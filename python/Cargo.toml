@@ -1,0 +1,16 @@
+[package]
+name = "chronopt-py"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "chronopt"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.25", features = ["extension-module"] }
+chronopt = { path = "../rust" }
+
+[build-dependencies]
+pyo3-build-config = "0.25"

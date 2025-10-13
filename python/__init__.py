@@ -1,4 +1,4 @@
-from chronopt._core import (
+from chronopt import (
     Builder,
     BuilderFactory,
     Problem,

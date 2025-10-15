@@ -1,0 +1,11 @@
+[build-system]
+requires = ["maturin>=1.9,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+# Point maturin to the Python extension crate inside the workspace
+manifest-path = "python/Cargo.toml"
+module-name = "chronopt"
+features = ["pyo3/extension-module"]
+
+

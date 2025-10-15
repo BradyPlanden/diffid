@@ -1,3 +1,4 @@
 [workspace]
 members = ["rust", "python"]
 resolver = "2"
+default-members = ["rust"]

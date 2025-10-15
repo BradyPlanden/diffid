@@ -7,17 +7,17 @@ def rosenbrock(x):
 
 
 # Simple API
-builder = chron.builder.SimpleProblem().add_callable(rosenbrock)
+builder = chron.Builder().add_callable(rosenbrock)
 problem = builder.build()
 
-optim = chron.NelderMead(problem)
+optim = chron.NelderMead().with_max_iter(1000)
 # sampler = chron.Hamiltonian()
 # sampler.set_number_of_chains(6)
 # sampler.set_parallel(True)
 
 
 # Run
-results = optim.run()
+results = optim.run(problem, [10.0, 10.0])
 # samples = sampler.run()
 
 print(results)

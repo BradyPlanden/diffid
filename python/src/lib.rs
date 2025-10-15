@@ -1,178 +1,153 @@
-// use pyo3::prelude::*;
-// use std::collections::HashMap;
+use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::prelude::*;
+use std::sync::Arc;
 
-// // Builder pattern for the optimisation problem
-// #[pyclass]
-// pub struct Builder {
-//     callables: Vec<PyObject>,
-//     config: HashMap<String, f64>,
-// }
+struct PyObjectiveFn {
+    callable: PyObject,
+}
 
-// #[pymethods]
-// impl Builder {
-//     fn add_callable(slf: Py<Self>, py: Python, obj: PyObject) -> PyResult<Py<Self>> {
-//         let mut builder = slf.borrow_mut(py);
-//         // callable verification
-//         if !obj.bind(py).is_callable() {
-//             return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-//                 "Object must be a callable",
-//             ));
-//         }
-//         builder.callables.push(obj);
-//         drop(builder);
-//         Ok(slf)
-//     }
+// Wrapper for Python callable
+impl PyObjectiveFn {
+    fn call(&self, x: &[f64]) -> PyResult<f64> {
+        Python::with_gil(|py| {
+            let callable = self.callable.bind(py);
+            callable.call1((x.to_vec(),))?.extract()
+        })
+    }
+}
 
-//     fn build(&self, py: Python) -> PyResult<Problem> {
-//         if self.callables.is_empty() {
-//             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-//                 "At least one callable must be provided",
-//             ));
-//         }
+#[pyclass(name = "Builder")]
+pub struct PyBuilder {
+    inner: chronopt_core::problem::Builder,
+    py_callable: Option<Arc<PyObjectiveFn>>,
+}
 
-//         Ok(Problem {
-//             objective: self.callables[0].clone_ref(py), // clone zero index?
-//             config: self.config.clone(),
-//         })
-//     }
-// }
+#[pymethods]
+impl PyBuilder {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: chronopt_core::problem::Builder::new(),
+            py_callable: None,
+        }
+    }
 
-// // Problem factory for creating builders
-// #[pyclass]
-// pub struct SimpleProblem;
+    fn add_callable<'a>(
+        mut slf: PyRefMut<'a, Self>,
+        obj: PyObject,
+        py: Python<'_>,
+    ) -> PyResult<PyRefMut<'a, Self>> {
+        if !obj.bind(py).is_callable() {
+            return Err(PyTypeError::new_err("Object must be callable"));
+        }
 
-// #[pymethods]
-// impl SimpleProblem {
-//     fn __call__(&self) -> Builder {
-//         Builder {
-//             callables: Vec::new(),
-//             config: HashMap::new(),
-//         }
-//     }
-// }
+        let py_fn = Arc::new(PyObjectiveFn { callable: obj });
+        let py_fn_clone = Arc::clone(&py_fn);
 
-// // Main API Entry
-// #[pyclass]
-// pub struct BuilderFactory;
+        slf.inner = std::mem::take(&mut slf.inner)
+            .with_objective(move |x: &[f64]| py_fn_clone.call(x).unwrap_or(f64::INFINITY));
 
-// #[pymethods]
-// impl BuilderFactory {
-//     #[new]
-//     fn new() -> Self {
-//         Self
-//     }
+        slf.py_callable = Some(py_fn);
+        Ok(slf)
+    }
 
-//     #[getter]
-//     fn SimpleProblem(&self) -> SimpleProblem {
-//         SimpleProblem
-//     }
-// }
+    fn with_config(mut slf: PyRefMut<'_, Self>, key: String, value: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_config(key, value);
+        slf
+    }
 
-// // Problem class
-// #[pyclass]
-// pub struct Problem {
-//     objective: PyObject,
-//     config: HashMap<String, f64>,
-// }
+    fn build(&mut self) -> PyResult<PyProblem> {
+        let inner = std::mem::take(&mut self.inner);
+        match inner.build() {
+            Ok(problem) => Ok(PyProblem { inner: problem }),
+            Err(e) => Err(PyValueError::new_err(e)),
+        }
+    }
+}
 
-// #[pymethods]
-// impl Problem {
-//     pub fn evaluate(&self, py: Python, x: Vec<f64>) -> PyResult<f64> {
-//         let result = self.objective.call1(py, (x,))?;
-//         result.extract(py)
-//     }
-// }
+#[pyclass(name = "Problem")]
+pub struct PyProblem {
+    inner: chronopt_core::problem::Problem,
+}
 
-// // Initial optimiser
-// #[pyclass]
-// pub struct NelderMead {
-//     problem: Py<Problem>,
-//     max_iter: usize,
-//     threshold: f64,
-// }
+impl PyProblem {
+    pub fn evaluate(&self, x: Vec<f64>) -> f64 {
+        self.inner.evaluate(&x)
+    }
 
-// #[pymethods]
-// impl NelderMead {
-//     #[new]
-//     fn new(problem: Py<Problem>) -> Self {
-//         Self {
-//             problem,
-//             max_iter: 1000,
-//             threshold: 1e-6,
-//         }
-//     }
+    pub fn get_config(&self, key: String) -> Option<f64> {
+        self.inner.get_config(&key).copied()
+    }
+}
 
-//     fn run(&self, py: Python) -> PyResult<OptimisationResults> {
-//         let problem = self.problem.borrow(py);
+#[pyclass(name = "NelderMead")]
+pub struct PyNelderMead {
+    inner: chronopt_core::optimisers::NelderMead,
+}
 
-//         // Simplified Nelder-Mead for testing
-//         let mut x = vec![0.0, 0.0];
-//         let mut best_val = problem.evaluate(py, x.clone())?;
-//         let mut iterations = 0;
+#[pymethods]
+impl PyNelderMead {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: chronopt_core::optimisers::NelderMead::new(),
+        }
+    }
 
-//         for i in 0..self.max_iter {
-//             iterations += 1;
+    fn with_max_iter(mut slf: PyRefMut<'_, Self>, max_iter: usize) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_max_iter(max_iter);
+        slf
+    }
 
-//             // Simplified step
-//             let perturbation = 0.1 / (i as f64 + 1.0);
-//             let mut improved = false;
+    fn with_threshold(mut slf: PyRefMut<'_, Self>, threshold: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_threshold(threshold);
+        slf
+    }
 
-//             for j in 0..x.len() {
-//                 let mut x_new = x.clone();
-//                 x_new[j] += perturbation;
+    fn run(&self, problem: &PyProblem, initial: Vec<f64>) -> PyOptimisationResults {
+        let result = self.inner.run(&problem.inner, initial);
+        PyOptimisationResults { inner: result }
+    }
+}
 
-//                 let val = problem.evaluate(py, x_new.clone())?;
-//                 if val < best_val {
-//                     x = x_new;
-//                     best_val = val;
-//                     improved = true;
-//                 }
-//             }
+#[pyclass(name = "OptimisationResults")]
+pub struct PyOptimisationResults {
+    inner: chronopt_core::optimisers::OptimisationResults,
+}
 
-//             if !improved && perturbation < self.threshold {
-//                 break;
-//             }
-//         }
-//         Ok(OptimisationResults {
-//             x,
-//             fun: best_val,
-//             nit: iterations,
-//             success: true,
-//         })
-//     }
-// }
+#[pymethods]
+impl PyOptimisationResults {
+    #[getter]
+    fn x(&self) -> Vec<f64> {
+        self.inner.x.clone()
+    }
 
-// // Results object
-// #[pyclass]
-// pub struct OptimisationResults {
-//     #[pyo3(get)]
-//     x: Vec<f64>,
-//     #[pyo3(get)]
-//     fun: f64,
-//     #[pyo3(get)]
-//     nit: usize,
-//     #[pyo3(get)]
-//     success: bool,
-// }
+    #[getter]
+    fn fun(&self) -> f64 {
+        self.inner.fun
+    }
 
-// #[pymethods]
-// impl OptimisationResults {
-//     fn __repr__(&self) -> String {
-//         format!(
-//             "OptimizationResults(x={:?}, fun={:.6}, nit={}, success={}))",
-//             self.x, self.fun, self.nit, self.success
-//         )
-//     }
-// }
+    #[getter]
+    fn nit(&self) -> usize {
+        self.inner.nit
+    }
 
-// // Python module definition
-// #[pymodule]
-// fn chronopt(m: &Bound<'_, PyModule>) -> PyResult<()> {
-//     m.add_class::<problem::Builder>()?;
-//     m.add_class::<problem::SimpleProblem>()?;
-//     m.add_class::<problem::BuilderFactory>()?;
-//     m.add_class::<problem::Problem>()?;
-//     m.add_class::<optimisers::NelderMead>()?;
-//     m.add_class::<optimisers::OptimisationResults>()?;
-//     Ok(())
-// }
+    #[getter]
+    fn success(&self) -> bool {
+        self.inner.success
+    }
+
+    // fn __repr__(&self) -> String {
+    //     self.inner.to_string()
+    // }
+}
+
+// Module registration
+#[pymodule]
+fn chronopt(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PyBuilder>()?;
+    m.add_class::<PyProblem>()?;
+    m.add_class::<PyNelderMead>()?;
+    m.add_class::<PyOptimisationResults>()?;
+    Ok(())
+}

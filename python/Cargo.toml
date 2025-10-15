@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "0.25", features = ["extension-module"] }
-chronopt = { path = "../rust" }
+chronopt_core = { package = "chronopt", path = "../rust" }
 
 [build-dependencies]
 pyo3-build-config = "0.25"

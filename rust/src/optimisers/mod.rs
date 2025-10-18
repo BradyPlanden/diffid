@@ -1,13 +1,11 @@
 use crate::problem::Problem;
 
-
 // Core behaviour shared by all optimisers
 pub trait Optimiser {
     fn run(&self, problem: &Problem, initial: Vec<f64>) -> OptimisationResults;
 }
 
-// Reusable configuration helpers. Each optimiser implements the setters,
-// and gets a default builder-style `with_*` for free.
+// Optimiser traits
 pub trait WithMaxIter: Sized {
     fn set_max_iter(&mut self, max_iter: usize);
     fn with_max_iter(mut self, max_iter: usize) -> Self {
@@ -31,8 +29,6 @@ pub trait WithSigma0: Sized {
         self
     }
 }
-
-
 
 // Nelder-Mead optimiser
 pub struct NelderMead {

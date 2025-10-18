@@ -1,7 +1,6 @@
 import chronopt as chron
 
-
-# Example ODE
+# Example diffsol ODE
 ds = """
 in = [r, k]
 r { 1 } k { 1 }
@@ -22,16 +21,14 @@ builder = (
     .add_params(params)
 )
 problem = builder.build()
+map_result = problem.optimize()
 
-# optim = chron.NelderMead(problem)
 sampler = chron.Hamiltonian()
 sampler.set_number_of_chains(6)
 sampler.set_parallel(True)
 
 # Run
-# results = optim.run()
-samples = sampler.run()
+samples = sampler.run(x0=map_result.x)
 
-print(results)
-print(f"Optimal x: {results.x}")
-print(f"Optimal value: {results.fun}")
+print(samples)
+print(f"Optimal x: {samples.mean_x}")

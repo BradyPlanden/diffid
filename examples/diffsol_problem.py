@@ -1,34 +1,41 @@
 import chronopt as chron
+import numpy as np
 
-# Example diffsol ODE
+# Example diffsol ODE (logistic growth)
 ds = """
 in = [r, k]
 r { 1 } k { 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
-}"""
+"""
 
-data = np.linspace(0, 1, 10)
+# Generate some test data (logistic growth)
+t_span = np.linspace(0, 1, 10)
+# Simple logistic growth for testing
+data = 0.1 * np.exp(t_span) / (1 + 0.1 * (np.exp(t_span) - 1))
+
 params = {"r": 1.0, "k": 1.0}
 
 # Simple API
 config = {"rtol": 1e-6}
 builder = (
-    chron.builder.Diffsol()
+    chron.DiffsolBuilder()
     .add_diffsl(ds)
-    .add_data(data)
+    .add_data(data.tolist())
     .add_config(config)
     .add_params(params)
 )
 problem = builder.build()
+
+# Optimize to find MAP estimate
 map_result = problem.optimize()
+print(f"MAP result: {map_result}")
 
-sampler = chron.Hamiltonian()
-sampler.set_number_of_chains(6)
-sampler.set_parallel(True)
+# For now, just print the optimization result since Hamiltonian sampler is not implemented yet
+print(f"Optimal parameters: {map_result.x}")
+print(f"Optimal cost: {map_result.fun}")
+print(f"Optimization success: {map_result.success}")
+print(f"Iterations: {map_result.nit}")
 
-# Run
-samples = sampler.run(x0=map_result.x)
-
-print(samples)
-print(f"Optimal x: {samples.mean_x}")
+# Note: Hamiltonian sampler will be implemented in Phase 3
+print("\nNote: Hamiltonian sampler will be implemented in Phase 3")

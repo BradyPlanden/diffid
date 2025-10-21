@@ -80,7 +80,7 @@ impl NelderMead {
         }
         OptimisationResults {
             x,
-            fun: best_val,
+            fun: best_val.unwrap(),
             nit: iterations,
             success: true,
         }

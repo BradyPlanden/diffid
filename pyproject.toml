@@ -8,4 +8,9 @@ manifest-path = "python/Cargo.toml"
 module-name = "chronopt"
 features = ["pyo3/extension-module"]
 
+[dependency-groups]
+dev = [
+    "numpy>=2.3.4",
+]
+
 

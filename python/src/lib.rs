@@ -1,3 +1,4 @@
+use nalgebra::DMatrix;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyType;
@@ -5,6 +6,7 @@ use pyo3::wrap_pyfunction;
 use std::sync::Arc;
 
 use chronopt_core::prelude::*;
+use chronopt_core::problem::DiffsolBuilder;
 
 struct PyObjectiveFn {
     callable: PyObject,
@@ -91,6 +93,60 @@ impl PyBuilder {
     }
 }
 
+#[pyclass(name = "DiffsolBuilder")]
+pub struct PyDiffsolBuilder {
+    inner: DiffsolBuilder,
+}
+
+#[pymethods]
+impl PyDiffsolBuilder {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: DiffsolBuilder::new(),
+        }
+    }
+
+    fn add_diffsl(mut slf: PyRefMut<'_, Self>, dsl: String) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).add_diffsl(dsl);
+        slf
+    }
+
+    fn add_data(mut slf: PyRefMut<'_, Self>, data: Vec<f64>) -> PyRefMut<'_, Self> {
+        let ncols = data.len();
+        let data_matrix = DMatrix::from_vec(ncols, 1, data);
+        slf.inner = std::mem::take(&mut slf.inner).add_data(data_matrix);
+        slf
+    }
+
+    fn add_config(
+        mut slf: PyRefMut<'_, Self>,
+        config: std::collections::HashMap<String, f64>,
+    ) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).add_config(config);
+        slf
+    }
+
+    fn add_params(
+        mut slf: PyRefMut<'_, Self>,
+        params: std::collections::HashMap<String, f64>,
+    ) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).add_params(params);
+        slf
+    }
+
+    fn build(&mut self) -> PyResult<PyProblem> {
+        let inner = std::mem::take(&mut self.inner);
+        match inner.build() {
+            Ok(problem) => Ok(PyProblem {
+                inner: problem,
+                default_optimiser: None,
+            }),
+            Err(e) => Err(PyValueError::new_err(e)),
+        }
+    }
+}
+
 #[pyclass(name = "Problem")]
 pub struct PyProblem {
     inner: Problem,
@@ -98,10 +154,6 @@ pub struct PyProblem {
 }
 
 impl PyProblem {
-    pub fn evaluate(&self, x: Vec<f64>) -> f64 {
-        self.inner.evaluate(&x)
-    }
-
     pub fn get_config(&self, key: String) -> Option<f64> {
         self.inner.get_config(&key).copied()
     }
@@ -178,6 +230,10 @@ impl PyOptimisationResults {
 
 #[pymethods]
 impl PyProblem {
+    fn evaluate(&self, x: Vec<f64>) -> f64 {
+        self.inner.evaluate(&x).unwrap()
+    }
+
     #[pyo3(signature = (initial = None, optimiser = None))]
     fn optimize(
         &self,
@@ -210,10 +266,20 @@ fn chronopt(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyProblem>()?;
     m.add_class::<PyNelderMead>()?;
     m.add_class::<PyOptimisationResults>()?;
+    m.add_class::<PyDiffsolBuilder>()?;
+
     // Add alias: PythonBuilder -> Builder (type alias at module level)
     let builder_type = PyType::new::<PyBuilder>(py);
     let builder_type_owned = builder_type.unbind();
     m.add("PythonBuilder", builder_type_owned)?;
+
+    // Create builder submodule
+    let builder_module = PyModule::new(py, "builder")?;
+    builder_module.add_class::<PyDiffsolBuilder>()?;
+    m.add_submodule(&builder_module)?;
+
+    // Also add Diffsol directly to the main module for convenience
+    m.add_class::<PyDiffsolBuilder>()?;
 
     // Provide a simple factory function for convenience
     m.add_function(wrap_pyfunction!(builder_factory_py, py)?)?;

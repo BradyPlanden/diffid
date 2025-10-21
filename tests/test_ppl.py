@@ -1,4 +1,3 @@
-import chronopt as chron
 
 
 var1 = Normal(0.5, 0.1)

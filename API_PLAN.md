@@ -34,21 +34,7 @@
   - Add `PythonBuilder` as an alias to `Builder` and implement `.add_parameter(name: str, prior: Optional[Any] = None)` to record parameter order and optional prior (affects `dimension()` only for now).
   - Support `Builder.set_optimiser(opt)` as sugar to store a default optimiser used by `Problem.optimize()` when `optimiser=None`.
 
-### Phase 2 — Hamiltonian sampler (MVP)
-- **Rust core**
-  - New module `samplers::hamiltonian` with struct `Hamiltonian { num_chains, parallel, num_steps, step_size }`.
-  - Implement simple HMC with leapfrog, diagonal mass, fixed step size.
-  - Parallelize chains with `rayon`.
-  - Output `Samples { chains: Vec<Vec<Vec<f64>>>, mean_x: Vec<f64>, draws: usize }`.
-- **Python bindings**
-  - Class `Hamiltonian` with:
-    - `set_number_of_chains(int)`
-    - `set_parallel(bool)`
-    - `with_num_steps(int)`, `with_step_size(float)` (optional for MVP)
-    - `run(problem: Problem, x0: List[float]) -> Samples`
-  - Treat objective as negative log-density for MVP.
-
-### Phase 3 — Diffsol builder and simulation representation
+### Phase 2 — Diffsol builder and simulation representation
 - **Core problem abstraction**
   - Extend `Problem` to support multiple kinds via `enum ProblemKind { Callable(ObjectiveFn), Diffsol(DiffsolSim) }`.
   - `Problem::evaluate(x)` dispatches by kind.
@@ -64,6 +50,21 @@
     - `.add_config(dict)`
     - `.add_params(dict)`
     - `.build() -> Problem`
+
+### Phase 3 — Hamiltonian sampler (MVP)
+- **Rust core**
+  - New module `samplers::hamiltonian` with struct `Hamiltonian { num_chains, parallel, num_steps, step_size }`.
+  - Implement simple HMC with leapfrog, diagonal mass, fixed step size.
+  - Parallelize chains with `rayon`.
+  - Output `Samples { chains: Vec<Vec<Vec<f64>>>, mean_x: Vec<f64>, draws: usize }`.
+- **Python bindings**
+  - Class `Hamiltonian` with:
+    - `set_number_of_chains(int)`
+    - `set_parallel(bool)`
+    - `with_num_steps(int)`, `with_step_size(float)` (optional for MVP)
+    - `run(problem: Problem, x0: List[float]) -> Samples`
+  - Treat objective as negative log-density for MVP.
+
 
 ### Phase 4 — Evidence (optional) and ergonomics
 - **Dynamic nested sampler (stub)**

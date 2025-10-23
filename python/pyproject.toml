@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "chronopt"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
@@ -12,9 +12,6 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = ["numpy>=1.24.4"]
-
-[project.optional-dependencies]
-dev = ["pytest>=8.3.5", "maturin>=1.9,<2.0"]
 
 [tool.maturin]
 module-name = "chronopt"

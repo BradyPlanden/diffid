@@ -1,7 +1,7 @@
 use diffsol::{DiffSl, MatrixCommon, NalgebraVec, OdeEquations, OdeSolverMethod, OdeSolverProblem};
 use nalgebra::DMatrix;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 type M = diffsol::NalgebraMat<f64>;
 type V = nalgebra::DVector<f64>;
@@ -16,7 +16,7 @@ type Eqn = DiffSl<M, CG>;
 
 /// Cost function for Diffsol problems
 pub struct DiffsolCost {
-    problem: Mutex<OdeSolverProblem<Eqn>>,
+    problem: Arc<Mutex<OdeSolverProblem<Eqn>>>,
     data: DMatrix<f64>,
     t_span: Vec<f64>,
     config: HashMap<String, f64>,
@@ -30,7 +30,7 @@ impl DiffsolCost {
         config: HashMap<String, f64>,
     ) -> Self {
         Self {
-            problem: Mutex::new(problem),
+            problem: Arc::new(Mutex::new(problem)),
             data,
             t_span,
             config,
@@ -55,19 +55,35 @@ impl DiffsolCost {
             return Ok(1000.0);
         };
 
-        let nrows = solution.nrows();
-        let ncols = solution.ncols();
+        let sol_rows = solution.nrows();
+        let sol_cols = solution.ncols();
+        let data_rows = self.data.nrows();
+        let data_cols = self.data.ncols();
 
-        let cost: f64 = (0..ncols)
-            .map(|i| {
-                let mut sum_sq = 0.0;
-                for j in 0..nrows {
+        let cost = if sol_rows == data_rows && sol_cols == data_cols {
+            let mut sum_sq = 0.0;
+            for j in 0..sol_rows {
+                for i in 0..sol_cols {
                     let diff = solution[(j, i)] - self.data[(j, i)];
                     sum_sq += diff * diff;
                 }
-                sum_sq
-            })
-            .sum();
+            }
+            sum_sq
+        } else if sol_rows == data_cols && sol_cols == data_rows {
+            let mut sum_sq = 0.0;
+            for j in 0..sol_rows {
+                for i in 0..sol_cols {
+                    let diff = solution[(j, i)] - self.data[(i, j)];
+                    sum_sq += diff * diff;
+                }
+            }
+            sum_sq
+        } else {
+            return Err(format!(
+                "Solution shape {}x{} does not match data shape {}x{}",
+                sol_rows, sol_cols, data_rows, data_cols
+            ));
+        };
 
         Ok(cost)
     }

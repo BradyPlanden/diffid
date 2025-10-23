@@ -35,9 +35,3 @@ F_i { (r * y) * (1 - (y / k)) }
     # Cost should be finite
     assert np.isfinite(cost), f"Cost should be finite, got {cost}"
     assert cost >= 0, f"Cost should be non-negative, got {cost}"
-
-    print(f"Diffsol test passed! Cost: {cost}")
-
-
-if __name__ == "__main__":
-    test_diffsol_builder()

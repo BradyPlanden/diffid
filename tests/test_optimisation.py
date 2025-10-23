@@ -1,4 +1,5 @@
 import chronopt as chron
+import numpy as np
 
 
 # Build an optimisation problem
@@ -6,28 +7,20 @@ def rosenbrock(x):
     return (1 - x[0]) ** 2 + 100 * (x[1] - x[0] ** 2) ** 2
 
 
-data = np.linspace(0, 10, 10)
-theta = bernoulli(0.2, 0.8)
-builder = (
-    chron.builders.Problem()
-    .add_callable(rosenbrock)
-    .add_parameter(theta)
-    .add_data(data)
-)
-problem = builder.build()
+def test_python_builder_rosenbrock():
+    builder = (
+        chron.PythonBuilder()
+        .add_callable(rosenbrock)
+        .add_parameter("x")
+        .add_parameter("y")
+    )
+    problem = builder.build()
 
-# Create the optimisation
-optim = chron.optim.CMAES()
-optim.set_sigma0(1.0)  # Initial covariance
-optim.set_time_allowance(60.0)  # Optimiser time limit in seconds
-optim.set_convergence_threshold(1e-5)  # threshold to start unchanged iteration count
-optim.set_patience(10)  # number of iterations at threshold until finishing optimisation
+    # Create the optimisation
+    optimiser = chron.NelderMead().with_max_iter(500).with_threshold(1e-6)
+    results = optimiser.run(problem, [1.5, -1.5])
 
-results = optim.run()
-
-# Validation metrics
-# Some may require additional arguments, or further computation
-hessian = results.hessian()  # Finite-diff, covariance from CMAES, autodiff
-evidence = results.evidence()
-sensitivities = results.sensitivities()
-uncertainties = results.uncertainties()
+    # Validation metrics
+    assert results.success
+    assert np.allclose(results.x, np.ones(2), atol=1e-4)
+    assert results.fun < 1e-6

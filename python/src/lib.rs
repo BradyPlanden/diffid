@@ -113,8 +113,8 @@ impl PyDiffsolBuilder {
     }
 
     fn add_data(mut slf: PyRefMut<'_, Self>, data: Vec<f64>) -> PyRefMut<'_, Self> {
-        let ncols = data.len();
-        let data_matrix = DMatrix::from_vec(ncols, 1, data);
+        let nrows = data.len();
+        let data_matrix = DMatrix::from_vec(nrows, 1, data);
         slf.inner = std::mem::take(&mut slf.inner).add_data(data_matrix);
         slf
     }

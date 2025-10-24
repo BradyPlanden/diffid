@@ -217,6 +217,33 @@ impl PyNelderMead {
         slf
     }
 
+    fn with_position_tolerance(
+        mut slf: PyRefMut<'_, Self>,
+        tolerance: f64,
+    ) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_position_tolerance(tolerance);
+        slf
+    }
+
+    fn with_max_evaluations(
+        mut slf: PyRefMut<'_, Self>,
+        max_evaluations: usize,
+    ) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_max_evaluations(max_evaluations);
+        slf
+    }
+
+    fn with_coefficients(
+        mut slf: PyRefMut<'_, Self>,
+        alpha: f64,
+        gamma: f64,
+        rho: f64,
+        sigma: f64,
+    ) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_coefficients(alpha, gamma, rho, sigma);
+        slf
+    }
+
     fn run(&self, problem: &PyProblem, initial: Vec<f64>) -> PyOptimisationResults {
         let result = self.inner.run(&problem.inner, initial);
         PyOptimisationResults { inner: result }
@@ -246,14 +273,44 @@ impl PyOptimisationResults {
     }
 
     #[getter]
+    fn nfev(&self) -> usize {
+        self.inner.nfev
+    }
+
+    #[getter]
     fn success(&self) -> bool {
         self.inner.success
     }
 
+    #[getter]
+    fn message(&self) -> String {
+        self.inner.message.clone()
+    }
+
+    #[getter]
+    fn termination_reason(&self) -> String {
+        self.inner.termination_reason.to_string()
+    }
+
+    #[getter]
+    fn final_simplex(&self) -> Vec<Vec<f64>> {
+        self.inner.final_simplex.clone()
+    }
+
+    #[getter]
+    fn final_simplex_values(&self) -> Vec<f64> {
+        self.inner.final_simplex_values.clone()
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "OptimisationResults(x={:?}, fun={:.6}, nit={}, success={})",
-            self.inner.x, self.inner.fun, self.inner.nit, self.inner.success
+            "OptimisationResults(x={:?}, fun={:.6}, nit={}, nfev={}, success={}, reason={})",
+            self.inner.x,
+            self.inner.fun,
+            self.inner.nit,
+            self.inner.nfev,
+            self.inner.success,
+            self.inner.message
         )
     }
 }

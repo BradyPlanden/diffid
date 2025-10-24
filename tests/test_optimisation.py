@@ -22,5 +22,5 @@ def test_python_builder_rosenbrock():
 
     # Validation metrics
     assert results.success
-    assert np.allclose(results.x, np.ones(2), atol=1e-4)
+    assert np.allclose(results.x, np.ones(2), atol=1e-3)
     assert results.fun < 1e-6

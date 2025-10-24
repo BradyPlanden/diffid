@@ -1,6 +1,7 @@
 use crate::problem::Problem;
 use std::cmp::Ordering;
 use std::fmt;
+use std::time::{Duration, Instant};
 
 // Core behaviour shared by all optimisers
 pub trait Optimiser {
@@ -32,6 +33,14 @@ pub trait WithSigma0: Sized {
     }
 }
 
+pub trait WithPatience: Sized {
+    fn set_patience(&mut self, patience_seconds: f64);
+    fn with_patience(mut self, patience_seconds: f64) -> Self {
+        self.set_patience(patience_seconds);
+        self
+    }
+}
+
 #[derive(Debug, Clone)]
 struct SimplexVertex {
     point: Vec<f64>,
@@ -52,6 +61,7 @@ pub enum TerminationReason {
     MaxIterationsReached,
     MaxFunctionEvaluationsReached,
     DegenerateSimplex,
+    PatienceElapsed,
     FunctionEvaluationFailed(String),
 }
 
@@ -76,6 +86,9 @@ impl fmt::Display for TerminationReason {
             TerminationReason::DegenerateSimplex => {
                 write!(f, "Degenerate simplex encountered")
             }
+            TerminationReason::PatienceElapsed => {
+                write!(f, "Patience elapsed")
+            }
             TerminationReason::FunctionEvaluationFailed(msg) => {
                 write!(f, "Function evaluation failed: {}", msg)
             }
@@ -95,6 +108,7 @@ pub struct NelderMead {
     gamma: f64,
     rho: f64,
     sigma: f64,
+    patience: Option<Duration>,
 }
 
 impl NelderMead {
@@ -109,6 +123,7 @@ impl NelderMead {
             gamma: 2.0,
             rho: 0.5,
             sigma: 0.5,
+            patience: None,
         }
     }
 
@@ -174,10 +189,7 @@ impl NelderMead {
         reason: TerminationReason,
     ) -> OptimisationResults {
         let mut ordered = simplex.to_vec();
-        ordered.sort_by(|a, b| a
-            .value
-            .partial_cmp(&b.value)
-            .unwrap_or(Ordering::Equal));
+        ordered.sort_by(|a, b| a.value.partial_cmp(&b.value).unwrap_or(Ordering::Equal));
 
         let best = ordered
             .first()
@@ -232,6 +244,8 @@ impl NelderMead {
     }
 
     pub fn run(&self, problem: &Problem, initial: Vec<f64>) -> OptimisationResults {
+        let start_time = Instant::now();
+
         let start = if !initial.is_empty() {
             initial
         } else {
@@ -319,22 +333,31 @@ impl NelderMead {
         }
 
         if simplex.len() != dim + 1 {
-            return Self::build_results(
-                &simplex,
-                0,
-                nfev,
-                TerminationReason::DegenerateSimplex,
-            );
+            return Self::build_results(&simplex, 0, nfev, TerminationReason::DegenerateSimplex);
         }
 
         let mut nit = 0usize;
+        if let Some(patience) = self.patience {
+            if start_time.elapsed() >= patience {
+                return Self::build_results(
+                    &simplex,
+                    nit,
+                    nfev,
+                    TerminationReason::PatienceElapsed,
+                );
+            }
+        }
         let mut termination = TerminationReason::MaxIterationsReached;
 
         loop {
-            simplex.sort_by(|a, b| a
-                .value
-                .partial_cmp(&b.value)
-                .unwrap_or(Ordering::Equal));
+            if let Some(patience) = self.patience {
+                if start_time.elapsed() >= patience {
+                    termination = TerminationReason::PatienceElapsed;
+                    break;
+                }
+            }
+
+            simplex.sort_by(|a, b| a.value.partial_cmp(&b.value).unwrap_or(Ordering::Equal));
 
             if let Some(reason) = self.convergence_reason(&simplex) {
                 termination = reason;
@@ -551,6 +574,16 @@ impl WithSigma0 for NelderMead {
     }
 }
 
+impl WithPatience for NelderMead {
+    fn set_patience(&mut self, patience_seconds: f64) {
+        if patience_seconds.is_finite() && patience_seconds > 0.0 {
+            self.patience = Some(Duration::from_secs_f64(patience_seconds));
+        } else {
+            self.patience = None;
+        }
+    }
+}
+
 impl Default for NelderMead {
     fn default() -> Self {
         Self::new()
@@ -575,12 +608,7 @@ impl OptimisationResults {
     fn __repr__(&self) -> String {
         format!(
             "OptimisationResults(x={:?}, fun={:.6}, nit={}, nfev={}, success={}, reason={})",
-            self.x,
-            self.fun,
-            self.nit,
-            self.nfev,
-            self.success,
-            self.message
+            self.x, self.fun, self.nit, self.nfev, self.success, self.message
         )
     }
 }
@@ -627,7 +655,10 @@ mod tests {
         let optimiser = NelderMead::new().with_max_iter(1).with_sigma0(1.0);
         let result = optimiser.run(&problem, vec![10.0, -10.0]);
 
-        assert_eq!(result.termination_reason, TerminationReason::MaxIterationsReached);
+        assert_eq!(
+            result.termination_reason,
+            TerminationReason::MaxIterationsReached
+        );
         assert!(!result.success);
         assert!(result.nit <= 1);
     }
@@ -652,5 +683,26 @@ mod tests {
         );
         assert!(!result.success);
         assert!(result.nfev <= 2);
+    }
+
+    #[test]
+    fn nelder_mead_respects_patience() {
+        let problem = Builder::new()
+            .with_objective(|x: &[f64]| {
+                std::thread::sleep(Duration::from_millis(5));
+                x.iter().map(|xi| xi * xi).sum()
+            })
+            .build()
+            .unwrap();
+
+        let optimiser = NelderMead::new().with_sigma0(0.5).with_patience(0.01);
+
+        let result = optimiser.run(&problem, vec![5.0, -5.0]);
+
+        assert_eq!(
+            result.termination_reason,
+            TerminationReason::PatienceElapsed
+        );
+        assert!(!result.success);
     }
 }

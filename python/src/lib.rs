@@ -217,10 +217,7 @@ impl PyNelderMead {
         slf
     }
 
-    fn with_position_tolerance(
-        mut slf: PyRefMut<'_, Self>,
-        tolerance: f64,
-    ) -> PyRefMut<'_, Self> {
+    fn with_position_tolerance(mut slf: PyRefMut<'_, Self>, tolerance: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_position_tolerance(tolerance);
         slf
     }
@@ -241,6 +238,11 @@ impl PyNelderMead {
         sigma: f64,
     ) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_coefficients(alpha, gamma, rho, sigma);
+        slf
+    }
+
+    fn with_patience(mut slf: PyRefMut<'_, Self>, patience_seconds: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_patience(patience_seconds);
         slf
     }
 

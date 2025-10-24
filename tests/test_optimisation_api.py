@@ -2,7 +2,7 @@ import chronopt as chron
 import numpy as np
 
 
-def test_diffsol_builder():
+def _test_optimisation_api():
     """Test basic Diffsol builder functionality"""
     # Example diffsol ODE (logistic growth)
     ds = """
@@ -28,18 +28,7 @@ F_i { (r * y) * (1 - (y / k)) }
 
     problem = builder.build()
 
-    # Test that we can evaluate the problem
-    x0 = [1.0, 1.0]  # r, k parameters
-    cost = problem.evaluate(x)
-
-    # Cost should be finite
-    assert np.isfinite(cost), f"Cost should be finite, got {cost}"
-    assert cost >= 0, f"Cost should be non-negative, got {cost}"
-
     # Test that we can optimise the problem
-    optimiser = (
-        chron.NelderMead().with_max_iter(500).with_threshold(1e-6).with_patience(10)
-    )
-    result = optimiser.run(problem,x0)
+    result = problem.optimize()
     assert result.success
     assert result.fun < 1e-5

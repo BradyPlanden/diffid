@@ -44,12 +44,12 @@ impl DiffsolCost {
             .lock()
             .map_err(|e| format!("Mutex lock error: {}", e))?;
 
-        // Create NalgebraVec instead of DVector
+        // Create NalgebraVec
         let param_vec = NalgebraVec::from(V::from_vec(params.to_vec()));
         problem.eqn_mut().set_params(&param_vec);
 
         let Ok(solution) = problem.bdf::<LS>().unwrap().solve_dense(&self.t_span) else {
-            return Ok(1000.0);
+            return Ok(1e5);
         };
 
         let sol_rows = solution.nrows();

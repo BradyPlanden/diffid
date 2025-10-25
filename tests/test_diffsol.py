@@ -13,7 +13,7 @@ F_i { (r * y) * (1 - (y / k)) }
 """
 
     # Generate some test data
-    t_span = np.linspace(0, 1, 10)
+    t_span = np.linspace(0, 1, 100)
     # Simple exponential growth for testing
     data = 0.1 * np.exp(t_span)
 
@@ -22,7 +22,8 @@ F_i { (r * y) * (1 - (y / k)) }
         chron.DiffsolBuilder()
         .add_diffsl(ds)
         .add_data(data)
-        .add_config({"rtol": 1e-6})
+        .with_rtol(1e-6)
+        .with_atol(1e-6)
         .add_params({"r": 1.0, "k": 1.0})
     )
 
@@ -38,7 +39,7 @@ F_i { (r * y) * (1 - (y / k)) }
 
     # Test that we can optimise the problem
     optimiser = (
-        chron.NelderMead().with_max_iter(500).with_threshold(1e-6).with_patience(10)
+        chron.NelderMead().with_max_iter(500).with_threshold(1e-7).with_patience(10)
     )
     result = optimiser.run(problem, x0)
     assert result.success

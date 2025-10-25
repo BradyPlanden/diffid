@@ -9,6 +9,49 @@ pub use diffsol_problem::DiffsolCost;
 pub type ObjectiveFn = Box<dyn Fn(&[f64]) -> f64 + Send + Sync>;
 type M = diffsol::NalgebraMat<f64>;
 
+const DEFAULT_RTOL: f64 = 1e-6;
+const DEFAULT_ATOL: f64 = 1e-9;
+
+#[derive(Debug, Clone)]
+pub struct DiffsolConfig {
+    pub rtol: f64,
+    pub atol: f64,
+}
+
+impl Default for DiffsolConfig {
+    fn default() -> Self {
+        Self {
+            rtol: DEFAULT_RTOL,
+            atol: DEFAULT_ATOL,
+        }
+    }
+}
+
+impl DiffsolConfig {
+    pub fn with_rtol(mut self, rtol: f64) -> Self {
+        self.rtol = rtol;
+        self
+    }
+
+    pub fn with_atol(mut self, atol: f64) -> Self {
+        self.atol = atol;
+        self
+    }
+
+    pub fn merge(mut self, other: Self) -> Self {
+        self.rtol = other.rtol;
+        self.atol = other.atol;
+        self
+    }
+
+    pub fn to_map(&self) -> HashMap<String, f64> {
+        HashMap::from([
+            ("rtol".to_string(), self.rtol),
+            ("atol".to_string(), self.atol),
+        ])
+    }
+}
+
 /// Different kinds of problems
 pub enum ProblemKind {
     Callable(ObjectiveFn),
@@ -20,6 +63,7 @@ pub struct Builder {
     objective: Option<ObjectiveFn>,
     config: HashMap<String, f64>,
     parameter_names: Vec<String>,
+    params: HashMap<String, f64>,
     default_nm: Option<NelderMead>,
     default_cmaes: Option<CMAES>,
 }
@@ -29,6 +73,7 @@ impl Builder {
             objective: None,
             config: HashMap::new(),
             parameter_names: Vec::new(),
+            params: HashMap::new(),
             default_nm: None,
             default_cmaes: None,
         }
@@ -70,6 +115,7 @@ impl Builder {
                 kind: ProblemKind::Callable(obj),
                 config: self.config,
                 parameter_names: self.parameter_names,
+                params: self.params,
                 default_nm: self.default_nm,
                 default_cmaes: self.default_cmaes,
             }),
@@ -89,7 +135,7 @@ pub struct DiffsolBuilder {
     dsl: Option<String>,
     data: Option<DMatrix<f64>>,
     t_span: Option<Vec<f64>>,
-    config: HashMap<String, f64>,
+    config: DiffsolConfig,
     params: HashMap<String, f64>,
     parameter_names: Vec<String>,
 }
@@ -100,7 +146,7 @@ impl DiffsolBuilder {
             dsl: None,
             data: None,
             t_span: None,
-            config: HashMap::new(),
+            config: DiffsolConfig::default(),
             params: HashMap::new(),
             parameter_names: Vec::new(),
         }
@@ -116,8 +162,29 @@ impl DiffsolBuilder {
         self
     }
 
+    pub fn with_t_span(mut self, t_span: Vec<f64>) -> Self {
+        self.t_span = Some(t_span);
+        self
+    }
+
+    pub fn with_rtol(mut self, rtol: f64) -> Self {
+        self.config.rtol = rtol;
+        self
+    }
+
+    pub fn with_atol(mut self, atol: f64) -> Self {
+        self.config.atol = atol;
+        self
+    }
+
     pub fn add_config(mut self, config: HashMap<String, f64>) -> Self {
-        self.config = config;
+        for (key, value) in config {
+            match key.as_str() {
+                "rtol" => self.config.rtol = value,
+                "atol" => self.config.atol = value,
+                _ => {}
+            }
+        }
         self
     }
 
@@ -135,7 +202,14 @@ impl DiffsolBuilder {
             .t_span
             .unwrap_or_else(|| (0..data.len()).map(|i| i as f64).collect());
 
-        Problem::new_diffsol(&dsl, data, t_span, self.config, self.parameter_names)
+        Problem::new_diffsol(
+            &dsl,
+            data,
+            t_span,
+            self.config,
+            self.parameter_names,
+            self.params,
+        )
     }
 }
 
@@ -150,6 +224,7 @@ pub struct Problem {
     kind: ProblemKind,
     config: HashMap<String, f64>,
     parameter_names: Vec<String>,
+    params: HashMap<String, f64>,
     default_nm: Option<NelderMead>,
     default_cmaes: Option<CMAES>,
 }
@@ -159,16 +234,23 @@ impl Problem {
         dsl: &str,
         data: DMatrix<f64>,
         t_span: Vec<f64>,
-        config: HashMap<String, f64>,
+        config: DiffsolConfig,
         parameter_names: Vec<String>,
+        params: HashMap<String, f64>,
     ) -> Result<Self, String> {
-        let model = OdeBuilder::<M>::new().build_from_diffsl(dsl).unwrap();
-        let cost = DiffsolCost::new(model, data, t_span, config);
+        let builder = OdeBuilder::<M>::new()
+            .atol([config.atol])
+            .rtol(config.rtol);
+        let model = builder
+            .build_from_diffsl(dsl)
+            .map_err(|e| format!("Failed to build ODE model: {}", e))?;
+        let cost = DiffsolCost::new(model, data, t_span);
 
         Ok(Problem {
             kind: ProblemKind::Diffsol(Box::new(cost)),
             config: HashMap::new(),
             parameter_names,
+            params,
             default_nm: None,
             default_cmaes: None,
         })
@@ -187,6 +269,10 @@ impl Problem {
 
     pub fn config(&self) -> &HashMap<String, f64> {
         &self.config
+    }
+
+    pub fn params(&self) -> &HashMap<String, f64> {
+        &self.params
     }
 
     pub fn dimension(&self) -> usize {

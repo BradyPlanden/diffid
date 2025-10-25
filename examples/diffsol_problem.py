@@ -17,12 +17,11 @@ data = 0.1 * np.exp(t_span) / (1 + 0.1 * (np.exp(t_span) - 1))
 params = {"r": 1.0, "k": 1.0}
 
 # Simple API
-config = {"rtol": 1e-6}
 builder = (
     chron.DiffsolBuilder()
     .add_diffsl(ds)
     .add_data(data)
-    .add_config(config)
+    .with_rtol(1e-6)
     .add_params(params)
 )
 problem = builder.build()

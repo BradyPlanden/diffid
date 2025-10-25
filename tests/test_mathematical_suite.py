@@ -198,7 +198,7 @@ def test_diffsol_logistic_convergence():
         chron.DiffsolBuilder()
         .add_diffsl(_LOGISTIC_DSL)
         .add_data(data)
-        .add_config({"rtol": 1e-6})
+        .with_rtol(1e-6)
         .add_params({"r": r_true, "k": k_true})
     )
 

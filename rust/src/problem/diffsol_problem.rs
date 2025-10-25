@@ -1,6 +1,6 @@
 use diffsol::{DiffSl, MatrixCommon, NalgebraVec, OdeEquations, OdeSolverMethod, OdeSolverProblem};
 use nalgebra::DMatrix;
-use std::collections::HashMap;
+
 use std::sync::{Arc, Mutex};
 
 type M = diffsol::NalgebraMat<f64>;
@@ -19,7 +19,6 @@ pub struct DiffsolCost {
     problem: Arc<Mutex<OdeSolverProblem<Eqn>>>,
     data: DMatrix<f64>,
     t_span: Vec<f64>,
-    config: HashMap<String, f64>,
 }
 
 impl DiffsolCost {
@@ -27,13 +26,11 @@ impl DiffsolCost {
         problem: OdeSolverProblem<Eqn>,
         data: DMatrix<f64>,
         t_span: Vec<f64>,
-        config: HashMap<String, f64>,
     ) -> Self {
         Self {
             problem: Arc::new(Mutex::new(problem)),
             data,
             t_span,
-            config,
         }
     }
 

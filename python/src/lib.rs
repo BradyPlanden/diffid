@@ -1,91 +1,106 @@
 use nalgebra::DMatrix;
-use numpy::{Ix1, Ix2, PyArray1, PyReadonlyArrayDyn, PyUntypedArrayMethods};
+use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArrayDyn, PyUntypedArrayMethods};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyType;
-use pyo3::wrap_pyfunction;
 use std::sync::Arc;
 
 use chronopt_core::prelude::*;
 use chronopt_core::problem::DiffsolBuilder;
 
+// ============================================================================
+// Optimiser Enum for Polymorphic Types
+// ============================================================================
+
+#[derive(Clone)]
+enum Optimiser {
+    NelderMead(NelderMead),
+    CMAES(CMAES),
+}
+
+impl<'py> FromPyObject<'py> for Optimiser {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        if let Ok(nm) = ob.extract::<PyRef<PyNelderMead>>() {
+            Ok(Optimiser::NelderMead(nm.inner.clone()))
+        } else if let Ok(cma) = ob.extract::<PyRef<PyCMAES>>() {
+            Ok(Optimiser::CMAES(cma.inner.clone()))
+        } else {
+            Err(PyTypeError::new_err(
+                "Optimiser must be an instance of NelderMead or CMAES"
+            ))
+        }
+    }
+}
+
+// ============================================================================
+// Python Objective Function Wrapper
+// ============================================================================
+
 struct PyObjectiveFn {
-    callable: PyObject,
+    callable: Py<PyAny>,
 }
 
-impl PyNelderMead {
-    fn clone_inner(&self) -> NelderMead {
-        self.inner.clone()
-    }
-}
-
-impl PyCMAES {
-    fn clone_inner(&self) -> CMAES {
-        self.inner.clone()
-    }
-}
-
-// Wrapper for Python callable
 impl PyObjectiveFn {
+    fn new(callable: Py<PyAny>) -> Self {
+        Self { callable }
+    }
+
     fn call(&self, x: &[f64]) -> PyResult<f64> {
         Python::with_gil(|py| {
             let callable = self.callable.bind(py);
             let input = PyArray1::from_slice(py, x);
             let result = callable.call1((input,))?;
 
-            if let Ok(output) = result.extract::<PyReadonlyArrayDyn<f64>>() {
-                let slice = output.as_slice().map_err(|_| {
-                    PyValueError::new_err(
-                        "Objective array must be contiguous and convertible to a slice",
-                    )
-                })?;
-
-                if slice.len() == 1 {
-                    return Ok(slice[0]);
-                }
-
-                return Err(PyValueError::new_err(format!(
-                    "Objective array must contain exactly one element, got {}",
-                    slice.len()
-                )));
+            // Try extracting as array first
+            if let Ok(output) = result.extract::<PyReadonlyArray1<f64>>() {
+                let array = output.as_array();
+                return match array.len() {
+                    1 => Ok(array[0]),
+                    n => Err(PyValueError::new_err(format!(
+                        "Objective array must contain exactly one element, got {}", n
+                    ))),
+                };
             }
 
+            // Try extracting as sequence
             if let Ok(values) = result.extract::<Vec<f64>>() {
-                match values.as_slice() {
-                    [value] => return Ok(*value),
-                    other => {
-                        return Err(PyValueError::new_err(format!(
-                            "Objective sequence must contain exactly one element, got {}",
-                            other.len()
-                        )));
-                    }
-                }
+                return match values.len() {
+                    1 => Ok(values[0]),
+                    n => Err(PyValueError::new_err(format!(
+                        "Objective sequence must contain exactly one element, got {}", n
+                    ))),
+                };
             }
 
+            // Try extracting as scalar
             if let Ok(value) = result.extract::<f64>() {
                 return Ok(value);
             }
 
+            // Error case
             let ty_name = result
                 .get_type()
                 .name()
-                .ok()
-                .and_then(|name| name.to_str().ok().map(str::to_owned))
-                .unwrap_or_else(|| "unknown".to_string());
+                .map(|n| n.to_string())
+                .unwrap_or_else(|_| "unknown".to_string());
+
             Err(PyTypeError::new_err(format!(
-                "Objective callable must return a float, a numpy.ndarray of dtype float64, or a single-element sequence; got {}",
+                "Objective callable must return a float, numpy array, or single-element sequence; got {}",
                 ty_name
             )))
         })
     }
 }
 
+// ============================================================================
+// Builder
+// ============================================================================
+
 #[pyclass(name = "Builder")]
 pub struct PyBuilder {
     inner: Builder,
     py_callable: Option<Arc<PyObjectiveFn>>,
-    default_nm: Option<PyNelderMead>,
-    default_cmaes: Option<PyCMAES>,
+    default_optimiser: Option<Optimiser>,
 }
 
 #[pymethods]
@@ -95,76 +110,43 @@ impl PyBuilder {
         Self {
             inner: Builder::new(),
             py_callable: None,
-            default_nm: None,
-            default_cmaes: None,
+            default_optimiser: None,
         }
     }
 
     #[pyo3(name = "set_optimiser")]
-    fn set_optimiser<'py>(
-        mut slf: PyRefMut<'py, Self>,
-        py: Python<'py>,
-        optimiser: PyObject,
-    ) -> PyResult<PyRefMut<'py, Self>> {
-        let bound = optimiser.bind(py);
-
-        if let Ok(opt) = bound.downcast::<PyNelderMead>() {
-            let nm = {
-                let borrow = opt.borrow();
-                borrow.clone_inner()
-            };
-
-            {
-                let builder = &mut *slf;
-                builder.inner = std::mem::take(&mut builder.inner).set_optimiser_nm(nm.clone());
-                builder.default_nm = Some(PyNelderMead { inner: nm });
-                builder.default_cmaes = None;
+    fn set_optimiser(mut slf: PyRefMut<'_, Self>, optimiser: Optimiser) -> PyRefMut<'_, Self> {
+        slf.inner = match &optimiser {
+            Optimiser::NelderMead(nm) => {
+                std::mem::take(&mut slf.inner).set_optimiser_nm(nm.clone())
             }
-
-            Ok(slf)
-        } else if let Ok(opt) = bound.downcast::<PyCMAES>() {
-            let cma = {
-                let borrow = opt.borrow();
-                borrow.clone_inner()
-            };
-
-            {
-                let builder = &mut *slf;
-                builder.inner = std::mem::take(&mut builder.inner).set_optimiser_cmaes(cma.clone());
-                builder.default_cmaes = Some(PyCMAES { inner: cma });
-                builder.default_nm = None;
+            Optimiser::CMAES(cma) => {
+                std::mem::take(&mut slf.inner).set_optimiser_cmaes(cma.clone())
             }
+        };
 
-            Ok(slf)
-        } else {
-            Err(PyTypeError::new_err(
-                "Optimiser must be an instance of NelderMead or CMAES",
-            ))
-        }
+        slf.default_optimiser = Some(optimiser);
+        slf
     }
 
-    fn add_callable<'a>(
-        mut slf: PyRefMut<'a, Self>,
-        obj: PyObject,
-        py: Python<'_>,
-    ) -> PyResult<PyRefMut<'a, Self>> {
-        if !obj.bind(py).is_callable() {
-            return Err(PyTypeError::new_err("Object must be callable"));
-        }
+    fn add_callable(mut slf: PyRefMut<'_, Self>, obj: Py<PyAny>) -> PyResult<PyRefMut<'_, Self>> {
+        Python::with_gil(|py| {
+            if !obj.bind(py).is_callable() {
+                return Err(PyTypeError::new_err("Object must be callable"));
+            }
+            Ok(())
+        })?;
 
-        let py_fn = Arc::new(PyObjectiveFn { callable: obj });
+        let py_fn = Arc::new(PyObjectiveFn::new(obj));
         let py_fn_clone = Arc::clone(&py_fn);
 
         slf.inner = std::mem::take(&mut slf.inner)
-            .with_objective(move |x: &[f64]| py_fn_clone.call(x).unwrap_or(f64::INFINITY));
+            .with_objective(move |x: &[f64]| {
+                py_fn_clone.call(x).unwrap_or(f64::INFINITY)
+            });
 
         slf.py_callable = Some(py_fn);
         Ok(slf)
-    }
-
-    fn with_config(mut slf: PyRefMut<'_, Self>, key: String, value: f64) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).with_config(key, value);
-        slf
     }
 
     fn add_parameter(mut slf: PyRefMut<'_, Self>, name: String) -> PyRefMut<'_, Self> {
@@ -174,18 +156,20 @@ impl PyBuilder {
 
     fn build(&mut self) -> PyResult<PyProblem> {
         let inner = std::mem::take(&mut self.inner);
-        let default_nm = std::mem::take(&mut self.default_nm);
-        let default_cmaes = std::mem::take(&mut self.default_cmaes);
-        match inner.build() {
-            Ok(problem) => Ok(PyProblem {
-                inner: problem,
-                default_nm,
-                default_cmaes,
-            }),
-            Err(e) => Err(PyValueError::new_err(e)),
-        }
+        let default_optimiser = self.default_optimiser.take();
+
+        let problem = inner.build().map_err(|e| PyValueError::new_err(e))?;
+
+        Ok(PyProblem {
+            inner: problem,
+            default_optimiser,
+        })
     }
 }
+
+// ============================================================================
+// DiffsolBuilder
+// ============================================================================
 
 #[pyclass(name = "DiffsolBuilder")]
 pub struct PyDiffsolBuilder {
@@ -210,43 +194,29 @@ impl PyDiffsolBuilder {
         mut slf: PyRefMut<'py, Self>,
         data: PyReadonlyArrayDyn<'py, f64>,
     ) -> PyResult<PyRefMut<'py, Self>> {
-        let data_matrix = match data.ndim() {
-            1 => {
-                let array = data
-                    .as_array()
-                    .into_dimensionality::<Ix1>()
-                    .map_err(|_| PyValueError::new_err("Data array must be 1D or 2D"))?;
-                let nrows = array.len();
-                let mut column_major = Vec::with_capacity(nrows);
-                column_major.extend(array.iter().copied());
-                DMatrix::from_vec(nrows, 1, column_major)
-            }
-            2 => {
-                let array = data
-                    .as_array()
-                    .into_dimensionality::<Ix2>()
-                    .map_err(|_| PyValueError::new_err("Data array must be 1D or 2D"))?;
-                let (nrows, ncols) = array.dim();
-                let mut column_major = Vec::with_capacity(nrows * ncols);
-                for j in 0..ncols {
-                    for i in 0..nrows {
-                        column_major.push(array[(i, j)]);
-                    }
-                }
-                DMatrix::from_vec(nrows, ncols, column_major)
-            }
-            _ => return Err(PyValueError::new_err("Data array must be 1D or 2D")),
-        };
-
+        let data_matrix = convert_array_to_dmatrix(&data)?;
         slf.inner = std::mem::take(&mut slf.inner).add_data(data_matrix);
         Ok(slf)
     }
 
-    fn add_config(
+    fn with_t_span(
         mut slf: PyRefMut<'_, Self>,
-        config: std::collections::HashMap<String, f64>,
-    ) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).add_config(config);
+        t_span: Vec<f64>,
+    ) -> PyResult<PyRefMut<'_, Self>> {
+        if t_span.is_empty() {
+            return Err(PyValueError::new_err("t_span must not be empty"));
+        }
+        slf.inner = std::mem::take(&mut slf.inner).with_t_span(t_span);
+        Ok(slf)
+    }
+
+    fn with_rtol(mut slf: PyRefMut<'_, Self>, rtol: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_rtol(rtol);
+        slf
+    }
+
+    fn with_atol(mut slf: PyRefMut<'_, Self>, atol: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_atol(atol);
         slf
     }
 
@@ -260,42 +230,101 @@ impl PyDiffsolBuilder {
 
     fn build(&mut self) -> PyResult<PyProblem> {
         let inner = std::mem::take(&mut self.inner);
-        match inner.build() {
-            Ok(problem) => Ok(PyProblem {
-                inner: problem,
-                default_nm: None,
-                default_cmaes: None,
-            }),
-            Err(e) => Err(PyValueError::new_err(e)),
-        }
+        let problem = inner.build().map_err(|e| PyValueError::new_err(e))?;
+
+        Ok(PyProblem {
+            inner: problem,
+            default_optimiser: None,
+        })
     }
 }
+
+// Helper function to convert numpy arrays to DMatrix
+fn convert_array_to_dmatrix(data: &PyReadonlyArrayDyn<f64>) -> PyResult<DMatrix<f64>> {
+    match data.ndim() {
+        1 => {
+            let slice = data.as_slice()
+                .map_err(|_| PyValueError::new_err("Array must be contiguous"))?;
+            Ok(DMatrix::from_vec(slice.len(), 1, slice.to_vec()))
+        }
+        2 => {
+            // Extract shape information
+            let shape = data.shape();
+            let (nrows, ncols) = (shape[0], shape[1]);
+
+            // Try to get as 2D array for efficient access
+            if let Ok(array2d) = data.as_array().into_dimensionality::<numpy::Ix2>() {
+                let mut column_major = Vec::with_capacity(nrows * ncols);
+                for j in 0..ncols {
+                    for i in 0..nrows {
+                        column_major.push(array2d[[i, j]]);
+                    }
+                }
+                Ok(DMatrix::from_vec(nrows, ncols, column_major))
+            } else {
+                Err(PyValueError::new_err("Failed to convert 2D array"))
+            }
+        }
+        _ => Err(PyValueError::new_err("Data array must be 1D or 2D")),
+    }
+}
+
+// ============================================================================
+// Problem
+// ============================================================================
 
 #[pyclass(name = "Problem")]
 pub struct PyProblem {
     inner: Problem,
-    default_nm: Option<PyNelderMead>,
-    default_cmaes: Option<PyCMAES>,
+    default_optimiser: Option<Optimiser>,
 }
 
+#[pymethods]
 impl PyProblem {
-    pub fn get_config(&self, key: String) -> Option<f64> {
+    fn evaluate(&self, x: Vec<f64>) -> PyResult<f64> {
+        self.inner.evaluate(&x)
+            .map_err(|e| PyValueError::new_err(format!("Evaluation failed: {}", e)))
+    }
+
+    #[pyo3(signature = (initial=None, optimiser=None))]
+    fn optimize(
+        &self,
+        initial: Option<Vec<f64>>,
+        optimiser: Option<Optimiser>,
+    ) -> PyResult<PyOptimisationResults> {
+        let opt = optimiser.as_ref()
+            .or(self.default_optimiser.as_ref());
+
+        let result = match opt {
+            Some(Optimiser::NelderMead(nm)) => {
+                self.inner.optimize(initial, Some(nm))
+            }
+            Some(Optimiser::CMAES(cma)) => {
+                self.inner.optimize(initial, Some(cma))
+            }
+            None => self.inner.optimize(initial, None),
+        };
+
+        Ok(PyOptimisationResults { inner: result })
+    }
+
+    fn get_config(&self, key: String) -> Option<f64> {
         self.inner.get_config(&key).copied()
     }
 
-    pub fn dimension(&self) -> usize {
+    fn dimension(&self) -> usize {
         self.inner.dimension()
     }
 }
 
+// ============================================================================
+// NelderMead Optimiser
+// ============================================================================
+
 #[pyclass(name = "NelderMead")]
+#[derive(Clone)]
 pub struct PyNelderMead {
     inner: NelderMead,
-}
-
-#[pyclass(name = "CMAES")]
-pub struct PyCMAES {
-    inner: CMAES,
 }
 
 #[pymethods]
@@ -351,6 +380,68 @@ impl PyNelderMead {
         PyOptimisationResults { inner: result }
     }
 }
+
+// ============================================================================
+// CMAES Optimiser
+// ============================================================================
+
+#[pyclass(name = "CMAES")]
+#[derive(Clone)]
+pub struct PyCMAES {
+    inner: CMAES,
+}
+
+#[pymethods]
+impl PyCMAES {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: CMAES::new(),
+        }
+    }
+
+    fn with_max_iter(mut slf: PyRefMut<'_, Self>, max_iter: usize) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_max_iter(max_iter);
+        slf
+    }
+
+    fn with_threshold(mut slf: PyRefMut<'_, Self>, threshold: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_threshold(threshold);
+        slf
+    }
+
+    fn with_sigma0(mut slf: PyRefMut<'_, Self>, sigma0: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_sigma0(sigma0);
+        slf
+    }
+
+    fn with_patience(mut slf: PyRefMut<'_, Self>, patience_seconds: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_patience(patience_seconds);
+        slf
+    }
+
+    fn with_population_size(
+        mut slf: PyRefMut<'_, Self>,
+        population_size: usize,
+    ) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_population_size(population_size);
+        slf
+    }
+
+    fn with_seed(mut slf: PyRefMut<'_, Self>, seed: u64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_seed(seed);
+        slf
+    }
+
+    fn run(&self, problem: &PyProblem, initial: Vec<f64>) -> PyOptimisationResults {
+        let result = self.inner.run(&problem.inner, initial);
+        PyOptimisationResults { inner: result }
+    }
+}
+
+// ============================================================================
+// Optimisation Results
+// ============================================================================
 
 #[pyclass(name = "OptimisationResults")]
 pub struct PyOptimisationResults {
@@ -422,95 +513,9 @@ impl PyOptimisationResults {
     }
 }
 
-#[pymethods]
-impl PyProblem {
-    fn evaluate(&self, x: Vec<f64>) -> f64 {
-        self.inner.evaluate(&x).unwrap()
-    }
-
-    #[pyo3(signature = (initial = None, optimiser = None))]
-    fn optimize(
-        &self,
-        py: Python<'_>,
-        initial: Option<Vec<f64>>,
-        optimiser: Option<PyObject>,
-    ) -> PyResult<PyOptimisationResults> {
-        let result = match optimiser {
-            Some(obj) => {
-                let bound = obj.bind(py);
-                if let Ok(opt) = bound.downcast::<PyNelderMead>() {
-                    let borrow = opt.borrow();
-                    self.inner.optimize(initial, Some(&borrow.inner))
-                } else if let Ok(opt) = bound.downcast::<PyCMAES>() {
-                    let borrow = opt.borrow();
-                    self.inner.optimize(initial, Some(&borrow.inner))
-                } else {
-                    return Err(PyTypeError::new_err(
-                        "Optimiser must be an instance of NelderMead or CMAES",
-                    ));
-                }
-            }
-            None => {
-                if let Some(ref default_opt) = self.default_nm {
-                    self.inner.optimize(initial, Some(&default_opt.inner))
-                } else if let Some(ref default_opt) = self.default_cmaes {
-                    self.inner.optimize(initial, Some(&default_opt.inner))
-                } else {
-                    self.inner.optimize(initial, None)
-                }
-            }
-        };
-        Ok(PyOptimisationResults { inner: result })
-    }
-}
-
-#[pymethods]
-impl PyCMAES {
-    #[new]
-    fn new() -> Self {
-        Self {
-            inner: CMAES::new(),
-        }
-    }
-
-    fn with_max_iter(mut slf: PyRefMut<'_, Self>, max_iter: usize) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).with_max_iter(max_iter);
-        slf
-    }
-
-    fn with_threshold(mut slf: PyRefMut<'_, Self>, threshold: f64) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).with_threshold(threshold);
-        slf
-    }
-
-    fn with_sigma0(mut slf: PyRefMut<'_, Self>, sigma0: f64) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).with_sigma0(sigma0);
-        slf
-    }
-
-    fn with_patience(mut slf: PyRefMut<'_, Self>, patience_seconds: f64) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).with_patience(patience_seconds);
-        slf
-    }
-
-    fn with_population_size(
-        mut slf: PyRefMut<'_, Self>,
-        population_size: usize,
-    ) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).with_population_size(population_size);
-        slf
-    }
-
-    fn with_seed(mut slf: PyRefMut<'_, Self>, seed: u64) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).with_seed(seed);
-        slf
-    }
-
-    fn run(&self, problem: &PyProblem, initial: Vec<f64>) -> PyOptimisationResults {
-        let result = self.inner.run(&problem.inner, initial);
-        PyOptimisationResults { inner: result }
-    }
-}
+// ============================================================================
+// Module Registration
+// ============================================================================
 
 #[pyfunction]
 fn builder_factory_py() -> PyBuilder {
@@ -519,6 +524,7 @@ fn builder_factory_py() -> PyBuilder {
 
 #[pymodule]
 fn chronopt(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Main classes
     m.add_class::<PyBuilder>()?;
     m.add_class::<PyProblem>()?;
     m.add_class::<PyNelderMead>()?;
@@ -526,20 +532,18 @@ fn chronopt(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyOptimisationResults>()?;
     m.add_class::<PyDiffsolBuilder>()?;
 
-    // Add alias: PythonBuilder -> Builder (type alias at module level)
+    // Alias for backwards compatibility
     let builder_type = PyType::new::<PyBuilder>(py);
     let builder_type_owned = builder_type.unbind();
     m.add("PythonBuilder", builder_type_owned)?;
 
-    // Create builder submodule
+    // Builder submodule
     let builder_module = PyModule::new(py, "builder")?;
     builder_module.add_class::<PyDiffsolBuilder>()?;
     m.add_submodule(&builder_module)?;
 
-    // Also add Diffsol directly to the main module for convenience
-    m.add_class::<PyDiffsolBuilder>()?;
+    // Factory function
+    m.add_function(wrap_pyfunction!(builder_factory_py, m)?)?;
 
-    // Provide a simple factory function for convenience
-    m.add_function(wrap_pyfunction!(builder_factory_py, py)?)?;
     Ok(())
 }

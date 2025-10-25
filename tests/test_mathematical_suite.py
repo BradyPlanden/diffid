@@ -9,47 +9,54 @@ import pytest
 import chronopt as chron
 
 
-def sphere(x: list[float]) -> float:
+def sphere(x: list[float]) -> np.ndarray:
     """Simple convex bowl with minimum at the origin."""
     arr = np.asarray(x, dtype=float)
-    return float(np.dot(arr, arr))
+    value = float(np.dot(arr, arr))
+    return np.asarray([value], dtype=float)
 
 
-def rosenbrock(x: list[float]) -> float:
+def rosenbrock(x: list[float]) -> np.ndarray:
     """Classic Rosenbrock banana function with minimum at (1, 1)."""
     x1, x2 = x
-    return (1 - x1) ** 2 + 100 * (x2 - x1**2) ** 2
+    value = (1 - x1) ** 2 + 100 * (x2 - x1**2) ** 2
+    return np.asarray([value], dtype=float)
 
 
-def booth(x: list[float]) -> float:
+def booth(x: list[float]) -> np.ndarray:
     """Booth function with a known minimum at (1, 3)."""
     x1, x2 = x
-    return (x1 + 2 * x2 - 7) ** 2 + (2 * x1 + x2 - 5) ** 2
+    value = (x1 + 2 * x2 - 7) ** 2 + (2 * x1 + x2 - 5) ** 2
+    return np.asarray([value], dtype=float)
 
 
-def extended_rosenbrock(x: list[float]) -> float:
+def extended_rosenbrock(x: list[float]) -> np.ndarray:
     """N-dimensional Rosenbrock with narrow curved valley."""
     arr = np.asarray(x, dtype=float)
-    return np.sum(100 * (arr[1:] - arr[:-1] ** 2) ** 2 + (1 - arr[:-1]) ** 2)
+    value = np.sum(100 * (arr[1:] - arr[:-1] ** 2) ** 2 + (1 - arr[:-1]) ** 2)
+    return np.asarray([value], dtype=float)
 
 
-def matyas(x: list[float]) -> float:
+def matyas(x: list[float]) -> np.ndarray:
     """Matyas function - very flat near minimum at (0, 0)."""
     x1, x2 = x
-    return 0.26 * (x1**2 + x2**2) - 0.48 * x1 * x2
+    value = 0.26 * (x1**2 + x2**2) - 0.48 * x1 * x2
+    return np.asarray([value], dtype=float)
 
 
-def rastrigin(x: list[float]) -> float:
+def rastrigin(x: list[float]) -> np.ndarray:
     """Rastrigin function - many local minima, global minimum at origin."""
     arr = np.asarray(x, dtype=float)
     n = len(arr)
-    return 10 * n + np.sum(arr**2 - 10 * np.cos(2 * np.pi * arr))
+    value = 10 * n + np.sum(arr**2 - 10 * np.cos(2 * np.pi * arr))
+    return np.asarray([value], dtype=float)
 
 
-def ridge(x: list[float], alpha: float = 1.0) -> float:
+def ridge(x: list[float], alpha: float = 1.0) -> np.ndarray:
     """Ridge function - nearly flat in perpendicular directions."""
     arr = np.asarray(x, dtype=float)
-    return arr[0] ** 2 + alpha * np.sum(arr[1:] ** 2)
+    value = arr[0] ** 2 + alpha * np.sum(arr[1:] ** 2)
+    return np.asarray([value], dtype=float)
 
 
 def make_nelder_mead() -> chron.NelderMead:

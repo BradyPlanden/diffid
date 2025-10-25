@@ -1,5 +1,5 @@
 use nalgebra::DMatrix;
-use numpy::{Ix1, Ix2, PyReadonlyArrayDyn, PyUntypedArrayMethods};
+use numpy::{Ix1, Ix2, PyArray1, PyReadonlyArrayDyn, PyUntypedArrayMethods};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyType;
@@ -30,7 +30,52 @@ impl PyObjectiveFn {
     fn call(&self, x: &[f64]) -> PyResult<f64> {
         Python::with_gil(|py| {
             let callable = self.callable.bind(py);
-            callable.call1((x.to_vec(),))?.extract()
+            let input = PyArray1::from_slice(py, x);
+            let result = callable.call1((input,))?;
+
+            if let Ok(output) = result.extract::<PyReadonlyArrayDyn<f64>>() {
+                let slice = output.as_slice().map_err(|_| {
+                    PyValueError::new_err(
+                        "Objective array must be contiguous and convertible to a slice",
+                    )
+                })?;
+
+                if slice.len() == 1 {
+                    return Ok(slice[0]);
+                }
+
+                return Err(PyValueError::new_err(format!(
+                    "Objective array must contain exactly one element, got {}",
+                    slice.len()
+                )));
+            }
+
+            if let Ok(values) = result.extract::<Vec<f64>>() {
+                match values.as_slice() {
+                    [value] => return Ok(*value),
+                    other => {
+                        return Err(PyValueError::new_err(format!(
+                            "Objective sequence must contain exactly one element, got {}",
+                            other.len()
+                        )));
+                    }
+                }
+            }
+
+            if let Ok(value) = result.extract::<f64>() {
+                return Ok(value);
+            }
+
+            let ty_name = result
+                .get_type()
+                .name()
+                .ok()
+                .and_then(|name| name.to_str().ok().map(str::to_owned))
+                .unwrap_or_else(|| "unknown".to_string());
+            Err(PyTypeError::new_err(format!(
+                "Objective callable must return a float, a numpy.ndarray of dtype float64, or a single-element sequence; got {}",
+                ty_name
+            )))
         })
     }
 }

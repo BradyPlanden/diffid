@@ -51,7 +51,7 @@ uv run maturin develop
 
 Regenerate the Python *.pyi stub files after making changes to the bindings:
 ```bash
-uv run cargo run --bin generate_stubs --manifest-path python/Cargo.toml
+uv run cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
 ```
 
 ## Tests

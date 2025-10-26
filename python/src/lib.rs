@@ -5,13 +5,17 @@ use pyo3::prelude::*;
 use pyo3::types::PyType;
 use std::sync::Arc;
 
-use pyo3_stub_gen::{
-    define_stub_info_gatherer,
-    derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pymethods},
-};
-
 use chronopt_core::prelude::*;
 use chronopt_core::problem::DiffsolBuilder;
+
+#[cfg(feature = "stubgen")]
+use pyo3_stub_gen::{define_stub_info_gatherer, TypeInfo};
+
+#[cfg(all(feature = "stubgen", feature = "extension-module"))]
+compile_error!(
+    "The 'stubgen' feature must be built without the 'extension-module' feature. \
+     Run with `--no-default-features --features stubgen`."
+);
 
 // ============================================================================
 // Optimiser Enum for Polymorphic Types
@@ -21,6 +25,12 @@ use chronopt_core::problem::DiffsolBuilder;
 enum Optimiser {
     NelderMead(NelderMead),
     CMAES(CMAES),
+}
+
+#[cfg(feature = "stubgen")]
+#[allow(dead_code)]
+fn optimiser_type_info() -> TypeInfo {
+    TypeInfo::unqualified("chronopt.NelderMead") | TypeInfo::unqualified("chronopt.CMAES")
 }
 
 impl<'py> FromPyObject<'py> for Optimiser {
@@ -103,20 +113,17 @@ impl PyObjectiveFn {
 // Builder
 // ============================================================================
 
-#[gen_stub_pyclass]
+/// High-level builder for optimisation `Problem` instances exposed to Python.
 #[pyclass(name = "Builder")]
 pub struct PyBuilder {
-    #[gen_stub(skip)]
     inner: Builder,
-    #[gen_stub(skip)]
     py_callable: Option<Arc<PyObjectiveFn>>,
-    #[gen_stub(skip)]
     default_optimiser: Option<Optimiser>,
 }
 
-#[gen_stub_pymethods]
 #[pymethods]
 impl PyBuilder {
+    /// Create an empty builder with no objective, parameters, or default optimiser.
     #[new]
     fn new() -> Self {
         Self {
@@ -126,12 +133,9 @@ impl PyBuilder {
         }
     }
 
+    /// Configure the default optimiser used when `Problem.optimize` omits one.
     #[pyo3(name = "set_optimiser")]
-    fn set_optimiser(
-        mut slf: PyRefMut<'_, Self>,
-        #[gen_stub(override_type(type_repr = "chronopt.NelderMead | chronopt.CMAES"))]
-        optimiser: Optimiser,
-    ) -> PyRefMut<'_, Self> {
+    fn set_optimiser(mut slf: PyRefMut<'_, Self>, optimiser: Optimiser) -> PyRefMut<'_, Self> {
         slf.inner = match &optimiser {
             Optimiser::NelderMead(nm) => {
                 std::mem::take(&mut slf.inner).set_optimiser_nm(nm.clone())
@@ -145,6 +149,7 @@ impl PyBuilder {
         slf
     }
 
+    /// Attach the objective function callable executed during optimisation.
     fn add_callable(mut slf: PyRefMut<'_, Self>, obj: Py<PyAny>) -> PyResult<PyRefMut<'_, Self>> {
         Python::attach(|py| {
             if !obj.bind(py).is_callable() {
@@ -163,11 +168,13 @@ impl PyBuilder {
         Ok(slf)
     }
 
+    /// Register a named optimisation variable in the order it appears in vectors.
     fn add_parameter(mut slf: PyRefMut<'_, Self>, name: String) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).add_parameter(name);
         slf
     }
 
+    /// Finalize the builder into an executable `Problem`.
     fn build(&mut self) -> PyResult<PyProblem> {
         let inner = std::mem::take(&mut self.inner);
         let default_optimiser = self.default_optimiser.take();
@@ -185,16 +192,15 @@ impl PyBuilder {
 // DiffsolBuilder
 // ============================================================================
 
-#[gen_stub_pyclass]
+/// Builder for differential-equation problems described through DiffSL.
 #[pyclass(name = "DiffsolBuilder")]
 pub struct PyDiffsolBuilder {
-    #[gen_stub(skip)]
     inner: DiffsolBuilder,
 }
 
-#[gen_stub_pymethods]
 #[pymethods]
 impl PyDiffsolBuilder {
+    /// Create an empty differential solver builder.
     #[new]
     fn new() -> Self {
         Self {
@@ -202,11 +208,13 @@ impl PyDiffsolBuilder {
         }
     }
 
+    /// Register the DiffSL program describing the system dynamics.
     fn add_diffsl(mut slf: PyRefMut<'_, Self>, dsl: String) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).add_diffsl(dsl);
         slf
     }
 
+    /// Attach observed data used to fit the differential equation.
     fn add_data<'py>(
         mut slf: PyRefMut<'py, Self>,
         data: PyReadonlyArrayDyn<'py, f64>,
@@ -216,6 +224,7 @@ impl PyDiffsolBuilder {
         Ok(slf)
     }
 
+    /// Set the time sampling points or integration window.
     fn with_t_span(mut slf: PyRefMut<'_, Self>, t_span: Vec<f64>) -> PyResult<PyRefMut<'_, Self>> {
         if t_span.is_empty() {
             return Err(PyValueError::new_err("t_span must not be empty"));
@@ -224,16 +233,19 @@ impl PyDiffsolBuilder {
         Ok(slf)
     }
 
+    /// Adjust the relative integration tolerance.
     fn with_rtol(mut slf: PyRefMut<'_, Self>, rtol: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_rtol(rtol);
         slf
     }
 
+    /// Adjust the absolute integration tolerance.
     fn with_atol(mut slf: PyRefMut<'_, Self>, atol: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_atol(atol);
         slf
     }
 
+    /// Provide named parameter defaults for the DiffSL program.
     fn add_params(
         mut slf: PyRefMut<'_, Self>,
         params: std::collections::HashMap<String, f64>,
@@ -242,6 +254,7 @@ impl PyDiffsolBuilder {
         slf
     }
 
+    /// Create a `Problem` representing the differential solver model.
     fn build(&mut self) -> PyResult<PyProblem> {
         let inner = std::mem::take(&mut self.inner);
         let problem = inner.build().map_err(|e| PyValueError::new_err(e))?;
@@ -288,18 +301,16 @@ fn convert_array_to_dmatrix(data: &PyReadonlyArrayDyn<f64>) -> PyResult<DMatrix<
 // Problem
 // ============================================================================
 
-#[gen_stub_pyclass]
+/// Executable optimisation problem wrapping the Chronopt core implementation.
 #[pyclass(name = "Problem")]
 pub struct PyProblem {
-    #[gen_stub(skip)]
     inner: Problem,
-    #[gen_stub(skip)]
     default_optimiser: Option<Optimiser>,
 }
 
-#[gen_stub_pymethods]
 #[pymethods]
 impl PyProblem {
+    /// Evaluate the configured objective function at `x`.
     fn evaluate(&self, x: Vec<f64>) -> PyResult<f64> {
         self.inner
             .evaluate(&x)
@@ -307,10 +318,10 @@ impl PyProblem {
     }
 
     #[pyo3(signature = (initial=None, optimiser=None))]
+    /// Solve the problem starting from `initial` using the supplied optimiser.
     fn optimize(
         &self,
         initial: Option<Vec<f64>>,
-        #[gen_stub(override_type(type_repr = "chronopt.NelderMead | chronopt.CMAES | None",))]
         optimiser: Option<Optimiser>,
     ) -> PyResult<PyOptimisationResults> {
         let opt = optimiser.as_ref().or(self.default_optimiser.as_ref());
@@ -324,10 +335,12 @@ impl PyProblem {
         Ok(PyOptimisationResults { inner: result })
     }
 
+    /// Return the numeric configuration value stored under `key` if present.
     fn get_config(&self, key: String) -> Option<f64> {
         self.inner.get_config(&key).copied()
     }
 
+    /// Return the number of parameters the problem expects.
     fn dimension(&self) -> usize {
         self.inner.dimension()
     }
@@ -337,17 +350,16 @@ impl PyProblem {
 // NelderMead Optimiser
 // ============================================================================
 
-#[gen_stub_pyclass]
+/// Classic simplex-based direct search optimiser.
 #[pyclass(name = "NelderMead")]
 #[derive(Clone)]
 pub struct PyNelderMead {
-    #[gen_stub(skip)]
     inner: NelderMead,
 }
 
-#[gen_stub_pymethods]
 #[pymethods]
 impl PyNelderMead {
+    /// Create a Nelder-Mead optimiser with default coefficients.
     #[new]
     fn new() -> Self {
         Self {
@@ -355,21 +367,25 @@ impl PyNelderMead {
         }
     }
 
+    /// Limit the number of simplex iterations.
     fn with_max_iter(mut slf: PyRefMut<'_, Self>, max_iter: usize) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_max_iter(max_iter);
         slf
     }
 
+    /// Set the stopping threshold on simplex size or objective reduction.
     fn with_threshold(mut slf: PyRefMut<'_, Self>, threshold: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_threshold(threshold);
         slf
     }
 
+    /// Stop once simplex vertices fall within the supplied positional tolerance.
     fn with_position_tolerance(mut slf: PyRefMut<'_, Self>, tolerance: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_position_tolerance(tolerance);
         slf
     }
 
+    /// Abort after evaluating the objective `max_evaluations` times.
     fn with_max_evaluations(
         mut slf: PyRefMut<'_, Self>,
         max_evaluations: usize,
@@ -378,6 +394,7 @@ impl PyNelderMead {
         slf
     }
 
+    /// Override the reflection, expansion, contraction, and shrink coefficients.
     fn with_coefficients(
         mut slf: PyRefMut<'_, Self>,
         alpha: f64,
@@ -389,11 +406,13 @@ impl PyNelderMead {
         slf
     }
 
+    /// Abort if the objective fails to improve within the allotted time.
     fn with_patience(mut slf: PyRefMut<'_, Self>, patience_seconds: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_patience(patience_seconds);
         slf
     }
 
+    /// Optimise the given problem starting from the provided initial simplex centre.
     fn run(&self, problem: &PyProblem, initial: Vec<f64>) -> PyOptimisationResults {
         let result = self.inner.run(&problem.inner, initial);
         PyOptimisationResults { inner: result }
@@ -404,17 +423,16 @@ impl PyNelderMead {
 // CMAES Optimiser
 // ============================================================================
 
-#[gen_stub_pyclass]
+/// Covariance Matrix Adaptation Evolution Strategy optimiser.
 #[pyclass(name = "CMAES")]
 #[derive(Clone)]
 pub struct PyCMAES {
-    #[gen_stub(skip)]
     inner: CMAES,
 }
 
-#[gen_stub_pymethods]
 #[pymethods]
 impl PyCMAES {
+    /// Create a CMA-ES optimiser with library defaults.
     #[new]
     fn new() -> Self {
         Self {
@@ -422,26 +440,31 @@ impl PyCMAES {
         }
     }
 
+    /// Limit the number of iterations/generations before termination.
     fn with_max_iter(mut slf: PyRefMut<'_, Self>, max_iter: usize) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_max_iter(max_iter);
         slf
     }
 
+    /// Set the stopping threshold on the best objective value.
     fn with_threshold(mut slf: PyRefMut<'_, Self>, threshold: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_threshold(threshold);
         slf
     }
 
+    /// Set the initial global step-size (standard deviation).
     fn with_sigma0(mut slf: PyRefMut<'_, Self>, sigma0: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_sigma0(sigma0);
         slf
     }
 
+    /// Abort the run if no improvement occurs for the given wall-clock duration.
     fn with_patience(mut slf: PyRefMut<'_, Self>, patience_seconds: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_patience(patience_seconds);
         slf
     }
 
+    /// Specify the number of offspring evaluated per generation.
     fn with_population_size(
         mut slf: PyRefMut<'_, Self>,
         population_size: usize,
@@ -450,11 +473,13 @@ impl PyCMAES {
         slf
     }
 
+    /// Initialise the internal RNG for reproducible runs.
     fn with_seed(mut slf: PyRefMut<'_, Self>, seed: u64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_seed(seed);
         slf
     }
 
+    /// Optimise the given problem starting from the provided mean vector.
     fn run(&self, problem: &PyProblem, initial: Vec<f64>) -> PyOptimisationResults {
         let result = self.inner.run(&problem.inner, initial);
         PyOptimisationResults { inner: result }
@@ -465,66 +490,75 @@ impl PyCMAES {
 // Optimisation Results
 // ============================================================================
 
-#[gen_stub_pyclass]
+/// Container for optimiser outputs and diagnostic metadata.
 #[pyclass(name = "OptimisationResults")]
 pub struct PyOptimisationResults {
-    #[gen_stub(skip)]
     inner: OptimisationResults,
 }
 
-#[gen_stub_pymethods]
 #[pymethods]
 impl PyOptimisationResults {
+    /// Decision vector corresponding to the best-found objective value.
     #[getter]
     fn x(&self) -> Vec<f64> {
         self.inner.x.clone()
     }
 
+    /// Objective value evaluated at `x`.
     #[getter]
     fn fun(&self) -> f64 {
         self.inner.fun
     }
 
+    /// Number of iterations performed by the optimiser.
     #[getter]
     fn nit(&self) -> usize {
         self.inner.nit
     }
 
+    /// Total number of objective function evaluations.
     #[getter]
     fn nfev(&self) -> usize {
         self.inner.nfev
     }
 
+    /// Whether the run satisfied its convergence criteria.
     #[getter]
     fn success(&self) -> bool {
         self.inner.success
     }
 
+    /// Human-readable status message summarising the termination state.
     #[getter]
     fn message(&self) -> String {
         self.inner.message.clone()
     }
 
+    /// Structured termination flag describing why the run ended.
     #[getter]
     fn termination_reason(&self) -> String {
         self.inner.termination_reason.to_string()
     }
 
+    /// Simplex vertices at termination, when provided by the optimiser.
     #[getter]
     fn final_simplex(&self) -> Vec<Vec<f64>> {
         self.inner.final_simplex.clone()
     }
 
+    /// Objective values corresponding to `final_simplex`.
     #[getter]
     fn final_simplex_values(&self) -> Vec<f64> {
         self.inner.final_simplex_values.clone()
     }
 
+    /// Estimated covariance of the search distribution, if available.
     #[getter]
     fn covariance(&self) -> Option<Vec<Vec<f64>>> {
         self.inner.covariance.clone()
     }
 
+    /// Render a concise summary of the optimisation outcome.
     fn __repr__(&self) -> String {
         format!(
             "OptimisationResults(x={:?}, fun={:.6}, nit={}, nfev={}, success={}, reason={})",
@@ -542,9 +576,10 @@ impl PyOptimisationResults {
 // Module Registration
 // ============================================================================
 
+#[cfg(feature = "stubgen")]
 define_stub_info_gatherer!(stub_info);
 
-#[gen_stub_pyfunction]
+/// Return a convenience factory for creating `Builder` instances.
 #[pyfunction]
 fn builder_factory_py() -> PyBuilder {
     PyBuilder::new()

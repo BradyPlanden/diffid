@@ -15,3 +15,4 @@ diffsol = {version = "0.6.7", features = ["diffsl-cranelift"]}
 nalgebra = "0.34.1"
 rand = { version = "0.8", features = ["std"] }
 rand_distr = "0.4"
+rayon = "1.10"

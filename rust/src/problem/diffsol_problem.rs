@@ -1,6 +1,11 @@
-use diffsol::{DiffSl, MatrixCommon, NalgebraVec, OdeEquations, OdeSolverMethod, OdeSolverProblem};
+use super::DiffsolConfig;
+use diffsol::{
+    DiffSl, MatrixCommon, NalgebraVec, OdeBuilder, OdeEquations, OdeSolverMethod,
+    OdeSolverProblem,
+};
 use nalgebra::DMatrix;
 
+use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
 
 type M = diffsol::NalgebraMat<f64>;
@@ -16,7 +21,9 @@ type Eqn = DiffSl<M, CG>;
 
 /// Cost function for Diffsol problems
 pub struct DiffsolCost {
-    problem: Arc<Mutex<OdeSolverProblem<Eqn>>>,
+    dsl: String,
+    config: DiffsolConfig,
+    pool: Arc<Mutex<Vec<OdeSolverProblem<Eqn>>>>,
     data: DMatrix<f64>,
     t_span: Vec<f64>,
 }
@@ -24,64 +31,120 @@ pub struct DiffsolCost {
 impl DiffsolCost {
     pub fn new(
         problem: OdeSolverProblem<Eqn>,
+        dsl: String,
+        config: DiffsolConfig,
         data: DMatrix<f64>,
         t_span: Vec<f64>,
     ) -> Self {
         Self {
-            problem: Arc::new(Mutex::new(problem)),
+            dsl,
+            config,
+            pool: Arc::new(Mutex::new(vec![problem])),
             data,
             t_span,
         }
     }
 
-    /// Evaluate cost function (sum of squared differences)
-    /// This is currently non-optimised, with the solution type
-    /// NalgebraVec manually iterated over due to type conversion
-    /// problems.
-    pub fn evaluate(&self, params: &[f64]) -> Result<f64, String> {
-        let mut problem = self
-            .problem
-            .lock()
-            .map_err(|e| format!("Mutex lock error: {}", e))?;
+    fn build_problem(&self) -> Result<OdeSolverProblem<Eqn>, String> {
+        let builder = OdeBuilder::<M>::new()
+            .atol([self.config.atol])
+            .rtol(self.config.rtol);
 
-        // Create NalgebraVec
+        builder
+            .build_from_diffsl(&self.dsl)
+            .map_err(|e| format!("Failed to build ODE model: {}", e))
+    }
+
+    fn acquire_problem(&self) -> Result<OdeSolverProblem<Eqn>, String> {
+        if let Some(problem) = self
+            .pool
+            .lock()
+            .map_err(|e| format!("Mutex lock error: {}", e))?
+            .pop()
+        {
+            return Ok(problem);
+        }
+
+        self.build_problem()
+    }
+
+    fn release_problem(&self, problem: OdeSolverProblem<Eqn>) -> Result<(), String> {
+        self.pool
+            .lock()
+            .map_err(|e| format!("Mutex lock error: {}", e))?
+            .push(problem);
+        Ok(())
+    }
+
+    fn evaluate_with_problem(
+        problem: &mut OdeSolverProblem<Eqn>,
+        params: &[f64],
+        data: &DMatrix<f64>,
+        t_span: &[f64],
+    ) -> Result<f64, String> {
         let param_vec = NalgebraVec::from(V::from_vec(params.to_vec()));
         problem.eqn_mut().set_params(&param_vec);
 
-        let Ok(solution) = problem.bdf::<LS>().unwrap().solve_dense(&self.t_span) else {
+        let solver = problem
+            .bdf::<LS>()
+            .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
+
+        let mut solver = solver;
+
+        let Ok(solution) = solver.solve_dense(t_span) else {
             return Ok(1e5);
         };
 
         let sol_rows = solution.nrows();
         let sol_cols = solution.ncols();
-        let data_rows = self.data.nrows();
-        let data_cols = self.data.ncols();
+        let data_rows = data.nrows();
+        let data_cols = data.ncols();
 
-        let cost = if sol_rows == data_rows && sol_cols == data_cols {
+        if sol_rows == data_rows && sol_cols == data_cols {
             let mut sum_sq = 0.0;
             for j in 0..sol_rows {
                 for i in 0..sol_cols {
-                    let diff = solution[(j, i)] - self.data[(j, i)];
+                    let diff = solution[(j, i)] - data[(j, i)];
                     sum_sq += diff * diff;
                 }
             }
-            sum_sq
+            Ok(sum_sq)
         } else if sol_rows == data_cols && sol_cols == data_rows {
             let mut sum_sq = 0.0;
             for j in 0..sol_rows {
                 for i in 0..sol_cols {
-                    let diff = solution[(j, i)] - self.data[(i, j)];
+                    let diff = solution[(j, i)] - data[(i, j)];
                     sum_sq += diff * diff;
                 }
             }
-            sum_sq
+            Ok(sum_sq)
         } else {
-            return Err(format!(
+            Err(format!(
                 "Solution shape {}x{} does not match data shape {}x{}",
                 sol_rows, sol_cols, data_rows, data_cols
-            ));
-        };
+            ))
+        }
+    }
 
-        Ok(cost)
+    /// Evaluate cost function (sum of squared differences)
+    /// Falls back to a large penalty when the solver fails to converge.
+    pub fn evaluate(&self, params: &[f64]) -> Result<f64, String> {
+        let mut problem = self.acquire_problem()?;
+        let result = Self::evaluate_with_problem(&mut problem, params, &self.data, &self.t_span);
+        let release_result = self.release_problem(problem);
+        release_result?;
+        result
+    }
+
+    pub fn evaluate_population(&self, params: &[&[f64]]) -> Vec<Result<f64, String>> {
+        params
+            .par_iter()
+            .map(|param| -> Result<f64, String> {
+                let mut problem = self.acquire_problem()?;
+                let result = Self::evaluate_with_problem(&mut problem, *param, &self.data, &self.t_span);
+                self.release_problem(problem)?;
+                result
+            })
+            .collect()
     }
 }

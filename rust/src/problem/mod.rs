@@ -244,11 +244,17 @@ impl Problem {
         let model = builder
             .build_from_diffsl(dsl)
             .map_err(|e| format!("Failed to build ODE model: {}", e))?;
-        let cost = DiffsolCost::new(model, data, t_span);
+        let cost = DiffsolCost::new(
+            model,
+            dsl.to_string(),
+            config.clone(),
+            data,
+            t_span,
+        );
 
         Ok(Problem {
             kind: ProblemKind::Diffsol(Box::new(cost)),
-            config: HashMap::new(),
+            config: config.to_map(),
             parameter_names,
             params,
             default_nm: None,
@@ -260,6 +266,19 @@ impl Problem {
         match &self.kind {
             ProblemKind::Callable(obj) => Ok((obj)(x)),
             ProblemKind::Diffsol(cost) => cost.evaluate(x),
+        }
+    }
+
+    pub fn evaluate_population(&self, xs: &[Vec<f64>]) -> Vec<Result<f64, String>> {
+        match &self.kind {
+            ProblemKind::Callable(obj) => xs
+                .iter()
+                .map(|x| Ok((obj)(x)))
+                .collect(),
+            ProblemKind::Diffsol(cost) => {
+                let slices: Vec<&[f64]> = xs.iter().map(|x| x.as_slice()).collect();
+                cost.evaluate_population(&slices)
+            }
         }
     }
 
@@ -307,5 +326,69 @@ impl Problem {
         // Default to NelderMead when nothing provided
         let nm = NelderMead::new();
         nm.run(self, x0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn diffsol_population_evaluation_matches_individual() {
+        let dsl = r#"
+in = [r, k]
+r { 1 }
+k { 1 }
+u_i { y = 0.1 }
+F_i { (r * y) * (1 - (y / k)) }
+"#;
+
+        let t_span: Vec<f64> = (0..6).map(|i| i as f64 * 0.2).collect();
+        let data_values: Vec<f64> = t_span
+            .iter()
+            .map(|t| 0.1 * (*t).exp())
+            .collect();
+        let data = DMatrix::from_vec(t_span.len(), 1, data_values);
+
+        let mut params = HashMap::new();
+        params.insert("r".to_string(), 1.0);
+        params.insert("k".to_string(), 1.0);
+
+        let parameter_names = vec!["r".to_string(), "k".to_string()];
+
+        let problem = Problem::new_diffsol(
+            dsl,
+            data,
+            t_span,
+            DiffsolConfig::default(),
+            parameter_names,
+            params,
+        )
+        .expect("failed to build diffsol problem");
+
+        let population = vec![
+            vec![1.0, 1.0],
+            vec![0.9, 1.2],
+            vec![1.1, 0.8],
+            vec![0.8, 1.3],
+        ];
+
+        let sequential: Vec<f64> = population
+            .iter()
+            .map(|x| problem.evaluate(x).expect("sequential evaluation failed"))
+            .collect();
+
+        let batched: Vec<f64> = problem
+            .evaluate_population(&population)
+            .into_iter()
+            .map(|res| res.expect("batched evaluation failed"))
+            .collect();
+
+        assert_eq!(sequential.len(), batched.len());
+        for (expected, actual) in sequential.iter().zip(batched.iter()) {
+            let diff = (expected - actual).abs();
+            assert!(diff <= 1e-8, "expected {expected}, got {actual}");
+        }
     }
 }

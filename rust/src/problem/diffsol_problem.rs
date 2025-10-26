@@ -6,8 +6,8 @@ use nalgebra::DMatrix;
 
 use rayon::prelude::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 type M = diffsol::NalgebraMat<f64>;
@@ -94,10 +94,6 @@ impl DiffsolCost {
             if let Entry::Vacant(e) = cache.entry(id) {
                 e.insert(self.build_problem()?);
             }
-//             if !cache.contains_key(&id) {
-//                 let problem = self.build_problem()?;
-//                 cache.insert(id, problem);
-//             }
             let problem = cache
                 .get_mut(&id)
                 .expect("problem cache must contain entry after insertion");

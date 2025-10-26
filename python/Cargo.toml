@@ -11,11 +11,6 @@ extension-module = ["pyo3/extension-module"]
 [lib]
 name = "chronopt"
 crate-type = ["cdylib", "rlib"]
-
-[[bin]]
-name = "generate_stubs"
-path = "src/bin/generate_stubs.rs"
-
 [dependencies]
 pyo3 = { version = "0.26" }
 chronopt_core = { package = "chronopt", path = "../rust" }

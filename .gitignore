@@ -13,6 +13,9 @@ __pycache__/
 .venv/
 env/
 bin/
+# Keep Cargo source binaries checked in
+!python/src/bin/
+!python/src/bin/*
 build/
 develop-eggs/
 dist/

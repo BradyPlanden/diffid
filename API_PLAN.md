@@ -10,9 +10,9 @@
   - Once Hessian information is available, add natural gradient descent implementation
 
 ### Phase 2 — Diffsol builder and simulation representation
-  - Parallelize the DiffsolProblem with `rayon` (perhaps at OdeBuilder level, need to look into diffsol examples)
+  - ~~Parallelize the DiffsolProblem with `rayon` (perhaps at OdeBuilder level, need to look into diffsol examples)~~
   - Implement gradient/hessian acquisition 
-  - Implement sparse vs dense solving with faer/Nalgebra
+  - ~~Implement sparse vs dense solving with faer/Nalgebra~~
 
 ### Phase 3 — Samplers
 - **Rust core**

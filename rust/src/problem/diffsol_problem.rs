@@ -1,6 +1,8 @@
-use super::DiffsolConfig;
+use super::{DiffsolBackend, DiffsolConfig};
+use diffsol::op::Op;
 use diffsol::{
-    DiffSl, MatrixCommon, NalgebraVec, OdeBuilder, OdeEquations, OdeSolverMethod, OdeSolverProblem,
+    DiffSl, FaerSparseLU, FaerSparseMat, FaerVec, Matrix, MatrixCommon, NalgebraLU, NalgebraMat,
+    NalgebraVec, OdeBuilder, OdeEquations, OdeSolverMethod, OdeSolverProblem, Vector,
 };
 use nalgebra::DMatrix;
 
@@ -8,21 +10,31 @@ use rayon::prelude::*;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::ops::Index;
 use std::sync::atomic::{AtomicUsize, Ordering};
-
-type M = diffsol::NalgebraMat<f64>;
-type V = nalgebra::DVector<f64>;
-type LS = diffsol::NalgebraLU<f64>;
 
 #[cfg(not(feature = "diffsol-llvm"))]
 type CG = diffsol::CraneliftJitModule;
 #[cfg(feature = "diffsol-llvm")]
 type CG = diffsol::LlvmModule;
 
-type Eqn = DiffSl<M, CG>;
+type DenseEqn = DiffSl<NalgebraMat<f64>, CG>;
+type SparseEqn = DiffSl<FaerSparseMat<f64>, CG>;
+type DenseProblem = OdeSolverProblem<DenseEqn>;
+type SparseProblem = OdeSolverProblem<SparseEqn>;
+
+type DenseVector = NalgebraVec<f64>;
+type SparseVector = FaerVec<f64>;
+type DenseSolver = NalgebraLU<f64>;
+type SparseSolver = FaerSparseLU<f64>;
+
+pub enum BackendProblem {
+    Dense(DenseProblem),
+    Sparse(SparseProblem),
+}
 
 thread_local! {
-    static PROBLEM_CACHE: RefCell<HashMap<usize, OdeSolverProblem<Eqn>>> = RefCell::new(HashMap::new());
+    static PROBLEM_CACHE: RefCell<HashMap<usize, BackendProblem>> = RefCell::new(HashMap::new());
 }
 
 static NEXT_DIFFSOL_COST_ID: AtomicUsize = AtomicUsize::new(1);
@@ -45,7 +57,7 @@ pub struct DiffsolCost {
 /// Each thread lazily initializes its own problem instance on first use.
 impl DiffsolCost {
     pub fn new(
-        problem: OdeSolverProblem<Eqn>,
+        problem: BackendProblem,
         dsl: String,
         config: DiffsolConfig,
         data: DMatrix<f64>,
@@ -63,17 +75,24 @@ impl DiffsolCost {
         cost
     }
 
-    fn build_problem(&self) -> Result<OdeSolverProblem<Eqn>, String> {
-        let builder = OdeBuilder::<M>::new()
-            .atol([self.config.atol])
-            .rtol(self.config.rtol);
-
-        builder
-            .build_from_diffsl(&self.dsl)
-            .map_err(|e| format!("Failed to build ODE model: {}", e))
+    fn build_problem(&self) -> Result<BackendProblem, String> {
+        match self.config.backend {
+            DiffsolBackend::Dense => OdeBuilder::<NalgebraMat<f64>>::new()
+                .atol([self.config.atol])
+                .rtol(self.config.rtol)
+                .build_from_diffsl(&self.dsl)
+                .map_err(|e| format!("Failed to build ODE model: {}", e))
+                .map(BackendProblem::Dense),
+            DiffsolBackend::Sparse => OdeBuilder::<FaerSparseMat<f64>>::new()
+                .atol([self.config.atol])
+                .rtol(self.config.rtol)
+                .build_from_diffsl(&self.dsl)
+                .map_err(|e| format!("Failed to build ODE model: {}", e))
+                .map(BackendProblem::Sparse),
+        }
     }
 
-    fn seed_initial_problem(&self, problem: OdeSolverProblem<Eqn>) {
+    fn seed_initial_problem(&self, problem: BackendProblem) {
         let id = self.id;
         PROBLEM_CACHE.with(|cache| {
             let mut cache = cache.borrow_mut();
@@ -83,7 +102,7 @@ impl DiffsolCost {
 
     fn with_thread_local_problem<F, R>(&self, mut f: F) -> Result<R, String>
     where
-        F: FnMut(&mut OdeSolverProblem<Eqn>) -> Result<R, String>,
+        F: FnMut(&mut BackendProblem) -> Result<R, String>,
     {
         #[cfg(test)]
         let _probe_guard = test_support::ProbeGuard::new();
@@ -102,43 +121,66 @@ impl DiffsolCost {
     }
 
     fn evaluate_with_problem(
-        problem: &mut OdeSolverProblem<Eqn>,
+        problem: &mut BackendProblem,
         params: &[f64],
         data: &DMatrix<f64>,
         t_span: &[f64],
     ) -> Result<f64, String> {
-        let param_vec = NalgebraVec::from(V::from_vec(params.to_vec()));
-        problem.eqn_mut().set_params(&param_vec);
+        match problem {
+            BackendProblem::Dense(problem) => {
+                let ctx = problem.eqn().context().clone();
+                let params_vec = DenseVector::from_vec(params.to_vec(), ctx);
+                problem.eqn_mut().set_params(&params_vec);
 
-        let solver = problem
-            .bdf::<LS>()
-            .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
+                let mut solver = problem
+                    .bdf::<DenseSolver>()
+                    .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
 
-        let mut solver = solver;
+                match solver.solve_dense(t_span) {
+                    Ok(solution) => Self::matrix_squared_error(&solution, data),
+                    Err(_) => Ok(1e5),
+                }
+            }
+            BackendProblem::Sparse(problem) => {
+                let ctx = problem.eqn().context().clone();
+                let params_vec = SparseVector::from_vec(params.to_vec(), ctx);
+                problem.eqn_mut().set_params(&params_vec);
 
-        let Ok(solution) = solver.solve_dense(t_span) else {
-            return Ok(1e5);
-        };
+                let mut solver = problem
+                    .bdf::<SparseSolver>()
+                    .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
 
-        let sol_rows = solution.nrows();
-        let sol_cols = solution.ncols();
+                match solver.solve_dense(t_span) {
+                    Ok(solution) => Self::matrix_squared_error(&solution, data),
+                    Err(_) => Ok(1e5),
+                }
+            }
+        }
+    }
+
+    fn matrix_squared_error<M>(solution: &M, data: &DMatrix<f64>) -> Result<f64, String>
+    where
+        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
+    {
+        let sol_rows = solution.nrows() as usize;
+        let sol_cols = solution.ncols() as usize;
         let data_rows = data.nrows();
         let data_cols = data.ncols();
 
         if sol_rows == data_rows && sol_cols == data_cols {
             let mut sum_sq = 0.0;
-            for j in 0..sol_rows {
-                for i in 0..sol_cols {
-                    let diff = solution[(j, i)] - data[(j, i)];
+            for row in 0..sol_rows {
+                for col in 0..sol_cols {
+                    let diff = solution[(row, col)] - data[(row, col)];
                     sum_sq += diff * diff;
                 }
             }
             Ok(sum_sq)
         } else if sol_rows == data_cols && sol_cols == data_rows {
             let mut sum_sq = 0.0;
-            for j in 0..sol_rows {
-                for i in 0..sol_cols {
-                    let diff = solution[(j, i)] - data[(i, j)];
+            for row in 0..sol_rows {
+                for col in 0..sol_cols {
+                    let diff = solution[(row, col)] - data[(col, row)];
                     sum_sq += diff * diff;
                 }
             }

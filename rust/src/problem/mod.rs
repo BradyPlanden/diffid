@@ -7,15 +7,27 @@ pub mod diffsol_problem;
 pub use diffsol_problem::DiffsolCost;
 
 pub type ObjectiveFn = Box<dyn Fn(&[f64]) -> f64 + Send + Sync>;
-type M = diffsol::NalgebraMat<f64>;
 
 const DEFAULT_RTOL: f64 = 1e-6;
 const DEFAULT_ATOL: f64 = 1e-9;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffsolBackend {
+    Dense,
+    Sparse,
+}
+
+impl Default for DiffsolBackend {
+    fn default() -> Self {
+        DiffsolBackend::Dense
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct DiffsolConfig {
     pub rtol: f64,
     pub atol: f64,
+    pub backend: DiffsolBackend,
 }
 
 impl Default for DiffsolConfig {
@@ -23,6 +35,7 @@ impl Default for DiffsolConfig {
         Self {
             rtol: DEFAULT_RTOL,
             atol: DEFAULT_ATOL,
+            backend: DiffsolBackend::default(),
         }
     }
 }
@@ -38,9 +51,15 @@ impl DiffsolConfig {
         self
     }
 
+    pub fn with_backend(mut self, backend: DiffsolBackend) -> Self {
+        self.backend = backend;
+        self
+    }
+
     pub fn merge(mut self, other: Self) -> Self {
         self.rtol = other.rtol;
         self.atol = other.atol;
+        self.backend = other.backend;
         self
     }
 
@@ -177,6 +196,11 @@ impl DiffsolBuilder {
         self
     }
 
+    pub fn with_backend(mut self, backend: DiffsolBackend) -> Self {
+        self.config.backend = backend;
+        self
+    }
+
     pub fn add_config(mut self, config: HashMap<String, f64>) -> Self {
         for (key, value) in config {
             match key.as_str() {
@@ -238,11 +262,28 @@ impl Problem {
         parameter_names: Vec<String>,
         params: HashMap<String, f64>,
     ) -> Result<Self, String> {
-        let builder = OdeBuilder::<M>::new().atol([config.atol]).rtol(config.rtol);
-        let model = builder
-            .build_from_diffsl(dsl)
-            .map_err(|e| format!("Failed to build ODE model: {}", e))?;
-        let cost = DiffsolCost::new(model, dsl.to_string(), config.clone(), data, t_span);
+        let backend_problem = match config.backend {
+            DiffsolBackend::Dense => OdeBuilder::<diffsol::NalgebraMat<f64>>::new()
+                .atol([config.atol])
+                .rtol(config.rtol)
+                .build_from_diffsl(dsl)
+                .map_err(|e| format!("Failed to build ODE model: {}", e))
+                .map(diffsol_problem::BackendProblem::Dense),
+            DiffsolBackend::Sparse => OdeBuilder::<diffsol::FaerSparseMat<f64>>::new()
+                .atol([config.atol])
+                .rtol(config.rtol)
+                .build_from_diffsl(dsl)
+                .map_err(|e| format!("Failed to build ODE model: {}", e))
+                .map(diffsol_problem::BackendProblem::Sparse),
+        }?;
+
+        let cost = DiffsolCost::new(
+            backend_problem,
+            dsl.to_string(),
+            config.clone(),
+            data,
+            t_span,
+        );
 
         Ok(Problem {
             kind: ProblemKind::Diffsol(Box::new(cost)),

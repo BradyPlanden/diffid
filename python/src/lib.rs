@@ -6,7 +6,7 @@ use pyo3::types::PyType;
 use std::sync::Arc;
 
 use chronopt_core::prelude::*;
-use chronopt_core::problem::DiffsolBuilder;
+use chronopt_core::problem::{Builder, DiffsolBackend, DiffsolBuilder};
 
 #[cfg(feature = "stubgen")]
 use pyo3_stub_gen::{define_stub_info_gatherer, TypeInfo};
@@ -66,7 +66,6 @@ impl PyObjectiveFn {
             let input = PyArray1::from_slice(py, x);
             let result = callable.call1((input,))?;
 
-            // Try extracting as array first
             if let Ok(output) = result.extract::<PyReadonlyArray1<f64>>() {
                 let array = output.as_array();
                 return match array.len() {
@@ -78,7 +77,6 @@ impl PyObjectiveFn {
                 };
             }
 
-            // Try extracting as sequence
             if let Ok(values) = result.extract::<Vec<f64>>() {
                 return match values.len() {
                     1 => Ok(values[0]),
@@ -89,12 +87,10 @@ impl PyObjectiveFn {
                 };
             }
 
-            // Try extracting as scalar
             if let Ok(value) = result.extract::<f64>() {
                 return Ok(value);
             }
 
-            // Error case
             let ty_name = result
                 .get_type()
                 .name()
@@ -163,7 +159,6 @@ impl PyBuilder {
 
         slf.inner = std::mem::take(&mut slf.inner)
             .with_objective(move |x: &[f64]| py_fn_clone.call(x).unwrap_or(f64::INFINITY));
-
         slf.py_callable = Some(py_fn);
         Ok(slf)
     }
@@ -178,9 +173,7 @@ impl PyBuilder {
     fn build(&mut self) -> PyResult<PyProblem> {
         let inner = std::mem::take(&mut self.inner);
         let default_optimiser = self.default_optimiser.take();
-
         let problem = inner.build().map_err(|e| PyValueError::new_err(e))?;
-
         Ok(PyProblem {
             inner: problem,
             default_optimiser,
@@ -189,10 +182,10 @@ impl PyBuilder {
 }
 
 // ============================================================================
-// DiffsolBuilder
+// Diffsol Builder
 // ============================================================================
 
-/// Builder for differential-equation problems described through DiffSL.
+/// Differential equation solver builder.
 #[pyclass(name = "DiffsolBuilder")]
 pub struct PyDiffsolBuilder {
     inner: DiffsolBuilder,
@@ -230,6 +223,22 @@ impl PyDiffsolBuilder {
             return Err(PyValueError::new_err("t_span must not be empty"));
         }
         slf.inner = std::mem::take(&mut slf.inner).with_t_span(t_span);
+        Ok(slf)
+    }
+
+    /// Choose whether to use dense or sparse diffusion solvers.
+    fn with_backend(mut slf: PyRefMut<'_, Self>, backend: String) -> PyResult<PyRefMut<'_, Self>> {
+        let backend_enum = match backend.as_str() {
+            "dense" => DiffsolBackend::Dense,
+            "sparse" => DiffsolBackend::Sparse,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "Unknown backend '{}'. Expected 'dense' or 'sparse'",
+                    other
+                )))
+            }
+        };
+        slf.inner = std::mem::take(&mut slf.inner).with_backend(backend_enum);
         Ok(slf)
     }
 

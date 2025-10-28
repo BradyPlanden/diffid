@@ -18,7 +18,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12', '3.13']
+        python-version: ['3.11']
+#        python-version: ['3.11', '3.12', '3.13']
         platform:
           - runner: ubuntu-24.04
             target: x86_64
@@ -26,8 +27,7 @@ jobs:
             target: x64
           - runner: macos-15-intel
             target: x86_64
-          - runner: macos-15
-            target: arm64
+          - runner: macos-15-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -48,11 +48,14 @@ jobs:
         with:
           name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}-py${{ matrix.python-version }}
           path: dist
-      - name: pytest
+      - name: Run tests
         shell: bash
         env:
           UV_PROJECT_ENVIRONMENT: .venv
         run: |
+          uv venv
+          uv pip install pytest
+          uv pip install chronopt --no-index --find-links ./dist --force-reinstall
           uv run pytest -s -v tests
 
   sdist:

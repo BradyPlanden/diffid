@@ -1,7 +1,8 @@
 [package]
 name = "chronopt"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
 
 [features]
 diffsol-llvm = []
@@ -11,12 +12,8 @@ diffsol-llvm17 = ["diffsol/diffsl-llvm17", "diffsol-llvm"]
 diffsol-llvm18 = ["diffsol/diffsl-llvm18", "diffsol-llvm"]
 
 [dependencies]
-diffsol = { version = "0.7.0", default-features = false, features = ["diffsl-cranelift", "nalgebra"] }
-nalgebra = "0.34.1"
+diffsol = { version = "0.6.6", default-features = false, features = ["diffsl-cranelift", "nalgebra", "faer"] }
+nalgebra.workspace = true
 rand = { version = "0.8", features = ["std"] }
 rand_distr = "0.4"
 rayon = "1.10"
-
-[target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
-diffsol = { version = "0.7.0", default-features = false, features = ["diffsl-cranelift", "nalgebra", "faer"] }
-faer = "0.23.2"

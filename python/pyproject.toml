@@ -2,26 +2,8 @@
 requires = ["maturin>=1.9,<2.0"]
 build-backend = "maturin"
 
-[project]
-name = "chronopt"
-requires-python = ">=3.11"
-classifiers = [
-    "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
-]
-dynamic = ["version"]
-dependencies = [
-    "numpy>=1.24.4",
-]
-
-[project.optional-dependencies]
-jax = [
-    "jax==0.4.38; sys_platform == 'darwin' and platform_machine == 'x86_64'",
-    "jaxlib==0.4.38; sys_platform == 'darwin' and platform_machine == 'x86_64'",
-]
-
-
 [tool.maturin]
+# The authoritative project metadata lives in the repository root pyproject.toml.
+# Keep this file minimal so building from python/ still works, while avoiding duplication.
 module-name = "chronopt"
-features = ["pyo3/extension-module"]
+features = ["extension-module"]

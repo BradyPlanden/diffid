@@ -2,3 +2,12 @@
 members = ["rust", "python"]
 resolver = "2"
 default-members = ["rust"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license-file = "LICENSE"
+
+[workspace.dependencies]
+nalgebra = "0.34.1"
+pyo3 = "0.26"

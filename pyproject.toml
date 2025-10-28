@@ -2,15 +2,30 @@
 requires = ["maturin>=1.9,<2.0"]
 build-backend = "maturin"
 
+[project]
+name = "chronopt"
+requires-python = ">=3.11"
+dynamic = ["version"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+    "numpy>=1.24.4",
+]
+
+[project.optional-dependencies]
+jax = [
+    "jax==0.4.38; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "jaxlib==0.4.38; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]
+
 [tool.maturin]
 # Point maturin to the Python extension crate inside the workspace
 manifest-path = "python/Cargo.toml"
 module-name = "chronopt"
-features = ["pyo3/extension-module"]
-
-[tool.uv.workspace]
-members = ["python"]
-# "default-member" = "python"
+features = ["extension-module"]
 
 [dependency-groups]
 dev = [

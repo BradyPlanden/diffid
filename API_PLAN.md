@@ -50,3 +50,9 @@
   - Make `examples/model_evidence.py` runnable (stub evidence is acceptable initially).
 - README:
   - ~~Add quickstart showing callable flow, diffsol flow, optimiser and sampler usage, and evidence stub.~~
+
+### General
+- Add sub-crate for sensitivity analysis
+  - Interface accepts a callable that returns a singular value or a value + gradient
+  - If grad not provided, SOBOL sampling to construct parameter sensitivities (callable args)
+  - Otherwise, fewer functions calls required but still SOBOL sampling with gradient used for sensitivity analysis

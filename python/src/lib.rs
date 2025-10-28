@@ -183,9 +183,8 @@ impl PyBuilder {
         let py_fn = Arc::new(PyObjectiveFn::new(obj));
         let objective = Arc::clone(&py_fn);
 
-        slf.inner = std::mem::take(&mut slf.inner).with_objective(move |x: &[f64]| {
-            objective.call(x).unwrap_or(f64::INFINITY)
-        });
+        slf.inner = std::mem::take(&mut slf.inner)
+            .with_objective(move |x: &[f64]| objective.call(x).unwrap_or(f64::INFINITY));
         slf.py_callable = Some(py_fn);
         Ok(slf)
     }
@@ -374,10 +373,7 @@ impl PyProblem {
 
     /// Evaluate the gradient of the objective function at `x` if available.
     fn evaluate_gradient(&self, x: Vec<f64>) -> PyResult<Option<Vec<f64>>> {
-        Ok(self
-            .inner
-            .gradient()
-            .map(|grad| grad(x.as_slice())))
+        Ok(self.inner.gradient().map(|grad| grad(x.as_slice())))
     }
 
     #[pyo3(signature = (initial=None, optimiser=None))]

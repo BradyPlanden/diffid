@@ -16,7 +16,10 @@ struct CallableObjective {
 
 impl CallableObjective {
     fn new(objective: ObjectiveFn, gradient: Option<GradientFn>) -> Self {
-        Self { objective, gradient }
+        Self {
+            objective,
+            gradient,
+        }
     }
 
     fn evaluate(&self, x: &[f64]) -> f64 {
@@ -345,10 +348,9 @@ impl Problem {
 
     pub fn evaluate_population(&self, xs: &[Vec<f64>]) -> Vec<Result<f64, String>> {
         match &self.kind {
-            ProblemKind::Callable(callable) => xs
-                .iter()
-                .map(|x| Ok(callable.evaluate(x)))
-                .collect(),
+            ProblemKind::Callable(callable) => {
+                xs.iter().map(|x| Ok(callable.evaluate(x))).collect()
+            }
             ProblemKind::Diffsol(cost) => {
                 let slices: Vec<&[f64]> = xs.iter().map(|x| x.as_slice()).collect();
                 cost.evaluate_population(&slices)

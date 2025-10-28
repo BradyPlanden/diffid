@@ -212,6 +212,7 @@ name = "chronopt"
 version = "0.1.0"
 dependencies = [
  "diffsol",
+ "faer",
  "nalgebra",
  "rand 0.8.5",
  "rand_distr 0.4.3",

@@ -19,3 +19,4 @@ rayon = "1.10"
 
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
 diffsol = { version = "0.7.0", default-features = false, features = ["diffsl-cranelift", "nalgebra", "faer"] }
+faer = "0.23.2"

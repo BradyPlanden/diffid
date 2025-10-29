@@ -28,6 +28,7 @@ jobs:
           - runner: macos-15-intel
             target: x86_64
           - runner: macos-15-latest
+            target: arm64
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -53,9 +54,8 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: .venv
         run: |
-          uv venv
+          uv sync
           uv pip install pytest
-          uv pip install chronopt --no-index --find-links ./dist --force-reinstall
           uv run pytest -s -v tests
 
   sdist:

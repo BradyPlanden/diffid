@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.12']
 #        python-version: ['3.11', '3.12', '3.13']
         platform:
           - runner: ubuntu-24.04
@@ -54,9 +54,7 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: .venv
         run: |
-          uv sync
-          uv pip install pytest
-          uv run pytest -s -v tests
+          uv sync && uv run pytest -v
 
   sdist:
     runs-on: ubuntu-24.04

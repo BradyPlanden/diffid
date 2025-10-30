@@ -1,13 +1,17 @@
 # chronopt
 
 Chronopt is a time-series statistical inference package, it's goals are:
-- Be fast, without sacrificing safety
+- Be fast, without sacrificing accuracy
 - Be modular and informative
 - Batteries included
 
 ## Installation 
 ```bash
 pip install chronopt
+```
+
+```bash
+uv pip install chronopt
 ```
 
 ## Quickstart (Pure Python)
@@ -55,10 +59,22 @@ Regenerate the Python *.pyi stub files after making changes to the bindings:
 uv run cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
 ```
 
+## Pre-commit hooks
+Install the tooling once per clone, then install the hooks:
+```bash
+uv tool install pre-commit
+pre-commit install
+```
+
+Run all checks manually anytime:
+```bash
+pre-commit run --all-files
+```
+
 ## Tests
 To run the python tests, use pytest:
 ```bash
-uv run pytest
+uv sync && uv run pytest
 ```
 
 for the rust tests, use cargo:

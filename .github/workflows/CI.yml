@@ -19,7 +19,6 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ['3.12']
-#        python-version: ['3.11', '3.12', '3.13']
         platform:
           - runner: ubuntu-24.04
             target: x86_64

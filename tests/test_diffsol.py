@@ -1,6 +1,7 @@
+import copy
+
 import chronopt as chron
 import numpy as np
-import copy
 import pytest
 
 
@@ -60,7 +61,7 @@ F_i { a * y }
 """
 
     t_span = np.linspace(0, 1, 5)
-    data = t_span ** 2
+    data = t_span**2
     stacked_data = np.column_stack((t_span, data))
 
     metric = chron.costs.RMSE()
@@ -79,7 +80,7 @@ F_i { a * y }
 
     # Change data
     builder = builder.remove_data()
-    builder = builder.add_data(np.column_stack((t_span, t_span ** 3)))
+    builder = builder.add_data(np.column_stack((t_span, t_span**3)))
     problem_2 = builder.build()
 
     # Change t_span along with data
@@ -90,7 +91,7 @@ F_i { a * y }
 
     # Change params
     builder = builder.remove_params()
-    builder = builder.add_params({"a": 2.0}) # ToDo: needs to be updated
+    builder = builder.add_params({"a": 2.0})  # ToDo: needs to be updated
     problem_4 = builder.build()
 
     # Change cost

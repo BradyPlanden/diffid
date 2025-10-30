@@ -420,9 +420,7 @@ impl PyDiffsolBuilder {
     /// Create a `Problem` representing the differential solver model.
     fn build(&mut self) -> PyResult<PyProblem> {
         let snapshot = self.inner.clone();
-        let problem = snapshot
-            .build()
-            .map_err(|e| PyValueError::new_err(e))?;
+        let problem = snapshot.build().map_err(|e| PyValueError::new_err(e))?;
 
         Ok(PyProblem {
             inner: problem,

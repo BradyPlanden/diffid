@@ -7,9 +7,9 @@
 
 ### Builders / Problems
 - Add a time-series builder (perhaps `VectorProblemBuilder`)
+- Update `Problem` builder to be `ScalarProblemBuilder`
 - ~~Add a diffsol builder~~
 - ~~Add a callable builder~~
-- Update `Problem` builder to be `ScalarProblemBuilder`
 
 ### Phase 1 — Optimisation
   - Add a gradient-based optimization method (AdamW / IRPropMin)

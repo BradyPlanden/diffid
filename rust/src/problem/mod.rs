@@ -329,14 +329,8 @@ impl DiffsolBuilder {
             );
         }
 
-        let t_span: Vec<f64> = data_with_t
-            .column(0)
-            .iter()
-            .cloned()
-            .collect();
-        let data = data_with_t
-            .columns(1, data_with_t.ncols() - 1)
-            .into_owned();
+        let t_span: Vec<f64> = data_with_t.column(0).iter().cloned().collect();
+        let data = data_with_t.columns(1, data_with_t.ncols() - 1).into_owned();
 
         Problem::new_diffsol(
             &dsl,

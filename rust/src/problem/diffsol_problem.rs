@@ -31,53 +31,59 @@ type DenseSolver = NalgebraLU<f64>;
 type SparseSolver = FaerSparseLU<f64>;
 
 pub enum BackendProblem {
-    Dense(DenseProblem),
-    Sparse(SparseProblem),
+    Dense(Box<DenseProblem>),
+    Sparse(Box<SparseProblem>),
 }
 
 thread_local! {
     static PROBLEM_CACHE: RefCell<HashMap<usize, BackendProblem>> = RefCell::new(HashMap::new());
 }
 
-static NEXT_DIFFSOL_COST_ID: AtomicUsize = AtomicUsize::new(1);
+static NEXT_DIFFSOL_PROBLEM_ID: AtomicUsize = AtomicUsize::new(1);
 
-/// Cost function for Diffsol problems
-pub struct DiffsolCost {
-    id: usize,
-    dsl: String,
-    config: DiffsolConfig,
-    data: DMatrix<f64>,
-    t_span: Vec<f64>,
-    cost_metric: Arc<dyn CostMetric>,
-}
+const FAILED_SOLVE_PENALTY: f64 = 1e5;
 
-/// Cost function for Diffsol problems.
+/// Solver for Diffsol problems maintaining per-thread cached ODE instances.
 ///
 /// # Thread Safety
 ///
 /// This type uses thread-local storage to maintain per-thread ODE solver
 /// problem instances, enabling safe parallel evaluation without locks.
 /// Each thread lazily initializes its own problem instance on first use.
-impl DiffsolCost {
+pub struct DiffsolProblem {
+    id: usize,
+    dsl: String,
+    config: DiffsolConfig,
+    t_span: Vec<f64>,
+    data: DMatrix<f64>,
+    cost_metric: Arc<dyn CostMetric>,
+}
+
+pub enum SimulationResult {
+    Solution(DMatrix<f64>),
+    Penalty,
+}
+
+impl DiffsolProblem {
     pub fn new(
         problem: BackendProblem,
         dsl: String,
         config: DiffsolConfig,
-        data: DMatrix<f64>,
         t_span: Vec<f64>,
+        data: DMatrix<f64>,
         cost_metric: Arc<dyn CostMetric>,
     ) -> Self {
-        let id = NEXT_DIFFSOL_COST_ID.fetch_add(1, Ordering::Relaxed);
-        let cost = Self {
+        let id = NEXT_DIFFSOL_PROBLEM_ID.fetch_add(1, Ordering::Relaxed);
+        let solver = Self {
             id,
             dsl,
             config,
-            data,
             t_span,
+            data,
             cost_metric,
         };
-        cost.seed_initial_problem(problem);
-        cost
+        solver.seed_initial_problem(problem);
+        solver
     }
 
     fn build_problem(&self) -> Result<BackendProblem, String> {
@@ -87,13 +93,13 @@ impl DiffsolCost {
                 .rtol(self.config.rtol)
                 .build_from_diffsl(&self.dsl)
                 .map_err(|e| format!("Failed to build ODE model: {}", e))
-                .map(BackendProblem::Dense),
+                .map(|problem| BackendProblem::Dense(Box::new(problem))),
             DiffsolBackend::Sparse => OdeBuilder::<FaerSparseMat<f64>>::new()
                 .atol([self.config.atol])
                 .rtol(self.config.rtol)
                 .build_from_diffsl(&self.dsl)
                 .map_err(|e| format!("Failed to build ODE model: {}", e))
-                .map(BackendProblem::Sparse),
+                .map(|problem| BackendProblem::Sparse(Box::new(problem))),
         }
     }
 
@@ -125,13 +131,11 @@ impl DiffsolCost {
         })
     }
 
-    fn evaluate_with_problem(
+    fn simulate_with_problem(
         problem: &mut BackendProblem,
         params: &[f64],
-        data: &DMatrix<f64>,
         t_span: &[f64],
-        cost_metric: &Arc<dyn CostMetric>,
-    ) -> Result<f64, String> {
+    ) -> Result<SimulationResult, String> {
         match problem {
             BackendProblem::Dense(problem) => {
                 let ctx = problem.eqn().context().clone();
@@ -143,8 +147,10 @@ impl DiffsolCost {
                     .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
 
                 match solver.solve_dense(t_span) {
-                    Ok(solution) => Self::evaluate_residual_cost(&solution, data, cost_metric),
-                    Err(_) => Ok(1e5),
+                    Ok(solution) => Ok(SimulationResult::Solution(Self::matrix_to_dmatrix(
+                        &solution,
+                    ))),
+                    Err(_) => Ok(SimulationResult::Penalty),
                 }
             }
             BackendProblem::Sparse(problem) => {
@@ -157,31 +163,47 @@ impl DiffsolCost {
                     .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
 
                 match solver.solve_dense(t_span) {
-                    Ok(solution) => Self::evaluate_residual_cost(&solution, data, cost_metric),
-                    Err(_) => Ok(1e5),
+                    Ok(solution) => Ok(SimulationResult::Solution(Self::matrix_to_dmatrix(
+                        &solution,
+                    ))),
+                    Err(_) => Ok(SimulationResult::Penalty),
                 }
             }
         }
     }
 
-    fn evaluate_residual_cost<M>(
-        solution: &M,
-        data: &DMatrix<f64>,
-        cost_metric: &Arc<dyn CostMetric>,
-    ) -> Result<f64, String>
-    where
-        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
-    {
-        let sol_rows = solution.nrows() as usize;
-        let sol_cols = solution.ncols() as usize;
-        let data_rows = data.nrows();
-        let data_cols = data.ncols();
+    pub fn simulate(&self, params: &[f64]) -> Result<SimulationResult, String> {
+        self.with_thread_local_problem(|problem| {
+            Self::simulate_with_problem(problem, params, &self.t_span)
+        })
+    }
+
+    pub fn simulate_population(&self, params: &[&[f64]]) -> Vec<Result<SimulationResult, String>> {
+        params
+            .par_iter()
+            .map(|param| {
+                self.with_thread_local_problem(|problem| {
+                    Self::simulate_with_problem(problem, param, &self.t_span)
+                })
+            })
+            .collect()
+    }
+
+    pub fn failed_solve_penalty() -> f64 {
+        FAILED_SOLVE_PENALTY
+    }
+
+    pub fn calculate_cost(&self, solution: &DMatrix<f64>) -> Result<f64, String> {
+        let sol_rows = solution.nrows();
+        let sol_cols = solution.ncols();
+        let data_rows = self.data.nrows();
+        let data_cols = self.data.ncols();
 
         let residuals = if sol_rows == data_rows && sol_cols == data_cols {
             let mut residuals = Vec::with_capacity(sol_rows * sol_cols);
             for row in 0..sol_rows {
                 for col in 0..sol_cols {
-                    residuals.push(solution[(row, col)] - data[(row, col)]);
+                    residuals.push(solution[(row, col)] - self.data[(row, col)]);
                 }
             }
             residuals
@@ -189,7 +211,7 @@ impl DiffsolCost {
             let mut residuals = Vec::with_capacity(sol_rows * sol_cols);
             for row in 0..sol_rows {
                 for col in 0..sol_cols {
-                    residuals.push(solution[(row, col)] - data[(col, row)]);
+                    residuals.push(solution[(row, col)] - self.data[(col, row)]);
                 }
             }
             residuals
@@ -200,44 +222,46 @@ impl DiffsolCost {
             ));
         };
 
-        Ok(cost_metric.evaluate(&residuals))
+        Ok(self.cost_metric.evaluate(&residuals))
     }
 
-    /// Evaluate cost function (sum of squared differences)
-    /// Falls back to a large penalty when the solver fails to converge.
     pub fn evaluate(&self, params: &[f64]) -> Result<f64, String> {
-        self.with_thread_local_problem(|problem| {
-            Self::evaluate_with_problem(
-                problem,
-                params,
-                &self.data,
-                &self.t_span,
-                &self.cost_metric,
-            )
-        })
+        match self.simulate(params)? {
+            SimulationResult::Solution(solution) => self.calculate_cost(&solution),
+            SimulationResult::Penalty => Ok(DiffsolProblem::failed_solve_penalty()),
+        }
     }
 
     pub fn evaluate_population(&self, params: &[&[f64]]) -> Vec<Result<f64, String>> {
-        params
-            .par_iter()
-            .map(|param| {
-                self.with_thread_local_problem(|problem| {
-                    Self::evaluate_with_problem(
-                        problem,
-                        param,
-                        &self.data,
-                        &self.t_span,
-                        &self.cost_metric,
-                    )
-                })
+        self.simulate_population(params)
+            .into_par_iter()
+            .map(|result| match result {
+                Ok(SimulationResult::Solution(solution)) => self.calculate_cost(&solution),
+                Ok(SimulationResult::Penalty) => Ok(DiffsolProblem::failed_solve_penalty()),
+                Err(err) => Err(err),
             })
             .collect()
+    }
+
+    fn matrix_to_dmatrix<M>(matrix: &M) -> DMatrix<f64>
+    where
+        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
+    {
+        let rows = matrix.nrows();
+        let cols = matrix.ncols();
+        let mut data = Vec::with_capacity(rows * cols);
+        for row in 0..rows {
+            for col in 0..cols {
+                data.push(matrix[(row, col)]);
+            }
+        }
+        DMatrix::from_row_slice(rows, cols, &data)
     }
 }
 
 /// Clean-up for globally stored
 /// PROBLEM_CACHE HashMap
-impl Drop for DiffsolCost {
+impl Drop for DiffsolProblem {
     fn drop(&mut self) {
         let id = self.id;
         PROBLEM_CACHE.with(|cache| {

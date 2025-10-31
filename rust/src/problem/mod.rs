@@ -8,7 +8,7 @@ pub mod builders;
 pub mod diffsol_problem;
 pub use crate::cost::{CostMetric, RootMeanSquaredError, SumSquaredError};
 pub use builders::{Builder, DiffsolBackend, DiffsolBuilder, DiffsolConfig};
-pub use diffsol_problem::DiffsolCost;
+pub use diffsol_problem::DiffsolProblem;
 
 pub type ObjectiveFn = Box<dyn Fn(&[f64]) -> f64 + Send + Sync>;
 pub type GradientFn = Box<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync>;
@@ -38,7 +38,7 @@ impl CallableObjective {
 /// Different kinds of problems
 pub enum ProblemKind {
     Callable(CallableObjective),
-    Diffsol(Box<DiffsolCost>),
+    Diffsol(Box<DiffsolProblem>),
 }
 // Problem class
 pub struct Problem {
@@ -66,26 +66,26 @@ impl Problem {
                 .rtol(config.rtol)
                 .build_from_diffsl(dsl)
                 .map_err(|e| format!("Failed to build ODE model: {}", e))
-                .map(diffsol_problem::BackendProblem::Dense),
+                .map(|problem| diffsol_problem::BackendProblem::Dense(Box::new(problem))),
             DiffsolBackend::Sparse => OdeBuilder::<diffsol::FaerSparseMat<f64>>::new()
                 .atol([config.atol])
                 .rtol(config.rtol)
                 .build_from_diffsl(dsl)
                 .map_err(|e| format!("Failed to build ODE model: {}", e))
-                .map(diffsol_problem::BackendProblem::Sparse),
+                .map(|problem| diffsol_problem::BackendProblem::Sparse(Box::new(problem))),
         }?;
 
-        let cost = DiffsolCost::new(
+        let problem = diffsol_problem::DiffsolProblem::new(
             backend_problem,
             dsl.to_string(),
             config.clone(),
-            data,
             t_span,
+            data,
             cost_metric,
         );
 
         Ok(Problem {
-            kind: ProblemKind::Diffsol(Box::new(cost)),
+            kind: ProblemKind::Diffsol(Box::new(problem)),
             config: config.to_map(),
             parameter_names,
             params,
@@ -97,7 +97,7 @@ impl Problem {
     pub fn evaluate(&self, x: &[f64]) -> Result<f64, String> {
         match &self.kind {
             ProblemKind::Callable(callable) => Ok(callable.evaluate(x)),
-            ProblemKind::Diffsol(cost) => cost.evaluate(x),
+            ProblemKind::Diffsol(problem) => problem.evaluate(x),
         }
     }
 
@@ -106,9 +106,9 @@ impl Problem {
             ProblemKind::Callable(callable) => {
                 xs.iter().map(|x| Ok(callable.evaluate(x))).collect()
             }
-            ProblemKind::Diffsol(cost) => {
+            ProblemKind::Diffsol(problem) => {
                 let slices: Vec<&[f64]> = xs.iter().map(|x| x.as_slice()).collect();
-                cost.evaluate_population(&slices)
+                problem.evaluate_population(&slices)
             }
         }
     }
@@ -202,7 +202,7 @@ F_i { (r * y) * (1 - (y / k)) }
             DiffsolConfig::default().with_backend(backend),
             parameter_names,
             params,
-            Arc::new(SumSquaredError::default()),
+            Arc::new(SumSquaredError),
         )
         .expect("failed to build diffsol problem")
     }

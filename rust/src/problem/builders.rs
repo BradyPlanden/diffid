@@ -10,16 +10,11 @@ use super::{CallableObjective, GradientFn, ObjectiveFn, Problem, ProblemKind};
 const DEFAULT_RTOL: f64 = 1e-6;
 const DEFAULT_ATOL: f64 = 1e-8;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum DiffsolBackend {
+    #[default]
     Dense,
     Sparse,
-}
-
-impl Default for DiffsolBackend {
-    fn default() -> Self {
-        DiffsolBackend::Dense
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -192,7 +187,7 @@ impl DiffsolBuilder {
             config: DiffsolConfig::default(),
             params: HashMap::new(),
             parameter_names: Vec::new(),
-            cost_metric: Arc::new(SumSquaredError::default()),
+            cost_metric: Arc::new(SumSquaredError),
         }
     }
 
@@ -255,7 +250,7 @@ impl DiffsolBuilder {
 
     /// Resets the cost metric to the default sum of squared errors.
     pub fn remove_cost(mut self) -> Self {
-        self.cost_metric = Arc::new(SumSquaredError::default());
+        self.cost_metric = Arc::new(SumSquaredError);
         self
     }
 

@@ -59,6 +59,11 @@ Regenerate the Python *.pyi stub files after making changes to the bindings:
 uv run cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
 ```
 
+If you're not using `uv`, the same generator can be invoked directly with cargo:
+```bash
+cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
+```
+
 ## Pre-commit hooks
 Install the tooling once per clone, then install the hooks:
 ```bash

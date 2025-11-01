@@ -10,4 +10,4 @@ license-file = "LICENSE"
 
 [workspace.dependencies]
 nalgebra = "0.34.1"
-pyo3 = "0.26"
+pyo3 = { version = "0.26", default-features = false, features = ["macros"] }

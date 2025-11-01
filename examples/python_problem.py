@@ -1,4 +1,5 @@
 import chronopt as chron
+import numpy as np
 
 
 # Example function

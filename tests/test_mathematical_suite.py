@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from functools import partial
-import numpy as np
-import pytest
 
 import chronopt as chron
+import numpy as np
+import pytest
 
 
 def sphere(x: list[float]) -> np.ndarray:

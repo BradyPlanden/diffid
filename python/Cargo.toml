@@ -4,22 +4,27 @@ version.workspace = true
 edition.workspace = true
 license-file.workspace = true
 
+[package.metadata.maturin]
+name = "chronopt._chronopt"
+python-source = "src"
+artifact = "dist"
+
 [features]
 default = []
 extension-module = ["pyo3/extension-module"]
-stubgen = ["pyo3-stub-gen", "pyo3-stub-gen-derive"]
+stubgen = ["clap", "pyo3-stub-gen", "pyo3-stub-gen-derive"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 name = "chronopt"
 crate-type = ["cdylib", "rlib"]
 [dependencies]
-pyo3 = { workspace = true }
+pyo3 = { workspace = true, default-features = false, features = ["macros"] }
 chronopt_core = { package = "chronopt", path = "../rust" }
 nalgebra.workspace = true
 numpy = "0.26"
 pyo3-stub-gen = { version = "0.16", optional = true }
 pyo3-stub-gen-derive = { version = "0.16", optional = true }
+clap = { version = "4.5", optional = true, features = ["derive"] }
 
 [build-dependencies]
 pyo3-build-config = "0.26"

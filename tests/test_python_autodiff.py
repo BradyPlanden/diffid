@@ -1,7 +1,6 @@
+import chronopt as chron
 import numpy as np
 import pytest
-
-import chronopt as chron
 
 jax = pytest.importorskip("jax")
 jnp = jax.numpy

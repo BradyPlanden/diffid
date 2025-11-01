@@ -20,13 +20,17 @@ jax = [
     "jax==0.4.38; sys_platform == 'darwin' and platform_machine == 'x86_64'",
     "jaxlib==0.4.38; sys_platform == 'darwin' and platform_machine == 'x86_64'",
 ]
+plotting = [
+    "matplotlib>=3.8",
+]
 
 [tool.maturin]
-# Point maturin to the Python extension crate inside the workspace
+# Match the recommended mixed Rust/Python layout where Python sources live in
+# `python/src` and the Rust extension crate sits under `python/`.
 manifest-path = "python/Cargo.toml"
-module-name = "chronopt"
+module-name = "chronopt._chronopt"
 features = ["extension-module"]
-python-source = "python"
+python-source = "python/src"
 
 [dependency-groups]
 dev = [

@@ -5,6 +5,12 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 use std::sync::Arc;
 
+#[cfg(feature = "stubgen")]
+use std::env;
+
+#[cfg(feature = "stubgen")]
+use std::path::PathBuf;
+
 use chronopt_core::cost::{CostMetric, GaussianNll, RootMeanSquaredError, SumSquaredError};
 use chronopt_core::prelude::*;
 use chronopt_core::problem::{Builder, DiffsolBackend, DiffsolBuilder};
@@ -13,7 +19,13 @@ use chronopt_core::samplers::{
 };
 
 #[cfg(feature = "stubgen")]
-use pyo3_stub_gen::TypeInfo;
+use pyo3_stub_gen::{
+    derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pymethods},
+    TypeInfo,
+};
+
+#[cfg(feature = "stubgen")]
+pyo3_stub_gen::impl_stub_type!(Optimiser = PyNelderMead | PyCMAES);
 
 #[cfg(all(feature = "stubgen", feature = "extension-module"))]
 compile_error!(
@@ -36,11 +48,13 @@ enum Optimiser {
 // ============================================================================
 
 /// Container for sampler draws and diagnostics.
-#[pyclass(name = "Samples")]
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
+#[pyclass(module = "chronopt.samplers", name = "Samples")]
 pub struct PySamples {
     inner: CoreSamples,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PySamples {
     #[getter]
@@ -69,12 +83,14 @@ impl PySamples {
 }
 
 /// Basic Metropolis-Hastings sampler binding mirroring the optimiser API.
-#[pyclass(name = "MetropolisHastings")]
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
+#[pyclass(module = "chronopt.samplers", name = "MetropolisHastings")]
 #[derive(Clone)]
 pub struct PyMetropolisHastings {
     inner: CoreMetropolisHastings,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyMetropolisHastings {
     #[new]
@@ -133,7 +149,8 @@ impl PyMetropolisHastings {
 #[cfg(feature = "stubgen")]
 #[allow(dead_code)]
 fn optimiser_type_info() -> TypeInfo {
-    TypeInfo::unqualified("chronopt.NelderMead") | TypeInfo::unqualified("chronopt.CMAES")
+    TypeInfo::unqualified("chronopt._chronopt.NelderMead")
+        | TypeInfo::unqualified("chronopt._chronopt.CMAES")
 }
 
 impl<'py> FromPyObject<'py> for Optimiser {
@@ -154,6 +171,7 @@ impl<'py> FromPyObject<'py> for Optimiser {
 // Cost Metrics
 // ============================================================================
 
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass(name = "CostMetric")]
 #[derive(Clone)]
 pub struct PyCostMetric {
@@ -161,6 +179,7 @@ pub struct PyCostMetric {
     name: &'static str,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyCostMetric {
     /// Name of the cost metric.
@@ -190,16 +209,19 @@ impl PyCostMetric {
     }
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pyfunction)]
 #[pyfunction(name = "SSE")]
 fn sse() -> PyCostMetric {
     PyCostMetric::from_metric(SumSquaredError::default(), "sse")
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pyfunction)]
 #[pyfunction(name = "RMSE")]
 fn rmse() -> PyCostMetric {
     PyCostMetric::from_metric(RootMeanSquaredError::default(), "rmse")
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pyfunction)]
 #[pyfunction(name = "GaussianNLL")]
 #[pyo3(signature = (variance = 1.0))]
 fn gaussian_nll(variance: f64) -> PyResult<PyCostMetric> {
@@ -301,6 +323,7 @@ impl PyGradientFn {
 // ============================================================================
 
 /// High-level builder for optimisation `Problem` instances exposed to Python.
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass(name = "Builder")]
 pub struct PyBuilder {
     inner: Builder,
@@ -309,6 +332,7 @@ pub struct PyBuilder {
     default_optimiser: Option<Optimiser>,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyBuilder {
     /// Create an empty builder with no objective, parameters, or default optimiser.
@@ -399,11 +423,13 @@ impl PyBuilder {
 // ============================================================================
 
 /// Differential equation solver builder.
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass(name = "DiffsolBuilder")]
 pub struct PyDiffsolBuilder {
     inner: DiffsolBuilder,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyDiffsolBuilder {
     /// Create an empty differential solver builder.
@@ -567,12 +593,14 @@ fn convert_array_to_dmatrix(data: &PyReadonlyArrayDyn<f64>) -> PyResult<DMatrix<
 // ============================================================================
 
 /// Executable optimisation problem wrapping the Chronopt core implementation.
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass(name = "Problem")]
 pub struct PyProblem {
     inner: Problem,
     default_optimiser: Option<Optimiser>,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyProblem {
     /// Evaluate the configured objective function at `x`.
@@ -621,12 +649,14 @@ impl PyProblem {
 // ============================================================================
 
 /// Classic simplex-based direct search optimiser.
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass(name = "NelderMead")]
 #[derive(Clone)]
 pub struct PyNelderMead {
     inner: NelderMead,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyNelderMead {
     /// Create a Nelder-Mead optimiser with default coefficients.
@@ -694,12 +724,14 @@ impl PyNelderMead {
 // ============================================================================
 
 /// Covariance Matrix Adaptation Evolution Strategy optimiser.
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass(name = "CMAES")]
 #[derive(Clone)]
 pub struct PyCMAES {
     inner: CMAES,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyCMAES {
     /// Create a CMA-ES optimiser with library defaults.
@@ -761,11 +793,13 @@ impl PyCMAES {
 // ============================================================================
 
 /// Container for optimiser outputs and diagnostic metadata.
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass(name = "OptimisationResults")]
 pub struct PyOptimisationResults {
     inner: OptimisationResults,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyOptimisationResults {
     /// Decision vector corresponding to the best-found objective value.
@@ -843,27 +877,55 @@ impl PyOptimisationResults {
 }
 
 // ============================================================================
-// Module Registration
+// Stub generation helpers
 // ============================================================================
 
 #[cfg(feature = "stubgen")]
-pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
-    use std::path::Path;
+fn resolve_pyproject_path() -> PathBuf {
+    if let Some(root) = env::var_os("MATURIN_WORKSPACE_ROOT") {
+        let candidate = PathBuf::from(root).join("pyproject.toml");
+        if candidate.exists() {
+            return candidate;
+        }
+    }
 
-    let manifest_dir: &Path = env!("CARGO_MANIFEST_DIR").as_ref();
-    let workspace_root = manifest_dir
+    let manifest_dir: &std::path::Path = env!("CARGO_MANIFEST_DIR").as_ref();
+    let manifest_candidate = manifest_dir.join("pyproject.toml");
+    if manifest_candidate.exists() {
+        return manifest_candidate;
+    }
+
+    manifest_dir
         .parent()
-        .expect("Python crate directory must have a parent workspace root");
-    pyo3_stub_gen::StubInfo::from_pyproject_toml(workspace_root.join("pyproject.toml"))
+        .map(|parent| parent.join("pyproject.toml"))
+        .unwrap_or(manifest_candidate)
 }
 
+#[cfg(feature = "stubgen")]
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    pyo3_stub_gen::StubInfo::from_pyproject_toml(resolve_pyproject_path())
+}
+
+#[cfg(feature = "stubgen")]
+pub fn stub_info_from(
+    pyproject: impl AsRef<std::path::Path>,
+) -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    pyo3_stub_gen::StubInfo::from_pyproject_toml(pyproject)
+}
+
+// ============================================================================
+// Module Registration
+// ============================================================================
+
 /// Return a convenience factory for creating `Builder` instances.
+#[cfg_attr(feature = "stubgen", gen_stub_pyfunction)]
 #[pyfunction]
 fn builder_factory_py() -> PyBuilder {
     PyBuilder::new()
 }
 
 #[pymodule]
+#[pyo3(name = "_chronopt")]
 fn chronopt(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Main classes
     m.add_class::<PyBuilder>()?;

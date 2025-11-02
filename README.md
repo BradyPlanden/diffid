@@ -1,20 +1,35 @@
 # chronopt
 
-Chronopt is a time-series statistical inference package, it's goals are:
-- Be fast, without sacrificing accuracy
-- Be modular and informative
-- Batteries included
+Chronopt is a Rust-first toolkit for time-series inference and optimisation with ergonomic Python bindings. It couples high-performance solvers with builder APIs for modelling objective functions and differential systems.
 
-## Installation 
+## Project goals
+- Speed and numerical accuracy through a Rust core.
+- Modular components with informative diagnostics.
+- Batteries-included experience spanning optimisation, sampling, and plotting.
+
+## Key capabilities
+- Deterministic optimisers (Nelder-Mead, CMA-ES) with configurable stopping criteria.
+- Differential equation fitting via [DiffSL](https://github.com/martinjrobins/diffsl) with dense or sparse [Diffsol](https://github.com/martinjrobins/diffsol) backends.
+- Customisable likelihood/cost metrics and Monte-Carlo sampling for posterior exploration.
+- Flexible integration with common differential solvers, such as [Diffrax](https://github.com/patrick-kidger/diffrax), [DifferentialEquations.jl](https://github.com/SciML/diffeqpy)
+- Python builder APIs mirroring the Rust core plus generated type stubs for autocompletion.
+
+## Installation
+
+Chronopt targets Python 3.11 or newer.
+
 ```bash
 pip install chronopt
-```
 
-```bash
+# Or with uv
 uv pip install chronopt
+
+# Optional extras
+pip install "chronopt[plotting]"
 ```
 
-## Quickstart (Pure Python)
+## Quickstart (Python)
+
 ```python
 import numpy as np
 import chronopt as chron
@@ -25,7 +40,6 @@ def rosenbrock(x):
     return np.asarray([value], dtype=float)
 
 
-# Build the optimisation problem
 builder = (
     chron.PythonBuilder()
     .add_callable(rosenbrock)
@@ -34,7 +48,6 @@ builder = (
 )
 problem = builder.build()
 
-# Choose an optimiser and solve
 optimiser = chron.NelderMead().with_max_iter(500).with_threshold(1e-6)
 result = optimiser.run(problem, [1.5, -1.5])
 
@@ -43,46 +56,77 @@ print(f"Objective value: {result.fun:.3e}")
 print(f"Success: {result.success}")
 ```
 
-## Development Installation
-Clone this repository, python installation via:
+### Differential solver workflow
+
+```python
+import numpy as np
+import chronopt as chron
+
+
+# Example diffsol ODE (logistic growth)
+dsl = """
+in = [r, k]
+r { 1 } k { 1 }
+u_i { y = 0.1 }
+F_i { (r * y) * (1 - (y / k)) }
+"""
+
+t = np.linspace(0.0, 5.0, 51)
+observations = np.exp(-1.3 * t)
+data = np.column_stack((t, observations))
+
+builder = (
+    chron.DiffsolBuilder()
+    .add_diffsl(dsl)
+    .add_data(data)
+    .add_params({"k":1.0})
+    .with_backend("dense")
+)
+problem = builder.build()
+
+optimiser = chron.CMAES().with_max_iter(1000)
+result = optimiser.run(problem, [0.5,0.5])
+
+print(result.x)
+```
+
+## Development setup
+
+Clone the repository and create the Python environment:
+
 ```bash
 uv sync
 ```
 
-Building the rust package w/ python bindings:
+Build the Rust extension with Python bindings:
+
 ```bash
 uv run maturin develop
 ```
 
-Regenerate the Python *.pyi stub files after making changes to the bindings:
+Regenerate `.pyi` stubs after changing the bindings:
+
 ```bash
 uv run cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
 ```
 
-If you're not using `uv`, the same generator can be invoked directly with cargo:
+Without `uv`, invoke the generator directly:
+
 ```bash
 cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
 ```
 
-## Pre-commit hooks
-Install the tooling once per clone, then install the hooks:
+### Pre-commit hooks
+
 ```bash
 uv tool install pre-commit
 pre-commit install
-```
-
-Run all checks manually anytime:
-```bash
 pre-commit run --all-files
 ```
 
-## Tests
-To run the python tests, use pytest:
-```bash
-uv sync && uv run pytest
-```
+### Tests
 
-for the rust tests, use cargo:
 ```bash
-cargo test
+uv sync && uv run pytest  # Python tests
+cargo test                 # Rust tests
 ```

@@ -65,12 +65,12 @@ def build_problem() -> chron.Problem:
     """Create the Chronopt problem for predator-prey identification."""
     builder = (
         chron.PythonBuilder()
-        .add_callable(objective)
-        .add_parameter("alpha")
-        .add_parameter("beta")
-        .add_parameter("delta")
-        .add_parameter("gamma")
-        .set_optimiser(chron.NelderMead().with_max_iter(1000))
+        .with_callable(objective)
+        .with_parameter("alpha")
+        .with_parameter("beta")
+        .with_parameter("delta")
+        .with_parameter("gamma")
+        .with_optimiser(chron.NelderMead().with_max_iter(1000))
     )
     return builder.build()
 

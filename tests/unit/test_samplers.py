@@ -12,8 +12,8 @@ def quadratic_potential(x: np.ndarray) -> np.ndarray:
 def test_metropolis_hastings_runs_and_returns_samples():
     problem = (
         chron.PythonBuilder()
-        .add_callable(quadratic_potential)
-        .add_parameter("x")
+        .with_callable(quadratic_potential)
+        .with_parameter("x", 1.0)
         .build()
     )
 

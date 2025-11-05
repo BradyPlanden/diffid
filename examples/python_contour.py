@@ -15,7 +15,10 @@ def rosenbrock(x: np.ndarray) -> float:
 
 # Setup
 builder = (
-    chron.PythonBuilder().add_callable(rosenbrock).add_params({"x": 1.0, "y": 1.0})
+    chron.PythonBuilder()
+    .with_callable(rosenbrock)
+    .with_parameter("x", 1.0)
+    .with_parameter("y", 1.0)
 )
 problem = builder.build()
 

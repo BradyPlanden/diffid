@@ -42,14 +42,12 @@ def rosenbrock(x):
 
 builder = (
     chron.PythonBuilder()
-    .add_callable(rosenbrock)
-    .add_parameter("x")
-    .add_parameter("y")
+    .with_callable(rosenbrock)
+    .with_parameter("x", 1.5)
+    .with_parameter("y", -1.5)
 )
 problem = builder.build()
-
-optimiser = chron.NelderMead().with_max_iter(500).with_threshold(1e-6)
-result = optimiser.run(problem, [1.5, -1.5])
+result = problem.optimize()
 
 print(f"Optimal parameters: {result.x}")
 print(f"Objective value: {result.fun:.3e}")
@@ -77,9 +75,9 @@ data = np.column_stack((t, observations))
 
 builder = (
     chron.DiffsolBuilder()
-    .add_diffsl(dsl)
-    .add_data(data)
-    .add_params({"k":1.0})
+    .with_diffsl(dsl)
+    .with_data(data)
+    .with_parameter("k", 1.0)
     .with_backend("dense")
 )
 problem = builder.build()

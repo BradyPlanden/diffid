@@ -97,7 +97,7 @@ impl ParameterSpec {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ParameterSet(Vec<ParameterSpec>);
 
 impl ParameterSet {
@@ -131,12 +131,6 @@ impl ParameterSet {
 
     pub fn iter(&self) -> std::slice::Iter<'_, ParameterSpec> {
         self.0.iter()
-    }
-}
-
-impl Default for ParameterSet {
-    fn default() -> Self {
-        Self(Vec::new())
     }
 }
 
@@ -367,7 +361,7 @@ impl DiffsolBuilder {
     }
 
     /// Registers the DiffSL differential equation system.
-    pub fn add_diffsl(mut self, dsl: String) -> Self {
+    pub fn with_diffsl(mut self, dsl: String) -> Self {
         self.dsl = Some(dsl);
         self
     }
@@ -379,7 +373,7 @@ impl DiffsolBuilder {
     }
 
     /// Supplies observed data used to fit the differential model.
-    pub fn add_data(mut self, data: DMatrix<f64>) -> Self {
+    pub fn with_data(mut self, data: DMatrix<f64>) -> Self {
         self.data = Some(data);
         self
     }
@@ -436,7 +430,7 @@ impl DiffsolBuilder {
     }
 
     /// Merges configuration values by name, updating tolerances when provided.
-    pub fn add_config(mut self, config: HashMap<String, f64>) -> Self {
+    pub fn with_config(mut self, config: HashMap<String, f64>) -> Self {
         for (key, value) in config {
             match key.as_str() {
                 "rtol" => self.config.rtol = value,

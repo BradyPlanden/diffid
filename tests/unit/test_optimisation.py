@@ -2,6 +2,21 @@ import chronopt as chron
 import numpy as np
 
 
+def test_builder_exposes_config_and_parameters():
+    builder = (
+        chron.PythonBuilder()
+        .with_callable(lambda x: np.asarray([float(x[0]) ** 2]))
+        .with_parameter("x", 3.5, bounds=(0.0, 10.0))
+    )
+
+    problem = builder.build()
+
+    params = problem.parameters()
+    assert params == [("x", 3.5, (0.0, 10.0))]
+
+    assert problem.default_parameters() == [3.5]
+
+
 # Build an optimisation problem
 def rosenbrock(x):
     value = (1 - x[0]) ** 2 + 100 * (x[1] - x[0] ** 2) ** 2
@@ -11,9 +26,9 @@ def rosenbrock(x):
 def test_python_builder_rosenbrock():
     builder = (
         chron.PythonBuilder()
-        .add_callable(rosenbrock)
-        .add_parameter("x")
-        .add_parameter("y")
+        .with_callable(rosenbrock)
+        .with_parameter("x", 1.2, None)
+        .with_parameter("y", -1.2, None)
     )
     problem = builder.build()
 

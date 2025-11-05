@@ -11,9 +11,9 @@ def rosenbrock(x):
 def build_rosenbrock_problem():
     return (
         chron.PythonBuilder()
-        .add_callable(rosenbrock)
-        .add_parameter("x")
-        .add_parameter("y")
+        .with_callable(rosenbrock)
+        .with_parameter("x", 1.0)
+        .with_parameter("y", 1.0)
         .build()
     )
 
@@ -39,9 +39,9 @@ def test_cmaes_direct_run_minimises_rosenbrock():
 def test_python_builder_optimise_with_cmaes_default():
     builder = (
         chron.PythonBuilder()
-        .add_callable(rosenbrock)
-        .add_parameter("x")
-        .add_parameter("y")
+        .with_callable(rosenbrock)
+        .with_parameter("x", 1.0)
+        .with_parameter("y", 1.0)
     )
 
     optimiser = (
@@ -52,7 +52,7 @@ def test_python_builder_optimise_with_cmaes_default():
         .with_seed(7)
     )
 
-    builder.set_optimiser(optimiser)
+    builder.with_optimiser(optimiser)
     problem = builder.build()
 
     result = problem.optimize(initial=[3.0, -3.0])
@@ -66,7 +66,7 @@ def test_set_optimiser_rejects_unknown_type():
     builder = chron.PythonBuilder()
 
     with pytest.raises(TypeError):
-        builder.set_optimiser(object())
+        builder.with_optimiser(object())
 
 
 def test_cmaes_result_covariance_available():

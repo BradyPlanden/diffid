@@ -24,13 +24,14 @@ F_i { (r * y) * (1 - (y / k)) }
     # Build the problem
     builder = (
         chron.DiffsolBuilder()
-        .add_diffsl(ds)
-        .add_data(stacked_data)
+        .with_diffsl(ds)
+        .with_data(stacked_data)
         .with_rtol(1e-6)
         .with_atol(1e-6)
-        .add_params({"r": 1.0, "k": 1.0})
-        .add_cost(chron.costs.SSE())
-        .add_cost(chron.costs.RMSE())
+        .with_parameter("r", 1.0, None)
+        .with_parameter("k", 1.0, None)
+        .with_cost(chron.costs.SSE())
+        .with_cost(chron.costs.RMSE())
     )
 
     problem = builder.build()
@@ -68,10 +69,10 @@ F_i { a * y }
 
     builder = (
         chron.DiffsolBuilder()
-        .add_diffsl(ds)
-        .add_data(stacked_data)
-        .add_params({"a": 1.0})
-        .add_cost(metric)
+        .with_diffsl(ds)
+        .with_data(stacked_data)
+        .with_parameter("a", 1.0, None)
+        .with_cost(metric)
     )
 
     # Initial build
@@ -80,23 +81,23 @@ F_i { a * y }
 
     # Change data
     builder = builder.remove_data()
-    builder = builder.add_data(np.column_stack((t_span, t_span**3)))
+    builder = builder.with_data(np.column_stack((t_span, t_span**3)))
     problem_2 = builder.build()
 
     # Change t_span along with data
     builder = builder.remove_data()
     new_t_span = t_span * 2
-    builder = builder.add_data(np.column_stack((new_t_span, data)))
+    builder = builder.with_data(np.column_stack((new_t_span, data)))
     problem_3 = builder.build()
 
     # Change params
-    builder = builder.remove_params()
-    builder = builder.add_params({"a": 2.0})  # ToDo: needs to be updated
+    builder = builder.clear_parameters()
+    builder = builder.with_parameter("a", 2.0, None)
     problem_4 = builder.build()
 
     # Change cost
     builder = builder.remove_cost()
-    builder = builder.add_cost(chron.costs.SSE())
+    builder = builder.with_cost(chron.costs.SSE())
     problem_5 = builder.build()
 
     # Check that problems are different
@@ -124,9 +125,10 @@ F_i { a * y }
 
     problem = (
         chron.DiffsolBuilder()
-        .add_diffsl(ds)
-        .add_data(stacked_data)
-        .add_params({"a": true_param})
+        .with_diffsl(ds)
+        .with_config({"rtol": 1e-4})
+        .with_data(stacked_data)
+        .with_parameter("a", true_param)
         .build()
     )
 
@@ -134,6 +136,7 @@ F_i { a * y }
 
     result = problem.optimize(optimiser=optimiser)
 
+    assert problem.config()["rtol"] == 1e-4
     assert pytest.approx(true_param, rel=1e-12, abs=1e-12) == result.x[0]
     assert result.nit == 0
     assert pytest.approx(true_param, rel=1e-12, abs=1e-12) == result.final_simplex[0][0]
@@ -153,19 +156,19 @@ F_i { (r * y) * (1 - (y / k)) }
     time_points = np.linspace(0, 1, 20)
     data = 0.1 * np.exp(time_points)
     stacked_data = np.column_stack((time_points, data))
-    params = {"r": 1.0, "k": 1.0}
 
     def build_problem(cost_metric=None):
         builder = (
             chron.DiffsolBuilder()
-            .add_diffsl(ds)
-            .add_data(stacked_data)
+            .with_diffsl(ds)
+            .with_data(stacked_data)
             .with_rtol(1e-6)
             .with_atol(1e-6)
-            .add_params(params)
+            .with_parameter("r", 2.0)
+            .with_parameter("k", 4.0)
         )
         if cost_metric is not None:
-            builder = builder.add_cost(cost_metric)
+            builder = builder.with_cost(cost_metric)
         return builder.build()
 
     sse_problem = build_problem()

@@ -32,12 +32,13 @@ data = np.column_stack((t_span, height + noise, velocity + noise))
 initial_values = [4.0, 4.0]
 builder = (
     chron.DiffsolBuilder()
-    .add_diffsl(dsl)
-    .add_data(data)
-    .add_params({"g": initial_values[0], "h": initial_values[1]})
+    .with_diffsl(dsl)
+    .with_data(data)
+    .with_parameter("g", initial_values[0])
+    .with_parameter("h", initial_values[1])
     .with_rtol(1e-6)
     .with_atol(1e-6)
-    .add_cost(chron.costs.GaussianNLL(variance=0.01))
+    .with_cost(chron.costs.GaussianNLL(variance=0.01))
 )
 
 problem = builder.build()

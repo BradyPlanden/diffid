@@ -58,9 +58,9 @@ F_i { (r * y) * (1 - (y / k)) }
         let config = HashMap::from([("rtol".to_string(), 1e-6)]);
 
         let builder = DiffsolBuilder::new()
-            .add_diffsl(dsl.to_string())
-            .add_data(data)
-            .add_config(config)
+            .with_diffsl(dsl.to_string())
+            .with_data(data)
+            .with_config(config)
             .with_parameter(ParameterSpec::new("r", 1.0, None))
             .with_parameter(ParameterSpec::new("k", 1.0, None));
 

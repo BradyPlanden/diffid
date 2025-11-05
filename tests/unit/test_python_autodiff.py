@@ -27,11 +27,11 @@ def quadratic_problem():
     """Creates a 3D quadratic optimization problem using PythonBuilder"""
     return (
         chron.PythonBuilder()
-        .add_callable(_quadratic_objective)
-        .add_gradient(_quadratic_gradient)
-        .add_parameter("x1")
-        .add_parameter("x2")
-        .add_parameter("x3")
+        .with_callable(_quadratic_objective)
+        .with_gradient(_quadratic_gradient)
+        .with_parameter("x1", 1.0)
+        .with_parameter("x2", 2.0)
+        .with_parameter("x3", 3.0)
         .build()
     )
 

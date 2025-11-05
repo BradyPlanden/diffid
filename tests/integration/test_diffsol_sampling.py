@@ -29,12 +29,13 @@ stop {x}
 
     builder = (
         chron.DiffsolBuilder()
-        .add_diffsl(dsl)
-        .add_data(data)
-        .add_params({"g": g_true, "h": h_true})
+        .with_diffsl(dsl)
+        .with_data(data)
+        .with_parameter("g", g_true)
+        .with_parameter("h", h_true)
         .with_rtol(1e-6)
         .with_atol(1e-6)
-        .add_cost(chron.costs.SSE())
+        .with_cost(chron.costs.SSE())
     )
 
     problem = builder.build()

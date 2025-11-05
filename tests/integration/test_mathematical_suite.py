@@ -160,9 +160,9 @@ def test_python_objectives_converge(
 ):
     """Ensure optimisation reaches known minima for several analytic functions."""
 
-    builder = chron.PythonBuilder().add_callable(objective)
+    builder = chron.PythonBuilder().with_callable(objective)
     for idx in range(dimension):
-        builder = builder.add_parameter(f"x{idx}")
+        builder = builder.with_parameter(f"x{idx}", 1.0)
 
     problem = builder.build()
 
@@ -197,10 +197,11 @@ def test_diffsol_logistic_convergence():
 
     builder = (
         chron.DiffsolBuilder()
-        .add_diffsl(_LOGISTIC_DSL)
-        .add_data(stacked_data)
+        .with_diffsl(_LOGISTIC_DSL)
+        .with_data(stacked_data)
         .with_rtol(1e-6)
-        .add_params({"r": r_true, "k": k_true})
+        .with_parameter("r", r_true)
+        .with_parameter("k", k_true)
     )
 
     problem = builder.build()

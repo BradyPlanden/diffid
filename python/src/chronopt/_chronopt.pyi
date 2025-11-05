@@ -16,19 +16,24 @@ class Builder:
         r"""
         Create an empty builder with no objective, parameters, or default optimiser.
         """
-    def set_optimiser(self, optimiser: NelderMead | CMAES) -> Builder:
+    def with_optimiser(self, optimiser: NelderMead | CMAES) -> Builder:
         r"""
         Configure the default optimiser used when `Problem.optimize` omits one.
         """
-    def add_callable(self, obj: typing.Any) -> Builder:
+    def with_callable(self, obj: typing.Any) -> Builder:
         r"""
         Attach the objective function callable executed during optimisation.
         """
-    def add_gradient(self, obj: typing.Any) -> Builder:
+    def with_gradient(self, obj: typing.Any) -> Builder:
         r"""
         Attach the gradient callable returning derivatives of the objective.
         """
-    def add_parameter(self, name: builtins.str) -> Builder:
+    def with_parameter(
+        self,
+        name: builtins.str,
+        initial_value: builtins.float,
+        bounds: typing.Optional[tuple[builtins.float, builtins.float]] = None,
+    ) -> Builder:
         r"""
         Register a named optimisation variable in the order it appears in vectors.
         """
@@ -97,7 +102,7 @@ class DiffsolBuilder:
         """
     def __copy__(self) -> DiffsolBuilder: ...
     def __deepcopy__(self, _memo: dict) -> DiffsolBuilder: ...
-    def add_diffsl(self, dsl: builtins.str) -> DiffsolBuilder:
+    def with_diffsl(self, dsl: builtins.str) -> DiffsolBuilder:
         r"""
         Register the DiffSL program describing the system dynamics.
         """
@@ -105,7 +110,7 @@ class DiffsolBuilder:
         r"""
         Remove any registered DiffSL program.
         """
-    def add_data(self, data: numpy.typing.NDArray[numpy.float64]) -> DiffsolBuilder:
+    def with_data(self, data: numpy.typing.NDArray[numpy.float64]) -> DiffsolBuilder:
         r"""
         Attach observed data used to fit the differential equation.
 
@@ -124,6 +129,9 @@ class DiffsolBuilder:
         r"""
         Enable or disable parallel evaluation of candidate populations.
         """
+    def with_config(
+        self, config: typing.Mapping[builtins.str, builtins.float]
+    ) -> DiffsolBuilder: ...
     def with_rtol(self, rtol: builtins.float) -> DiffsolBuilder:
         r"""
         Adjust the relative integration tolerance.
@@ -132,17 +140,20 @@ class DiffsolBuilder:
         r"""
         Adjust the absolute integration tolerance.
         """
-    def add_params(
-        self, params: typing.Mapping[builtins.str, builtins.float]
+    def with_parameter(
+        self,
+        name: builtins.str,
+        initial_value: builtins.float,
+        bounds: typing.Optional[tuple[builtins.float, builtins.float]] = None,
     ) -> DiffsolBuilder:
         r"""
-        Provide named parameter defaults for the DiffSL program.
+        Register a named optimisation variable in the order it appears in vectors.
         """
-    def remove_params(self) -> DiffsolBuilder:
+    def clear_parameters(self) -> DiffsolBuilder:
         r"""
         Remove previously provided parameter defaults.
         """
-    def add_cost(self, cost: CostMetric) -> DiffsolBuilder:
+    def with_cost(self, cost: CostMetric) -> DiffsolBuilder:
         r"""
         Select the error metric used to compare simulated and observed data.
         """
@@ -150,7 +161,7 @@ class DiffsolBuilder:
         r"""
         Reset the cost metric to the default sum of squared errors.
         """
-    def set_optimiser(self, optimiser: NelderMead | CMAES) -> DiffsolBuilder:
+    def with_optimiser(self, optimiser: NelderMead | CMAES) -> DiffsolBuilder:
         r"""
         Configure the default optimiser used when `Problem.optimize` omits one.
         """
@@ -302,6 +313,26 @@ class Problem:
     def dimension(self) -> builtins.int:
         r"""
         Return the number of parameters the problem expects.
+        """
+    def parameters(
+        self,
+    ) -> builtins.list[
+        tuple[
+            builtins.str,
+            builtins.float,
+            typing.Optional[tuple[builtins.float, builtins.float]],
+        ]
+    ]:
+        r"""
+        Return the configured optimisation parameters as (name, initial_value, bounds) tuples.
+        """
+    def default_parameters(self) -> builtins.list[builtins.float]:
+        r"""
+        Return the default parameter vector implied by the builder.
+        """
+    def config(self) -> builtins.dict[builtins.str, builtins.float]:
+        r"""
+        Return a copy of the problem configuration dictionary.
         """
 
 def GaussianNLL(variance: builtins.float = 1.0) -> CostMetric: ...

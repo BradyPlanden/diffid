@@ -11,10 +11,10 @@ def rosenbrock(x):
 # Simple API
 builder = (
     chron.PythonBuilder()
-    .add_callable(rosenbrock)
-    .add_parameter("x")
-    .add_parameter("y")
-    .set_optimiser(chron.NelderMead().with_max_iter(1000))
+    .with_callable(rosenbrock)
+    .with_parameter("x", 1.0)
+    .with_parameter("y", 1.0)
+    .with_optimiser(chron.NelderMead().with_max_iter(1000))
 )
 problem = builder.build()
 result = problem.optimize(initial=[10.0, 10.0])

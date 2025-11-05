@@ -14,8 +14,6 @@ t_span = np.linspace(0, 1, 100)
 data = 0.1 * np.exp(t_span) / (1 + 0.1 * (np.exp(t_span) - 1))
 stacked_data = np.column_stack((t_span, data))
 
-# Set parameters & initial value
-params = {"r": 1000, "k": 1000}
 
 # Create an optimiser
 optimiser = chron.CMAES().with_max_iter(1000).with_threshold(1e-12).with_sigma0(1.0)
@@ -23,13 +21,14 @@ optimiser = chron.CMAES().with_max_iter(1000).with_threshold(1e-12).with_sigma0(
 # Simple API
 builder = (
     chron.DiffsolBuilder()
-    .add_diffsl(ds)
-    .add_data(stacked_data)
+    .with_diffsl(ds)
+    .with_data(stacked_data)
     .with_rtol(1e-6)
     .with_atol(1e-8)
-    .add_params(params)
+    .with_parameter("r", 1000)
+    .with_parameter("k", 1000)
     .with_parallel(True)
-    .set_optimiser(optimiser)  # Override default optimiser
+    .with_optimiser(optimiser)  # Override default optimiser
 )
 problem = builder.build()
 

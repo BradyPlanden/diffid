@@ -127,11 +127,6 @@ impl PyMetropolisHastings {
         slf
     }
 
-    #[pyo3(name = "set_parallel")]
-    fn set_parallel(slf: PyRefMut<'_, Self>, parallel: bool) -> PyRefMut<'_, Self> {
-        Self::with_parallel(slf, parallel)
-    }
-
     fn with_step_size(mut slf: PyRefMut<'_, Self>, step_size: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_step_size(step_size);
         slf
@@ -332,7 +327,6 @@ pub struct PyBuilder {
     py_callable: Option<Arc<PyObjectiveFn>>,
     py_gradient: Option<Arc<PyGradientFn>>,
     default_optimiser: Option<Optimiser>,
-    parameter_defaults: ParameterSet,
 }
 
 #[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
@@ -346,12 +340,10 @@ impl PyBuilder {
             py_callable: None,
             py_gradient: None,
             default_optimiser: None,
-            parameter_defaults: ParameterSet::new(),
         }
     }
 
     /// Configure the default optimiser used when `Problem.optimize` omits one.
-    #[pyo3(name = "set_optimiser")]
     fn with_optimiser(mut slf: PyRefMut<'_, Self>, optimiser: Optimiser) -> PyRefMut<'_, Self> {
         match &optimiser {
             Optimiser::NelderMead(nm) => {
@@ -404,6 +396,7 @@ impl PyBuilder {
     }
 
     /// Register a named optimisation variable in the order it appears in vectors.
+    #[pyo3(signature = (name, initial_value, bounds=None))]
     fn with_parameter(
         mut slf: PyRefMut<'_, Self>,
         name: String,
@@ -417,17 +410,12 @@ impl PyBuilder {
 
     /// Finalize the builder into an executable `Problem`.
     fn build(&mut self) -> PyResult<PyProblem> {
-        let mut inner = std::mem::take(&mut self.inner);
-        if !self.parameter_defaults.is_empty() {
-            inner = inner.with_parameter(self.parameter_defaults.clone());
-        }
+        let inner = std::mem::take(&mut self.inner);
         let default_optimiser = self.default_optimiser.take();
         let problem = inner.build().map_err(|e| PyValueError::new_err(e))?;
-        let parameter_defaults = std::mem::take(&mut self.parameter_defaults);
         Ok(PyProblem {
             inner: problem,
             default_optimiser,
-            parameter_defaults,
         })
     }
 }
@@ -469,7 +457,7 @@ impl PyDiffsolBuilder {
 
     /// Register the DiffSL program describing the system dynamics.
     fn with_diffsl(mut slf: PyRefMut<'_, Self>, dsl: String) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).add_diffsl(dsl);
+        slf.inner = std::mem::take(&mut slf.inner).with_diffsl(dsl);
         slf
     }
 
@@ -493,7 +481,7 @@ impl PyDiffsolBuilder {
                 "Data must include at least two columns with t_span in the first column",
             ));
         }
-        slf.inner = std::mem::take(&mut slf.inner).add_data(data_matrix);
+        slf.inner = std::mem::take(&mut slf.inner).with_data(data_matrix);
         Ok(slf)
     }
 
@@ -525,6 +513,14 @@ impl PyDiffsolBuilder {
         slf
     }
 
+    fn with_config(
+        mut slf: PyRefMut<'_, Self>,
+        config: HashMap<String, f64>,
+    ) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_config(config);
+        slf
+    }
+
     /// Adjust the relative integration tolerance.
     fn with_rtol(mut slf: PyRefMut<'_, Self>, rtol: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_rtol(rtol);
@@ -538,7 +534,7 @@ impl PyDiffsolBuilder {
     }
 
     /// Register a named optimisation variable in the order it appears in vectors.
-    #[pyo3(name = "with_parameter")]
+    #[pyo3(signature = (name, initial_value, bounds=None))]
     fn with_parameter(
         mut slf: PyRefMut<'_, Self>,
         name: String,
@@ -551,8 +547,8 @@ impl PyDiffsolBuilder {
     }
 
     /// Remove previously provided parameter defaults.
-    fn remove_parameters(mut slf: PyRefMut<'_, Self>) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).remove_parameters();
+    fn clear_parameters(mut slf: PyRefMut<'_, Self>) -> PyRefMut<'_, Self> {
+        slf.inner.clear_parameters();
         slf
     }
 
@@ -593,13 +589,9 @@ impl PyDiffsolBuilder {
     fn build(&mut self) -> PyResult<PyProblem> {
         let snapshot = self.inner.clone();
         let problem = snapshot.build().map_err(|e| PyValueError::new_err(e))?;
-
-        let defaults = problem.params().clone();
-
         Ok(PyProblem {
             inner: problem,
             default_optimiser: self.default_optimiser.clone(),
-            parameter_defaults: defaults,
         })
     }
 }
@@ -645,7 +637,6 @@ fn convert_array_to_dmatrix(data: &PyReadonlyArrayDyn<f64>) -> PyResult<DMatrix<
 pub struct PyProblem {
     inner: Problem,
     default_optimiser: Option<Optimiser>,
-    parameter_defaults: ParameterSet,
 }
 
 #[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
@@ -695,6 +686,26 @@ impl PyProblem {
     /// Return the number of parameters the problem expects.
     fn dimension(&self) -> usize {
         self.inner.dimension()
+    }
+
+    /// Return the configured optimisation parameters as (name, initial_value, bounds) tuples.
+    fn parameters(&self) -> Vec<(String, f64, Option<(f64, f64)>)> {
+        self.inner
+            .parameter_specs()
+            .iter()
+            .map(|spec| (spec.name.clone(), spec.initial_value, spec.bounds))
+            .collect()
+    }
+
+    /// Return the default parameter vector implied by the builder.
+    #[pyo3(name = "default_parameters")]
+    fn default_parameters_py(&self) -> Vec<f64> {
+        self.inner.default_parameters()
+    }
+
+    /// Return a copy of the problem configuration dictionary.
+    fn config(&self) -> HashMap<String, f64> {
+        self.inner.config().clone()
     }
 }
 

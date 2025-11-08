@@ -1152,11 +1152,6 @@ fn chronopt(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMetropolisHastings>()?;
     m.add_class::<PySamples>()?;
 
-    // Alias for backwards compatibility
-    //     let builder_type = PyType::new::<PyScalarBuilder>(py);
-    //     let builder_type_owned = builder_type.unbind();
-    //     m.add("ScalarBuilder", builder_type_owned)?;
-
     // Builder submodule
     let builder_module = PyModule::new(py, "builder")?;
     builder_module.add_class::<PyDiffsolBuilder>()?;

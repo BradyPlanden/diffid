@@ -233,19 +233,21 @@ def test_vector_builder_multiple_builds():
         return params[0] * data
 
     # Build two problems with same configuration
-    def create_builder():
-        return (
-            chron.VectorBuilder()
-            .with_objective(model)
-            .with_data(data)
-            .with_parameter("scale", 1.0)
-        )
+    builder = (
+        chron.VectorBuilder()
+        .with_objective(model)
+        .with_data(data)
+        .with_parameter("scale", 1.0)
+        .with_cost(chron.cost.RMSE())
+    )
 
-    problem1 = create_builder().build()
-    problem2 = create_builder().build()
+    problem1 = builder.build()
+    builder.remove_cost()
+    builder.with_cost(chron.cost.SSE())
+    problem2 = builder.build()
 
     # Should produce same results
-    assert problem1.evaluate([1.5]) == problem2.evaluate([1.5])
+    assert problem1.evaluate([1.5]) != problem2.evaluate([1.5])
 
 
 def test_vector_builder_config():

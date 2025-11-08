@@ -412,12 +412,10 @@ impl PyScalarBuilder {
 
     /// Finalize the builder into an executable `Problem`.
     fn build(&mut self) -> PyResult<PyProblem> {
-        let inner = std::mem::take(&mut self.inner);
-        let default_optimiser = self.default_optimiser.take();
-        let problem = inner.build().map_err(|e| PyValueError::new_err(e))?;
+        let problem = self.inner.build().map_err(|e| PyValueError::new_err(e))?;
         Ok(PyProblem {
             inner: problem,
-            default_optimiser,
+            default_optimiser: self.default_optimiser.clone(),
         })
     }
 }
@@ -589,8 +587,7 @@ impl PyDiffsolBuilder {
 
     /// Create a `Problem` representing the differential solver model.
     fn build(&mut self) -> PyResult<PyProblem> {
-        let snapshot = self.inner.clone();
-        let problem = snapshot.build().map_err(|e| PyValueError::new_err(e))?;
+        let problem = self.inner.build().map_err(|e| PyValueError::new_err(e))?;
         Ok(PyProblem {
             inner: problem,
             default_optimiser: self.default_optimiser.clone(),
@@ -759,8 +756,7 @@ impl PyVectorBuilder {
 
     /// Create a `Problem` representing the vector optimisation model.
     fn build(mut slf: PyRefMut<'_, Self>) -> PyResult<PyProblem> {
-        let inner = std::mem::take(&mut slf.inner);
-        let problem = inner.build().map_err(|e| PyValueError::new_err(e))?;
+        let problem = slf.inner.build().map_err(|e| PyValueError::new_err(e))?;
         Ok(PyProblem {
             inner: problem,
             default_optimiser: slf.default_optimiser.clone(),

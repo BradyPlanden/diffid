@@ -10,6 +10,10 @@ use super::{
     VectorObjectiveFn,
 };
 
+type SharedObjectiveFn = Arc<dyn Fn(&[f64]) -> f64 + Send + Sync>;
+type SharedGradientFn = Arc<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync>;
+type SharedVectorObjectiveFn = Arc<dyn Fn(&[f64]) -> Result<Vec<f64>, String> + Send + Sync>;
+
 const DEFAULT_RTOL: f64 = 1e-6;
 const DEFAULT_ATOL: f64 = 1e-8;
 
@@ -239,8 +243,8 @@ impl<T: BuilderWithOptimiser> BuilderOptimiserExt for T {}
 
 /// Builder pattern for scalar optimisation problems.
 pub struct ScalarProblemBuilder {
-    objective: Option<ObjectiveFn>,
-    gradient: Option<GradientFn>,
+    objective: Option<SharedObjectiveFn>,
+    gradient: Option<SharedGradientFn>,
     config: HashMap<String, f64>,
     parameters: ParameterSet,
     optimiser_slot: OptimiserSlot,
@@ -263,7 +267,7 @@ impl ScalarProblemBuilder {
     where
         F: Fn(&[f64]) -> f64 + Send + Sync + 'static,
     {
-        self.objective = Some(Box::new(f));
+        self.objective = Some(Arc::new(f));
         self.gradient = None;
         self
     }
@@ -273,7 +277,7 @@ impl ScalarProblemBuilder {
     where
         G: Fn(&[f64]) -> Vec<f64> + Send + Sync + 'static,
     {
-        self.gradient = Some(Box::new(g));
+        self.gradient = Some(Arc::new(g));
         self
     }
 
@@ -283,8 +287,8 @@ impl ScalarProblemBuilder {
         F: Fn(&[f64]) -> f64 + Send + Sync + 'static,
         G: Fn(&[f64]) -> Vec<f64> + Send + Sync + 'static,
     {
-        self.objective = Some(Box::new(f));
-        self.gradient = Some(Box::new(g));
+        self.objective = Some(Arc::new(f));
+        self.gradient = Some(Arc::new(g));
         self
     }
 
@@ -295,21 +299,25 @@ impl ScalarProblemBuilder {
     }
 
     /// Finalises the builder, producing a callable optimisation problem.
-    pub fn build(mut self) -> Result<Problem, String> {
+    pub fn build(&self) -> Result<Problem, String> {
         let objective = self
             .objective
-            .take()
+            .as_ref()
+            .cloned()
             .ok_or_else(|| "At least one objective must be provide".to_string())?;
-        let gradient = self.gradient.take();
+        let gradient = self.gradient.as_ref().cloned();
 
-        // let parameter_specs = BuilderWithParameters::take_parameters(&mut self);
-        let default_optimiser = self.optimiser_slot.take();
+        let objective_box: ObjectiveFn = Box::new(move |x: &[f64]| objective(x));
+        let gradient_box: Option<GradientFn> = gradient.map(|g| {
+            let gradient = Arc::clone(&g);
+            Box::new(move |x: &[f64]| gradient(x)) as GradientFn
+        });
 
         Ok(Problem {
-            kind: ProblemKind::Callable(CallableObjective::new(objective, gradient)),
-            config: self.config,
-            parameter_specs: self.parameters,
-            default_optimiser,
+            kind: ProblemKind::Callable(CallableObjective::new(objective_box, gradient_box)),
+            config: self.config.clone(),
+            parameter_specs: self.parameters.clone(),
+            default_optimiser: self.optimiser_slot.get().cloned(),
         })
     }
 }
@@ -341,7 +349,7 @@ impl BuilderWithOptimiser for ScalarProblemBuilder {
 }
 
 pub struct VectorProblemBuilder {
-    objective: Option<VectorObjectiveFn>,
+    objective: Option<SharedVectorObjectiveFn>,
     data: Option<Vec<f64>>,
     shape: Option<Vec<usize>>,
     config: HashMap<String, f64>,
@@ -367,7 +375,7 @@ impl VectorProblemBuilder {
     where
         F: Fn(&[f64]) -> Result<Vec<f64>, String> + Send + Sync + 'static,
     {
-        self.objective = Some(Box::new(objective));
+        self.objective = Some(Arc::new(objective));
         self
     }
 
@@ -401,26 +409,29 @@ impl VectorProblemBuilder {
         self
     }
 
-    pub fn build(mut self) -> Result<Problem, String> {
+    pub fn build(&self) -> Result<Problem, String> {
         let objective = self
             .objective
-            .take()
+            .as_ref()
+            .cloned()
             .ok_or_else(|| "Vector objective must be provided".to_string())?;
         let data = self
             .data
-            .take()
+            .as_ref()
+            .cloned()
             .ok_or_else(|| "Observed data must be provided".to_string())?;
-        let shape = self.shape.take().unwrap_or_default();
-        let default_optimiser = self.optimiser_slot.take();
+        let shape = self.shape.clone().unwrap_or_default();
+
+        let objective_box: VectorObjectiveFn = Box::new(move |params: &[f64]| objective(params));
 
         Problem::new_vector(
-            objective,
+            objective_box,
             data,
             shape,
-            self.config,
-            self.parameters,
+            self.config.clone(),
+            self.parameters.clone(),
             Arc::clone(&self.cost_metric),
-            default_optimiser,
+            self.optimiser_slot.get().cloned(),
         )
     }
 }
@@ -557,9 +568,9 @@ impl DiffsolProblemBuilder {
     }
 
     /// Finalises the builder into an optimisation problem.
-    pub fn build(mut self) -> Result<Problem, String> {
-        let dsl = self.dsl.take().ok_or("DSL must be provided")?;
-        let data_with_t = self.data.take().ok_or("Data must be provided")?;
+    pub fn build(&self) -> Result<Problem, String> {
+        let dsl = self.dsl.clone().ok_or("DSL must be provided")?;
+        let data_with_t = self.data.as_ref().cloned().ok_or("Data must be provided")?;
         if data_with_t.ncols() < 2 {
             return Err(
                 "Data must include at least two columns: t_span followed by observed values"
@@ -569,16 +580,15 @@ impl DiffsolProblemBuilder {
 
         let t_span: Vec<f64> = data_with_t.column(0).iter().cloned().collect();
         let data = data_with_t.columns(1, data_with_t.ncols() - 1).into_owned();
-        let default_optimiser = self.optimiser_slot.take();
 
         Problem::new_diffsol(
             &dsl,
             data,
             t_span,
-            self.config,
-            self.parameters,
+            self.config.clone(),
+            self.parameters.clone(),
             Arc::clone(&self.cost_metric),
-            default_optimiser,
+            self.optimiser_slot.get().cloned(),
         )
     }
 }

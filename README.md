@@ -5,9 +5,9 @@
 [![License](https://img.shields.io/github/license/bradyplanden/chronopt?color=blue)](https://github.com/bradyplanden/chronopt/blob/main/LICENSE)
 [![Releases](https://img.shields.io/github/v/release/bradyplanden/chronopt?color=gold)](https://github.com/bradyplanden/chronopt/releases)
 
-</div>
-
 **chron**os-**opt**imum is a Rust-first toolkit for time-series inference and optimisation with ergonomic Python bindings. It couples high-performance solvers with builder APIs for modelling objective functions and differential systems.
+
+</div>
 
 ## Project goals
 - Speed and numerical accuracy through a Rust core.

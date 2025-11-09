@@ -23,6 +23,11 @@ def rosenbrock(x):
     return np.asarray([value], dtype=float)
 
 
+def bounded_quadratic(x):
+    value = (x[0] - 2.0) ** 2 + (x[1] - 3.0) ** 2
+    return np.asarray([value], dtype=float)
+
+
 def test_python_builder_rosenbrock():
     builder = (
         chron.ScalarBuilder()
@@ -40,3 +45,21 @@ def test_python_builder_rosenbrock():
     assert results.success
     assert np.allclose(results.x, np.ones(2), atol=1e-3)
     assert results.fun < 1e-6
+
+
+def test_python_builder_bounds_respected():
+    builder = (
+        chron.ScalarBuilder()
+        .with_callable(bounded_quadratic)
+        .with_parameter("x", 0.0, bounds=(0.0, 1.0))
+        .with_parameter("y", 0.0, bounds=(0.0, 2.0))
+    )
+    problem = builder.build()
+
+    optimiser = chron.NelderMead().with_max_iter(200).with_threshold(1e-8)
+    results = optimiser.run(problem, [0.5, 1.0])
+
+    assert results.success
+    assert 0.0 <= results.x[0] <= 1.0
+    assert 0.0 <= results.x[1] <= 2.0
+    assert np.allclose(results.x, np.array([1.0, 2.0]), atol=1e-2)

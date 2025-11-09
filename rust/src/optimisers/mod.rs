@@ -69,12 +69,88 @@ enum InitialState {
     Finished(OptimisationResults),
 }
 
-fn initialise_start(problem: &Problem, initial: Vec<f64>) -> InitialState {
-    let start = if !initial.is_empty() {
+#[derive(Debug, Clone)]
+struct Bounds {
+    limits: Vec<(f64, f64)>,
+}
+
+impl Bounds {
+    fn new(limits: Vec<(f64, f64)>) -> Self {
+        Self { limits }
+    }
+
+    fn apply(&self, point: &mut [f64]) {
+        let dim = self.dimension();
+        debug_assert_eq!(
+            point.len(),
+            dim,
+            "Bounds dimension mismatch: point has {} entries, bounds have {}",
+            point.len(),
+            dim
+        );
+
+        for (val, (lower, upper)) in point.iter_mut().zip(self.limits.iter()) {
+            *val = val.clamp(*lower, *upper);
+        }
+    }
+
+    fn dimension(&self) -> usize {
+        self.limits.len()
+    }
+}
+
+/// Apply bounds to a point when bounds are provided
+fn apply_bounds(point: &mut [f64], bounds: Option<&Bounds>) {
+    if let Some(bounds) = bounds {
+        bounds.apply(point);
+    }
+}
+
+/// Extract bounds from problem parameter specs
+fn extract_bounds(problem: &Problem) -> Option<Bounds> {
+    let specs = problem.parameter_specs();
+    if specs.is_empty() {
+        return None;
+    }
+
+    let mut has_any_bounds = false;
+    let mut limits: Vec<(f64, f64)> = Vec::with_capacity(specs.len());
+
+    for spec in specs.iter() {
+        match spec.bounds {
+            Some((lower, upper)) => {
+                let (low, high) = if lower <= upper {
+                    (lower, upper)
+                } else {
+                    (upper, lower)
+                };
+
+                if low.is_finite() || high.is_finite() {
+                    has_any_bounds = true;
+                }
+
+                limits.push((low, high));
+            }
+            None => limits.push((f64::NEG_INFINITY, f64::INFINITY)),
+        }
+    }
+
+    if has_any_bounds {
+        Some(Bounds::new(limits))
+    } else {
+        None
+    }
+}
+
+fn initialise_start(problem: &Problem, initial: Vec<f64>, bounds: Option<&Bounds>) -> InitialState {
+    let mut start = if !initial.is_empty() {
         initial
     } else {
         vec![0.0; problem.dimension()]
     };
+
+    // Clamp the initial guess so every optimiser starts within feasible bounds before evaluation.
+    apply_bounds(&mut start, bounds);
 
     let dim = start.len();
     let failed_time = Duration::try_from_secs_f64(0.0).expect("Failed to convert 0.0 to Duration");
@@ -340,7 +416,10 @@ impl NelderMead {
     pub fn run(&self, problem: &Problem, initial: Vec<f64>) -> OptimisationResults {
         let start_time = Instant::now();
 
-        let (start, start_value, mut nfev) = match initialise_start(problem, initial) {
+        let bounds = extract_bounds(problem);
+        let bounds_ref = bounds.as_ref();
+
+        let (start, start_value, mut nfev) = match initialise_start(problem, initial, bounds_ref) {
             InitialState::Finished(results) => return results,
             InitialState::Ready {
                 start,
@@ -380,6 +459,9 @@ impl NelderMead {
                 point[i] += self.sigma0;
             }
 
+            // Keep each simplex vertex feasible before evaluating the objective.
+            apply_bounds(&mut point, bounds_ref);
+
             let value = match evaluate_point(problem, &point) {
                 Ok(v) => v,
                 Err(msg) => {
@@ -410,18 +492,6 @@ impl NelderMead {
         }
 
         let mut nit = 0usize;
-        if let Some(patience) = self.patience {
-            if start_time.elapsed() >= patience {
-                return build_results(
-                    &simplex,
-                    nit,
-                    nfev,
-                    start_time.elapsed(),
-                    TerminationReason::PatienceElapsed,
-                    None,
-                );
-            }
-        }
         let mut termination = TerminationReason::MaxIterationsReached;
 
         loop {
@@ -453,13 +523,17 @@ impl NelderMead {
 
             let worst_index = simplex.len() - 1;
             let centroid = Self::centroid(&simplex[..worst_index]);
-            let worst = simplex[worst_index].clone();
+            let worst_point = &simplex[worst_index].point;
+            let worst_value = simplex[worst_index].value;
 
-            let reflected_point: Vec<f64> = centroid
+            let mut reflected_point: Vec<f64> = centroid
                 .iter()
-                .zip(&worst.point)
+                .zip(worst_point)
                 .map(|(c, w)| c + self.alpha * (c - w))
                 .collect();
+
+            // Reflected candidate must respect bounds to avoid evaluating illegal points.
+            apply_bounds(&mut reflected_point, bounds_ref);
 
             let reflected_value = match evaluate_point(problem, &reflected_point) {
                 Ok(v) => v,
@@ -480,11 +554,14 @@ impl NelderMead {
                     break;
                 }
 
-                let expanded_point: Vec<f64> = centroid
+                let mut expanded_point: Vec<f64> = centroid
                     .iter()
                     .zip(&reflected_point)
                     .map(|(c, r)| c + self.gamma * (r - c))
                     .collect();
+
+                // Expansion step can overshoot, so re-clamp to the allowable region.
+                apply_bounds(&mut expanded_point, bounds_ref);
 
                 let expanded_value = match evaluate_point(problem, &expanded_point) {
                     Ok(v) => v,
@@ -512,13 +589,16 @@ impl NelderMead {
                 continue;
             }
 
-            let (contract_point, contract_value) = if reflected_value < worst.value {
+            let (contract_point, contract_value) = if reflected_value < worst_value {
                 // Outside contraction
-                let point: Vec<f64> = centroid
+                let mut point: Vec<f64> = centroid
                     .iter()
                     .zip(&reflected_point)
                     .map(|(c, r)| c + self.rho * (r - c))
                     .collect();
+
+                // Outside contraction needs clamping so it remains within parameter limits.
+                apply_bounds(&mut point, bounds_ref);
 
                 if self.reached_max_evaluations(nfev) {
                     termination = TerminationReason::MaxFunctionEvaluationsReached;
@@ -541,11 +621,14 @@ impl NelderMead {
                 (point, value)
             } else {
                 // Inside contraction
-                let point: Vec<f64> = centroid
+                let mut point: Vec<f64> = centroid
                     .iter()
-                    .zip(&worst.point)
+                    .zip(worst_point)
                     .map(|(c, w)| c + self.rho * (w - c))
                     .collect();
+
+                // Inside contraction also reprojects onto the feasible hyper-rectangle.
+                apply_bounds(&mut point, bounds_ref);
 
                 if self.reached_max_evaluations(nfev) {
                     termination = TerminationReason::MaxFunctionEvaluationsReached;
@@ -568,13 +651,11 @@ impl NelderMead {
                 (point, value)
             };
 
-            if termination != TerminationReason::MaxIterationsReached
-                && matches!(termination, TerminationReason::FunctionEvaluationFailed(_))
-            {
+            if matches!(termination, TerminationReason::FunctionEvaluationFailed(_)) {
                 break;
             }
 
-            if contract_value < worst.value {
+            if contract_value < worst_value {
                 simplex[worst_index] = EvaluatedPoint::new(contract_point, contract_value);
                 continue;
             }
@@ -587,11 +668,14 @@ impl NelderMead {
                     break;
                 }
 
-                let new_point: Vec<f64> = best_point
+                let mut new_point: Vec<f64> = best_point
                     .iter()
                     .zip(item.point.iter())
                     .map(|(b, x)| b + self.sigma * (x - b))
                     .collect();
+
+                // Shrink step drifts towards the best point; clamp to maintain feasibility.
+                apply_bounds(&mut new_point, bounds_ref);
 
                 match evaluate_point(problem, &new_point) {
                     Ok(val) => {
@@ -683,7 +767,7 @@ impl CMAES {
     }
 
     pub fn with_population_size(mut self, population_size: usize) -> Self {
-        if population_size > 1 {
+        if population_size >= 1 {
             self.population_size = Some(population_size);
         }
         self
@@ -696,7 +780,7 @@ impl CMAES {
 
     fn population_size(&self, dim: usize) -> usize {
         if let Some(size) = self.population_size {
-            size.max(2)
+            size.max(1)
         } else if dim > 0 {
             let suggested = (4.0 + (3.0 * (dim as f64).ln())).floor() as usize;
             suggested.max(4).max(2 * dim)
@@ -708,7 +792,10 @@ impl CMAES {
     pub fn run(&self, problem: &Problem, initial: Vec<f64>) -> OptimisationResults {
         let start_time = Instant::now();
 
-        let (start, start_value, mut nfev) = match initialise_start(problem, initial) {
+        let bounds = extract_bounds(problem);
+        let bounds_ref = bounds.as_ref();
+
+        let (start, start_value, mut nfev) = match initialise_start(problem, initial, bounds_ref) {
             InitialState::Finished(results) => return results,
             InitialState::Ready {
                 start,
@@ -755,7 +842,7 @@ impl CMAES {
         let mu_eff = 1.0 / weights.iter().map(|w| w * w).sum::<f64>();
 
         let c_sigma = (mu_eff + 2.0) / (dim_f + mu_eff + 5.0);
-        let d_sigma = 1.0 + c_sigma + 2.0 * ((mu_eff - 1.0) / (dim_f + 1.0)).max(0.0).sqrt();
+        let d_sigma = compute_d_sigma(mu_eff, dim_f, c_sigma);
         let c_c = (4.0 + mu_eff / dim_f) / (dim_f + 4.0 + 2.0 * mu_eff / dim_f);
         let c1 = 2.0 / ((dim_f + 1.3).powi(2) + mu_eff);
         let c_mu = ((1.0 - c1)
@@ -807,7 +894,10 @@ impl CMAES {
                 let step = &eigenvectors * (&step_matrix * &z);
 
                 let candidate_vec = mean.clone() + step * sigma;
-                let candidate: Vec<f64> = candidate_vec.iter().cloned().collect();
+                let mut candidate: Vec<f64> = candidate_vec.iter().cloned().collect();
+
+                // Sampled population members are projected back inside bounds before scoring.
+                apply_bounds(&mut candidate, bounds_ref);
 
                 sampled_points.push(candidate);
                 sampled_steps.push(z);
@@ -845,32 +935,33 @@ impl CMAES {
 
             population.sort_by(|a, b| a.0.value.partial_cmp(&b.0.value).unwrap_or(Ordering::Equal));
 
-            let mut current_points: Vec<EvaluatedPoint> =
-                population.iter().map(|(pt, _)| pt.clone()).collect();
-
-            if let Some(best) = current_points.first() {
+            // Update best point from sorted population
+            if let Some((best, _)) = population.first() {
                 if best.value < best_point.value {
                     best_point = best.clone();
                 }
             }
 
-            if !current_points.iter().any(|pt| pt.point == best_point.point) {
-                current_points.push(best_point.clone());
-            }
-
-            let fun_diff = if current_points.len() > 1 {
-                let mut sorted = current_points.clone();
-                sorted.sort_by(|a, b| a.value.partial_cmp(&b.value).unwrap_or(Ordering::Equal));
-                let best = &sorted[0];
-                let worst = &sorted[sorted.len() - 1];
-                (worst.value - best.value).abs()
+            // Calculate function difference from sorted population
+            let fun_diff = if population.len() > 1 {
+                let best_val = population[0].0.value;
+                let worst_val = population[population.len() - 1].0.value;
+                (worst_val - best_val).abs()
             } else {
                 0.0
             };
 
+            // Build current_points for final results (include best overall)
+            let mut current_points: Vec<EvaluatedPoint> =
+                population.iter().map(|(pt, _)| pt.clone()).collect();
+            if !current_points.iter().any(|pt| pt.point == best_point.point) {
+                current_points.push(best_point.clone());
+            }
+
             let old_mean = mean.clone();
+            let limit = mu.min(population.len());
             let mut new_mean = DVector::zeros(dim);
-            for i in 0..mu.min(population.len()) {
+            for i in 0..limit {
                 let weight = weights[i];
                 let candidate_vec = DVector::from_column_slice(&population[i].0.point);
                 new_mean += candidate_vec.clone() * weight;
@@ -899,25 +990,23 @@ impl CMAES {
             };
 
             let pc_factor = (c_c * (2.0 - c_c) * mu_eff).sqrt();
+            let sigma_denom = sigma.max(1e-12);
             let mean_shift_scaled = if sigma > 0.0 {
-                mean_shift.clone() * (h_sigma * pc_factor / sigma.max(1e-12))
+                mean_shift.clone() * (h_sigma * pc_factor / sigma_denom)
             } else {
                 DVector::zeros(dim)
             };
             p_c = p_c * (1.0 - c_c) + mean_shift_scaled;
 
-            cov = cov * (1.0 - c1 - c_mu) + (p_c.clone() * p_c.transpose()) * c1;
-
-            for i in 0..mu.min(population.len()) {
+            let mut rank_mu_update = DMatrix::zeros(dim, dim);
+            for i in 0..limit {
                 let weight = weights[i];
                 let candidate_vec = DVector::from_column_slice(&population[i].0.point);
-                let y = (candidate_vec - &old_mean) / sigma.max(1e-12);
-                cov += (&y * y.transpose()) * (c_mu * weight);
+                let y = (candidate_vec - &old_mean) / sigma_denom;
+                rank_mu_update += (&y * y.transpose()) * weight;
             }
 
-            if dim > 0 {
-                cov = (&cov + cov.transpose()) * 0.5;
-            }
+            cov = update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu_update);
 
             sigma *= (c_sigma / d_sigma * (norm_p_sigma / chi_n - 1.0)).exp();
             sigma = sigma.max(1e-18);
@@ -936,13 +1025,6 @@ impl CMAES {
             } else if position_converged {
                 termination = TerminationReason::ParameterToleranceReached;
                 break;
-            }
-
-            if let Some(patience) = self.patience {
-                if start_time.elapsed() >= patience {
-                    termination = TerminationReason::PatienceElapsed;
-                    break;
-                }
             }
         }
 
@@ -997,6 +1079,34 @@ impl Default for CMAES {
     }
 }
 
+fn compute_d_sigma(mu_eff: f64, dim_f: f64, c_sigma: f64) -> f64 {
+    let sqrt_term = ((mu_eff - 1.0) / (dim_f + 1.0)).max(0.0).sqrt();
+    1.0 + c_sigma + 2.0 * (sqrt_term - 1.0).max(0.0)
+}
+
+fn update_covariance(
+    cov: &DMatrix<f64>,
+    c1: f64,
+    c_mu: f64,
+    p_c: &DVector<f64>,
+    h_sigma: f64,
+    c_c: f64,
+    rank_mu_contrib: &DMatrix<f64>,
+) -> DMatrix<f64> {
+    let mut updated = cov * (1.0 - c1 - c_mu);
+
+    // Rank-one update with exponential correction for h_sigma
+    let correction_factor = (1.0 - h_sigma) * c_c * (2.0 - c_c);
+    let rank_one = p_c * p_c.transpose();
+    updated += rank_one * c1;
+    updated += cov * (correction_factor * c1);
+
+    // Rank-mu update
+    updated += rank_mu_contrib * c_mu;
+
+    updated
+}
+
 // Results object
 #[derive(Debug, Clone)]
 pub struct OptimisationResults {
@@ -1025,7 +1135,8 @@ impl OptimisationResults {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::problem::ScalarProblemBuilder;
+    use crate::problem::{BuilderParameterExt, ScalarProblemBuilder};
+    use nalgebra::{DMatrix, DVector};
 
     #[test]
     fn nelder_mead_minimises_quadratic() {
@@ -1183,5 +1294,334 @@ mod tests {
             TerminationReason::PatienceElapsed
         );
         assert!(!result.success);
+    }
+
+    // Edge case tests
+    #[test]
+    fn nelder_mead_handles_bounds() {
+        use crate::problem::ParameterSpec;
+
+        let problem = ScalarProblemBuilder::new()
+            .with_objective(|x: &[f64]| (x[0] - 2.0).powi(2) + (x[1] - 3.0).powi(2))
+            .with_parameter(ParameterSpec::new("x", 0.0, Some((-1.0, 1.0))))
+            .with_parameter(ParameterSpec::new("y", 0.0, Some((0.0, 2.0))))
+            .build()
+            .unwrap();
+
+        let optimiser = NelderMead::new().with_max_iter(200).with_threshold(1e-8);
+
+        let result = optimiser.run(&problem, vec![0.5, 1.0]);
+
+        // Should converge to bounds: x=1.0 (clamped from 2.0), y=2.0 (clamped from 3.0)
+        assert!(
+            result.x[0] >= -1.0 && result.x[0] <= 1.0,
+            "x out of bounds: {}",
+            result.x[0]
+        );
+        assert!(
+            result.x[1] >= 0.0 && result.x[1] <= 2.0,
+            "y out of bounds: {}",
+            result.x[1]
+        );
+        assert!(
+            (result.x[0] - 1.0).abs() < 0.1,
+            "x should be near upper bound"
+        );
+        assert!(
+            (result.x[1] - 2.0).abs() < 0.1,
+            "y should be near upper bound"
+        );
+    }
+
+    #[test]
+    fn cmaes_handles_bounds() {
+        use crate::problem::ParameterSpec;
+
+        let problem = ScalarProblemBuilder::new()
+            .with_objective(|x: &[f64]| (x[0] - 5.0).powi(2) + (x[1] + 5.0).powi(2))
+            .with_parameter(ParameterSpec::new("x", 0.0, Some((0.0, 3.0))))
+            .with_parameter(ParameterSpec::new("y", 0.0, Some((-3.0, 0.0))))
+            .build()
+            .unwrap();
+
+        let optimiser = CMAES::new()
+            .with_max_iter(100)
+            .with_threshold(1e-6)
+            .with_seed(123);
+
+        let result = optimiser.run(&problem, vec![1.5, -1.5]);
+
+        // Should converge to bounds: x=3.0 (clamped from 5.0), y=-3.0 (clamped from -5.0)
+        assert!(
+            result.x[0] >= 0.0 && result.x[0] <= 3.0,
+            "x out of bounds: {}",
+            result.x[0]
+        );
+        assert!(
+            result.x[1] >= -3.0 && result.x[1] <= 0.0,
+            "y out of bounds: {}",
+            result.x[1]
+        );
+        assert!(
+            (result.x[0] - 3.0).abs() < 0.2,
+            "x should be near upper bound"
+        );
+        assert!(
+            (result.x[1] + 3.0).abs() < 0.2,
+            "y should be near lower bound"
+        );
+    }
+
+    #[test]
+    fn cmaes_population_size_heuristics() {
+        let default = CMAES::new();
+        assert_eq!(default.population_size(0), 4, "zero dimension defaults");
+        assert_eq!(default.population_size(1), 4, "univariate heuristic");
+        assert_eq!(
+            default.population_size(10),
+            20,
+            "high dimension uses lambda >= 2n"
+        );
+
+        let overridden = CMAES::new().with_population_size(6);
+        assert_eq!(
+            overridden.population_size(2),
+            6,
+            "explicit population respected when >= 1"
+        );
+    }
+
+    #[test]
+    fn cmaes_is_reproducible_with_seed() {
+        let problem = ScalarProblemBuilder::new()
+            .with_objective(|x: &[f64]| {
+                (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2)
+            })
+            .build()
+            .unwrap();
+
+        let optimiser = CMAES::new()
+            .with_max_iter(300)
+            .with_threshold(1e-8)
+            .with_sigma0(0.7)
+            .with_seed(2024);
+
+        let initial = vec![3.0, -2.0];
+        let result_one = optimiser.run(&problem, initial.clone());
+        let result_two = optimiser.run(&problem, initial);
+
+        assert!(
+            result_one.success,
+            "first run should converge: {}",
+            result_one.message
+        );
+        assert!(
+            result_two.success,
+            "second run should converge: {}",
+            result_two.message
+        );
+        assert_eq!(result_one.nit, result_two.nit);
+        assert_eq!(result_one.nfev, result_two.nfev);
+        assert!((result_one.fun - result_two.fun).abs() < 1e-12);
+        for (x1, x2) in result_one.x.iter().zip(result_two.x.iter()) {
+            assert!(
+                (x1 - x2).abs() < 1e-10,
+                "expected identical optima: {} vs {}",
+                x1,
+                x2
+            );
+        }
+        assert_eq!(result_one.covariance, result_two.covariance);
+    }
+
+    #[test]
+    fn nelder_mead_handles_nan_objective() {
+        let problem = ScalarProblemBuilder::new()
+            .with_objective(|x: &[f64]| if x[0] > 1.0 { f64::NAN } else { x[0] * x[0] })
+            .build()
+            .unwrap();
+
+        let optimiser = NelderMead::new().with_max_iter(50).with_sigma0(2.0); // Larger sigma to ensure we hit NaN region
+
+        let result = optimiser.run(&problem, vec![0.5]);
+
+        // Should either detect NaN or converge to valid region
+        // If it hits NaN, it should fail gracefully
+        if !result.success {
+            assert!(matches!(
+                result.termination_reason,
+                TerminationReason::FunctionEvaluationFailed(_)
+            ));
+        }
+        // Otherwise it converged to the valid region (x <= 1.0)
+    }
+
+    #[test]
+    fn cmaes_lazy_eigendecomposition_works() {
+        // Test with high dimension to trigger lazy updates
+        let problem = ScalarProblemBuilder::new()
+            .with_objective(|x: &[f64]| x.iter().map(|xi| xi * xi).sum::<f64>())
+            .build()
+            .unwrap();
+
+        let dim = 60; // > 50 to trigger lazy updates
+        let initial = vec![0.5; dim];
+
+        let optimiser = CMAES::new()
+            .with_max_iter(100)
+            .with_threshold(1e-6)
+            .with_seed(777);
+
+        let initial_value = initial.iter().map(|x| x * x).sum::<f64>();
+
+        let result = optimiser.run(&problem, initial);
+
+        // Should still work with lazy updates and improve from initial
+        assert!(result.nfev > 0);
+        assert!(
+            result.fun < initial_value,
+            "Should improve: {} < {}",
+            result.fun,
+            initial_value
+        );
+    }
+
+    #[test]
+    fn cmaes_covariance_is_symmetric_and_psd() {
+        let problem = ScalarProblemBuilder::new()
+            .with_objective(|x: &[f64]| {
+                (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2)
+            })
+            .build()
+            .unwrap();
+
+        let optimiser = CMAES::new()
+            .with_max_iter(400)
+            .with_threshold(1e-10)
+            .with_sigma0(0.6)
+            .with_seed(4242);
+
+        let result = optimiser.run(&problem, vec![4.5, -3.5]);
+
+        assert!(result.success, "Expected success: {}", result.message);
+        assert!(
+            result.fun < 1e-6,
+            "Should reach low objective value: {}",
+            result.fun
+        );
+
+        let covariance = result
+            .covariance
+            .clone()
+            .expect("CMAES should provide covariance estimates");
+        assert_eq!(covariance.len(), 2);
+        assert!(covariance.iter().all(|row| row.len() == 2));
+
+        for i in 0..2 {
+            for j in 0..2 {
+                assert!(
+                    (covariance[i][j] - covariance[j][i]).abs() < 1e-12,
+                    "covariance matrix must be symmetric"
+                );
+            }
+        }
+
+        let flat: Vec<f64> = covariance
+            .iter()
+            .flat_map(|row| row.iter().copied())
+            .collect();
+        let matrix = DMatrix::from_row_slice(2, 2, &flat);
+        let eigenvalues = matrix.symmetric_eigen().eigenvalues;
+
+        assert!(
+            eigenvalues.iter().all(|&eig| eig >= -1e-10),
+            "covariance must be positive semi-definite: {:?}",
+            eigenvalues
+        );
+    }
+
+    #[test]
+    fn d_sigma_matches_hansen_2016_formula() {
+        // Test case 1: Standard parameters from 10-dimensional optimization
+        let mu_eff = 4.5;
+        let dim_f = 10.0;
+        let c_sigma = 0.3;
+
+        // Manual computation following Hansen (2016)
+        let inner: f64 = (mu_eff - 1.0) / (dim_f + 1.0); // (4.5 - 1) / 11 = 0.318...
+        let sqrt_inner = inner.sqrt(); // ~0.564
+        let clamped = (sqrt_inner - 1.0).max(0.0); // max(0, -0.436) = 0.0
+        let expected = 1.0 + c_sigma + 2.0 * clamped; // 1.0 + 0.3 + 0 = 1.3
+
+        let computed = compute_d_sigma(mu_eff, dim_f, c_sigma);
+
+        assert!(
+            (computed - expected).abs() < 1e-12,
+            "d_sigma mismatch: expected {}, got {}",
+            expected,
+            computed
+        );
+
+        // For this case, the sqrt term is less than 1, so it should clamp to 0
+        assert!(
+            (computed - (1.0 + c_sigma)).abs() < 1e-12,
+            "When sqrt((mu_eff-1)/(n+1)) < 1, d_sigma should equal 1 + c_sigma"
+        );
+    }
+
+    #[test]
+    fn cmaes_d_sigma_clamps_when_below_unity() {
+        let mu_eff = 2.0_f64;
+        let dim_f = 10.0_f64;
+        let c_sigma = 0.2_f64;
+
+        let expected = 1.0 + c_sigma;
+        let computed = compute_d_sigma(mu_eff, dim_f, c_sigma);
+
+        assert!((computed - expected).abs() < 1e-12);
+    }
+
+    #[test]
+    fn covariance_update_applies_exponential_correction() {
+        let cov = DMatrix::from_row_slice(2, 2, &[2.0, 0.1, 0.1, 1.0]);
+        let c1 = 0.3_f64;
+        let c_mu = 0.2_f64;
+        let c_c = 0.5_f64;
+        let h_sigma = 0.0_f64;
+        let p_c = DVector::from_vec(vec![1.0, -0.5]);
+        let rank_mu = DMatrix::zeros(2, 2);
+
+        let correction_factor = (1.0 - h_sigma) * c_c * (2.0 - c_c);
+        let expected = cov.clone() * (1.0 - c1 - c_mu)
+            + (p_c.clone() * p_c.transpose() + cov.clone() * correction_factor) * c1
+            + rank_mu.clone() * c_mu;
+
+        let updated = update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
+
+        for (exp, got) in expected.iter().zip(updated.iter()) {
+            assert!((exp - got).abs() < 1e-12, "expected {} got {}", exp, got);
+        }
+    }
+
+    #[test]
+    fn covariance_update_skips_correction_when_h_sigma_one() {
+        let cov = DMatrix::from_row_slice(2, 2, &[1.5, 0.2, 0.2, 0.8]);
+        let c1 = 0.25_f64;
+        let c_mu = 0.1_f64;
+        let c_c = 0.6_f64;
+        let h_sigma = 1.0_f64;
+        let p_c = DVector::from_vec(vec![0.3, -0.7]);
+        let rank_mu = DMatrix::from_row_slice(2, 2, &[0.05, 0.01, 0.01, 0.04]);
+
+        let correction_factor = (1.0 - h_sigma) * c_c * (2.0 - c_c);
+        let expected = cov.clone() * (1.0 - c1 - c_mu)
+            + (p_c.clone() * p_c.transpose() + cov.clone() * correction_factor) * c1
+            + rank_mu.clone() * c_mu;
+
+        let updated = update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
+
+        for (exp, got) in expected.iter().zip(updated.iter()) {
+            assert!((exp - got).abs() < 1e-12, "expected {} got {}", exp, got);
+        }
     }
 }

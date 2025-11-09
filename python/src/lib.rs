@@ -656,7 +656,7 @@ impl PyVectorBuilder {
     /// of the same shape as the observed data.
     fn with_objective(
         mut slf: PyRefMut<'_, Self>,
-        objective: PyObject,
+        objective: Py<PyAny>,
     ) -> PyResult<PyRefMut<'_, Self>> {
         let obj_fn = move |params: &[f64]| -> Result<Vec<f64>, String> {
             Python::attach(|py| {
@@ -755,7 +755,7 @@ impl PyVectorBuilder {
     }
 
     /// Create a `Problem` representing the vector optimisation model.
-    fn build(mut slf: PyRefMut<'_, Self>) -> PyResult<PyProblem> {
+    fn build(slf: PyRefMut<'_, Self>) -> PyResult<PyProblem> {
         let problem = slf.inner.build().map_err(|e| PyValueError::new_err(e))?;
         Ok(PyProblem {
             inner: problem,

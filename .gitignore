@@ -76,3 +76,6 @@ docs/_build/
 
 # Synthetic data
 *.npz
+
+# MacOS
+*.DS_Store

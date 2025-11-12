@@ -51,7 +51,7 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: .venv
         run: |
-          uv sync && uv run pytest -v
+          uv sync --group dev && uv run pytest -v
 
   sdist:
     runs-on: ubuntu-24.04

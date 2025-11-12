@@ -68,6 +68,7 @@ plotting = [
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "scipy" },
 ]
 examples = [
     { name = "diffeqpy" },
@@ -89,7 +90,10 @@ requires-dist = [
 provides-extras = ["jax", "plotting", "diffeqpy"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.3.5" }]
+dev = [
+    { name = "pytest", specifier = ">=8.3.5" },
+    { name = "scipy", specifier = ">=1.16.2" },
+]
 examples = [
     { name = "diffeqpy" },
     { name = "diffrax", specifier = ">=0.7.0" },

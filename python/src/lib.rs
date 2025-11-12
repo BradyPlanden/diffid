@@ -19,7 +19,8 @@ use chronopt_core::problem::{
     DiffsolBackend, DiffsolProblemBuilder, ScalarProblemBuilder, VectorProblemBuilder,
 };
 use chronopt_core::sampler::{
-    MetropolisHastings as CoreMetropolisHastings, Samples as CoreSamples,
+    DynamicNestedSampler as CoreDynamicNestedSampler, MetropolisHastings as CoreMetropolisHastings,
+    NestedSamples as CoreNestedSamples, Samples as CoreSamples,
 };
 
 #[cfg(feature = "stubgen")]
@@ -86,6 +87,68 @@ impl PySamples {
     }
 }
 
+/// Nested sampling results including evidence estimates.
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
+#[pyclass(module = "chronopt.sampler", name = "NestedSamples")]
+#[derive(Clone)]
+pub struct PyNestedSamples {
+    inner: CoreNestedSamples,
+}
+
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
+#[pymethods]
+impl PyNestedSamples {
+    #[getter]
+    fn posterior(&self) -> Vec<(Vec<f64>, f64, f64)> {
+        self.inner
+            .posterior()
+            .iter()
+            .map(|sample| {
+                (
+                    sample.position.clone(),
+                    sample.log_likelihood,
+                    sample.log_weight,
+                )
+            })
+            .collect()
+    }
+
+    #[getter]
+    fn mean(&self) -> Vec<f64> {
+        self.inner.mean().to_vec()
+    }
+
+    #[getter]
+    fn draws(&self) -> usize {
+        self.inner.draws()
+    }
+
+    #[getter]
+    fn log_evidence(&self) -> f64 {
+        self.inner.log_evidence()
+    }
+
+    #[getter]
+    fn information(&self) -> f64 {
+        self.inner.information()
+    }
+
+    fn to_samples(&self) -> PySamples {
+        PySamples {
+            inner: self.inner.to_samples(),
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "NestedSamples(draws={}, log_evidence={:.3}, information={:.3})",
+            self.inner.draws(),
+            self.inner.log_evidence(),
+            self.inner.information()
+        )
+    }
+}
+
 /// Basic Metropolis-Hastings sampler binding mirroring the optimiser API.
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass(module = "chronopt.sampler", name = "MetropolisHastings")]
@@ -142,6 +205,68 @@ impl PyMetropolisHastings {
     fn run(&self, problem: &PyProblem, initial: Vec<f64>) -> PySamples {
         let samples = self.inner.run(&problem.inner, initial);
         PySamples { inner: samples }
+    }
+}
+
+/// Dynamic nested sampler binding exposing DNS configuration knobs.
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
+#[pyclass(module = "chronopt.sampler", name = "DynamicNestedSampler")]
+#[derive(Clone)]
+pub struct PyDynamicNestedSampler {
+    inner: CoreDynamicNestedSampler,
+}
+
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
+#[pymethods]
+impl PyDynamicNestedSampler {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: CoreDynamicNestedSampler::new(),
+        }
+    }
+
+    fn with_live_points(mut slf: PyRefMut<'_, Self>, live_points: usize) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_live_points(live_points);
+        slf
+    }
+
+    fn with_expansion_factor(
+        mut slf: PyRefMut<'_, Self>,
+        expansion_factor: f64,
+    ) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_expansion_factor(expansion_factor);
+        slf
+    }
+
+    fn with_termination_tolerance(
+        mut slf: PyRefMut<'_, Self>,
+        tolerance: f64,
+    ) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_termination_tolerance(tolerance);
+        slf
+    }
+
+    fn with_parallel(mut slf: PyRefMut<'_, Self>, parallel: bool) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_parallel(parallel);
+        slf
+    }
+
+    #[pyo3(name = "enable_parallel")]
+    fn enable_parallel(slf: PyRefMut<'_, Self>, parallel: bool) -> PyRefMut<'_, Self> {
+        Self::with_parallel(slf, parallel)
+    }
+
+    fn with_seed(mut slf: PyRefMut<'_, Self>, seed: u64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_seed(seed);
+        slf
+    }
+
+    #[pyo3(signature = (problem, initial=None))]
+    fn run(&self, problem: &PyProblem, initial: Option<Vec<f64>>) -> PyNestedSamples {
+        let initial = initial.unwrap_or_else(|| problem.inner.default_parameters());
+        let nested = self.inner.run_nested(&problem.inner, initial);
+        PyNestedSamples { inner: nested }
     }
 }
 
@@ -1145,8 +1270,10 @@ fn chronopt(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDiffsolBuilder>()?;
     m.add_class::<PyVectorBuilder>()?;
     m.add_class::<PyCostMetric>()?;
-    m.add_class::<PyMetropolisHastings>()?;
     m.add_class::<PySamples>()?;
+    m.add_class::<PyNestedSamples>()?;
+    m.add_class::<PyMetropolisHastings>()?;
+    m.add_class::<PyDynamicNestedSampler>()?;
 
     // Builder submodule
     let builder_module = PyModule::new(py, "builder")?;
@@ -1173,6 +1300,8 @@ fn chronopt(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     let sampler_module = PyModule::new(py, "sampler")?;
     sampler_module.add_class::<PyMetropolisHastings>()?;
+    sampler_module.add_class::<PyDynamicNestedSampler>()?;
+    sampler_module.add_class::<PyNestedSamples>()?;
     sampler_module.add_class::<PySamples>()?;
     m.add_submodule(&sampler_module)?;
     m.setattr("sampler", &sampler_module)?;

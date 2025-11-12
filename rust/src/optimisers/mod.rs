@@ -1517,12 +1517,14 @@ mod tests {
         assert_eq!(covariance.len(), 2);
         assert!(covariance.iter().all(|row| row.len() == 2));
 
-        covariance.iter().zip(&covariance).for_each(|(row_i, row_j)| {
-            row_i
-                .iter()
-                .zip(row_j)
-                .for_each(|(a, b)| assert!((a - b).abs() < 1e-12, "covariance matrix must be symmetric"));
-        });
+        covariance
+            .iter()
+            .zip(&covariance)
+            .for_each(|(row_i, row_j)| {
+                row_i.iter().zip(row_j).for_each(|(a, b)| {
+                    assert!((a - b).abs() < 1e-12, "covariance matrix must be symmetric")
+                });
+            });
 
         let flat: Vec<f64> = covariance
             .iter()

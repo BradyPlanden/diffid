@@ -57,7 +57,6 @@ impl Scheduler {
         }
     }
 
-
     /// The scheduler tracks the evolution of the log-evidence and compares it
     /// against a derived upper bound from the live set. Termination is granted
     /// once the estimated remaining evidence mass falls below `termination_tol`

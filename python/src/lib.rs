@@ -1,5 +1,5 @@
 use nalgebra::DMatrix;
-use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArrayDyn, PyUntypedArrayMethods};
+use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArrayDyn};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
@@ -29,14 +29,30 @@ use pyo3_stub_gen::{
     TypeInfo,
 };
 
+type ParameterSpecEntry = (String, f64, Option<(f64, f64)>);
+
+// Helper function to convert numpy arrays to DMatrix
+fn convert_array_to_dmatrix(data: &PyReadonlyArrayDyn<'_, f64>) -> PyResult<DMatrix<f64>> {
+    let array = data.as_array();
+    let array_2d = array
+        .into_dimensionality::<numpy::ndarray::Ix2>()
+        .map_err(|_| PyValueError::new_err("Data array must be two-dimensional"))?;
+
+    let (nrows, ncols) = array_2d.dim();
+    let mut column_major = Vec::with_capacity(nrows * ncols);
+
+    // nalgebra uses column-major storage
+    for col in 0..ncols {
+        for row in 0..nrows {
+            column_major.push(array_2d[[row, col]]);
+        }
+    }
+
+    Ok(DMatrix::from_vec(nrows, ncols, column_major))
+}
+
 #[cfg(feature = "stubgen")]
 pyo3_stub_gen::impl_stub_type!(Optimiser = PyNelderMead | PyCMAES);
-
-#[cfg(all(feature = "stubgen", feature = "extension-module"))]
-compile_error!(
-    "The 'stubgen' feature must be built without the 'extension-module' feature. \
-     Run with `--no-default-features --features stubgen`."
-);
 
 // ============================================================================
 // Optimiser Enum for Polymorphic Types
@@ -45,7 +61,7 @@ compile_error!(
 #[derive(Clone)]
 enum Optimiser {
     NelderMead(NelderMead),
-    CMAES(CMAES),
+    Cmaes(CMAES),
 }
 
 // ============================================================================
@@ -282,7 +298,7 @@ impl<'py> FromPyObject<'py> for Optimiser {
         if let Ok(nm) = ob.extract::<PyRef<PyNelderMead>>() {
             Ok(Optimiser::NelderMead(nm.inner.clone()))
         } else if let Ok(cma) = ob.extract::<PyRef<PyCMAES>>() {
-            Ok(Optimiser::CMAES(cma.inner.clone()))
+            Ok(Optimiser::Cmaes(cma.inner.clone()))
         } else {
             Err(PyTypeError::new_err(
                 "Optimiser must be an instance of NelderMead or CMAES",
@@ -336,13 +352,13 @@ impl PyCostMetric {
 #[cfg_attr(feature = "stubgen", gen_stub_pyfunction)]
 #[pyfunction(name = "SSE")]
 fn sse() -> PyCostMetric {
-    PyCostMetric::from_metric(SumSquaredError::default(), "sse")
+    PyCostMetric::from_metric(SumSquaredError, "sse")
 }
 
 #[cfg_attr(feature = "stubgen", gen_stub_pyfunction)]
 #[pyfunction(name = "RMSE")]
 fn rmse() -> PyCostMetric {
-    PyCostMetric::from_metric(RootMeanSquaredError::default(), "rmse")
+    PyCostMetric::from_metric(RootMeanSquaredError, "rmse")
 }
 
 #[cfg_attr(feature = "stubgen", gen_stub_pyfunction)]
@@ -476,7 +492,7 @@ impl PyScalarBuilder {
             Optimiser::NelderMead(nm) => {
                 slf.inner = std::mem::take(&mut slf.inner).with_optimiser(nm.clone());
             }
-            Optimiser::CMAES(cma) => {
+            Optimiser::Cmaes(cma) => {
                 slf.inner = std::mem::take(&mut slf.inner).with_optimiser(cma.clone());
             }
         }
@@ -537,7 +553,7 @@ impl PyScalarBuilder {
 
     /// Finalize the builder into an executable `Problem`.
     fn build(&mut self) -> PyResult<PyProblem> {
-        let problem = self.inner.build().map_err(|e| PyValueError::new_err(e))?;
+        let problem = self.inner.build().map_err(PyValueError::new_err)?;
         Ok(PyProblem {
             inner: problem,
             default_optimiser: self.default_optimiser.clone(),
@@ -700,7 +716,7 @@ impl PyDiffsolBuilder {
             Optimiser::NelderMead(nm) => {
                 inner = inner.with_optimiser(nm.clone());
             }
-            Optimiser::CMAES(cma) => {
+            Optimiser::Cmaes(cma) => {
                 inner = inner.with_optimiser(cma.clone());
             }
         }
@@ -712,42 +728,11 @@ impl PyDiffsolBuilder {
 
     /// Create a `Problem` representing the differential solver model.
     fn build(&mut self) -> PyResult<PyProblem> {
-        let problem = self.inner.build().map_err(|e| PyValueError::new_err(e))?;
+        let problem = self.inner.build().map_err(PyValueError::new_err)?;
         Ok(PyProblem {
             inner: problem,
             default_optimiser: self.default_optimiser.clone(),
         })
-    }
-}
-
-// Helper function to convert numpy arrays to DMatrix
-fn convert_array_to_dmatrix(data: &PyReadonlyArrayDyn<f64>) -> PyResult<DMatrix<f64>> {
-    match data.ndim() {
-        1 => {
-            let slice = data
-                .as_slice()
-                .map_err(|_| PyValueError::new_err("Array must be contiguous"))?;
-            Ok(DMatrix::from_vec(slice.len(), 1, slice.to_vec()))
-        }
-        2 => {
-            // Extract shape information
-            let shape = data.shape();
-            let (nrows, ncols) = (shape[0], shape[1]);
-
-            // Try to get as 2D array for efficient access
-            if let Ok(array2d) = data.as_array().into_dimensionality::<numpy::Ix2>() {
-                let mut column_major = Vec::with_capacity(nrows * ncols);
-                for j in 0..ncols {
-                    for i in 0..nrows {
-                        column_major.push(array2d[[i, j]]);
-                    }
-                }
-                Ok(DMatrix::from_vec(nrows, ncols, column_major))
-            } else {
-                Err(PyValueError::new_err("Failed to convert 2D array"))
-            }
-        }
-        _ => Err(PyValueError::new_err("Data array must be 1D or 2D")),
     }
 }
 
@@ -870,7 +855,7 @@ impl PyVectorBuilder {
             Optimiser::NelderMead(nm) => {
                 inner = inner.with_optimiser(nm.clone());
             }
-            Optimiser::CMAES(cma) => {
+            Optimiser::Cmaes(cma) => {
                 inner = inner.with_optimiser(cma.clone());
             }
         }
@@ -881,7 +866,7 @@ impl PyVectorBuilder {
 
     /// Create a `Problem` representing the vector optimisation model.
     fn build(slf: PyRefMut<'_, Self>) -> PyResult<PyProblem> {
-        let problem = slf.inner.build().map_err(|e| PyValueError::new_err(e))?;
+        let problem = slf.inner.build().map_err(PyValueError::new_err)?;
         Ok(PyProblem {
             inner: problem,
             default_optimiser: slf.default_optimiser.clone(),
@@ -933,7 +918,7 @@ impl PyProblem {
         });
         let result = match optimiser.as_ref().or(self.default_optimiser.as_ref()) {
             Some(Optimiser::NelderMead(nm)) => self.inner.optimize(initial, Some(nm)),
-            Some(Optimiser::CMAES(cma)) => self.inner.optimize(initial, Some(cma)),
+            Some(Optimiser::Cmaes(cma)) => self.inner.optimize(initial, Some(cma)),
             None => self.inner.optimize(initial, None),
         };
 
@@ -950,8 +935,7 @@ impl PyProblem {
         self.inner.dimension()
     }
 
-    /// Return the configured optimisation parameters as (name, initial_value, bounds) tuples.
-    fn parameters(&self) -> Vec<(String, f64, Option<(f64, f64)>)> {
+    fn parameters(&self) -> Vec<ParameterSpecEntry> {
         self.inner
             .parameter_specs()
             .iter()

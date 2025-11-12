@@ -4,6 +4,10 @@ use rand::rngs::StdRng;
 use rand_distr::StandardNormal;
 use rayon::prelude::*;
 
+mod dynamic_nested;
+
+pub use dynamic_nested::{DynamicNestedSampler, NestedSample, NestedSamples};
+
 /// Core behaviour shared by all samplers.
 pub trait Sampler {
     fn run(&self, problem: &Problem, initial: Vec<f64>) -> Samples;
@@ -209,7 +213,7 @@ fn run_chain(
     samples
 }
 
-fn evaluate(problem: &Problem, x: &[f64]) -> f64 {
+pub(super) fn evaluate(problem: &Problem, x: &[f64]) -> f64 {
     match problem.evaluate(x) {
         Ok(value) => value,
         Err(_) => f64::INFINITY,

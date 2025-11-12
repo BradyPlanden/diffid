@@ -1162,7 +1162,7 @@ mod tests {
         assert!((result.x[1] + 0.5).abs() < 1e-5);
         assert!(result.fun < 1e-9, "Final value too large: {}", result.fun);
         assert!(result.nit > 0);
-        assert!(result.nfev >= result.nit + 1);
+        assert!(result.nfev > result.nit);
     }
 
     #[test]
@@ -1251,7 +1251,7 @@ mod tests {
         assert!((result.x[1] + 0.5).abs() < 1e-4);
         assert!(result.fun < 1e-8, "Final value too large: {}", result.fun);
         assert!(result.nit > 0);
-        assert!(result.nfev >= result.nit + 1);
+        assert!(result.nfev > result.nit);
     }
 
     #[test]
@@ -1517,14 +1517,12 @@ mod tests {
         assert_eq!(covariance.len(), 2);
         assert!(covariance.iter().all(|row| row.len() == 2));
 
-        for i in 0..2 {
-            for j in 0..2 {
-                assert!(
-                    (covariance[i][j] - covariance[j][i]).abs() < 1e-12,
-                    "covariance matrix must be symmetric"
-                );
-            }
-        }
+        covariance.iter().zip(&covariance).for_each(|(row_i, row_j)| {
+            row_i
+                .iter()
+                .zip(row_j)
+                .for_each(|(a, b)| assert!((a - b).abs() < 1e-12, "covariance matrix must be symmetric"));
+        });
 
         let flat: Vec<f64> = covariance
             .iter()

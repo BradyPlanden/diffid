@@ -14,7 +14,9 @@ pub mod prelude {
         DiffsolProblemBuilder, ParameterSet, ParameterSpec, Problem, ScalarProblemBuilder,
         VectorProblemBuilder,
     };
-    pub use crate::sampler::{MetropolisHastings, Sampler, Samples};
+    pub use crate::sampler::{
+        DynamicNestedSampler, MetropolisHastings, NestedSample, NestedSamples, Sampler, Samples,
+    };
 }
 
 #[cfg(test)]

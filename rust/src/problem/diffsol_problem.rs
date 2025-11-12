@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::ops::Index;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -127,7 +128,20 @@ impl DiffsolProblem {
             let problem = cache
                 .get_mut(&id)
                 .expect("problem cache must contain entry after insertion");
-            f(problem)
+            match catch_unwind(AssertUnwindSafe(|| f(problem))) {
+                Ok(result) => result,
+                Err(_) => {
+                    let rebuilt = self.build_problem()?;
+                    let entry = cache
+                        .get_mut(&id)
+                        .expect("problem cache must contain entry after rebuild");
+                    *entry = rebuilt;
+                    let problem = cache
+                        .get_mut(&id)
+                        .expect("problem cache must contain entry after rebuild");
+                    f(problem)
+                }
+            }
         })
     }
 
@@ -146,11 +160,13 @@ impl DiffsolProblem {
                     .bdf::<DenseSolver>()
                     .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
 
-                match solver.solve_dense(t_span) {
-                    Ok(solution) => Ok(SimulationResult::Solution(Self::matrix_to_dmatrix(
+                let solve_result = catch_unwind(AssertUnwindSafe(|| solver.solve_dense(t_span)));
+
+                match solve_result {
+                    Ok(Ok(solution)) => Ok(SimulationResult::Solution(Self::matrix_to_dmatrix(
                         &solution,
                     ))),
-                    Err(_) => Ok(SimulationResult::Penalty),
+                    _ => Ok(SimulationResult::Penalty),
                 }
             }
             BackendProblem::Sparse(problem) => {
@@ -162,11 +178,13 @@ impl DiffsolProblem {
                     .bdf::<SparseSolver>()
                     .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
 
-                match solver.solve_dense(t_span) {
-                    Ok(solution) => Ok(SimulationResult::Solution(Self::matrix_to_dmatrix(
+                let solve_result = catch_unwind(AssertUnwindSafe(|| solver.solve_dense(t_span)));
+
+                match solve_result {
+                    Ok(Ok(solution)) => Ok(SimulationResult::Solution(Self::matrix_to_dmatrix(
                         &solution,
                     ))),
-                    Err(_) => Ok(SimulationResult::Penalty),
+                    _ => Ok(SimulationResult::Penalty),
                 }
             }
         }

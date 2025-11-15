@@ -14,6 +14,8 @@ pub(super) struct Bounds {
     upper: Vec<f64>,
 }
 
+const INITIAL_EVAL_BATCH_SIZE: usize = 16;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -41,7 +43,7 @@ mod tests {
         let problem = scalar_problem();
         let mut rng = StdRng::seed_from_u64(123);
         let bounds = Bounds::from_problem(&problem, &[0.0], 1);
-        let live_points = initial_live_points(&problem, &bounds, &mut rng, 16, 0.1);
+        let live_points = initial_live_points(&problem, &bounds, &mut rng, 16, 0.1, false);
         let mut state = SamplerState::new(live_points);
 
         let original_count = state.live_point_count();
@@ -57,7 +59,7 @@ mod tests {
         let problem = scalar_problem();
         let mut rng = StdRng::seed_from_u64(42);
         let bounds = Bounds::from_problem(&problem, &[0.0], 1);
-        let live_points = initial_live_points(&problem, &bounds, &mut rng, 12, 0.1);
+        let live_points = initial_live_points(&problem, &bounds, &mut rng, 12, 0.1, false);
         assert_eq!(live_points.len(), 12);
     }
 }
@@ -354,20 +356,60 @@ pub(super) fn initial_live_points(
     rng: &mut StdRng,
     live_points: usize,
     expansion_factor: f64,
+    parallel: bool,
 ) -> Vec<LivePoint> {
     let mut samples = Vec::with_capacity(live_points);
     let mut attempts = 0usize;
     let max_attempts = live_points.saturating_mul(200).max(1000);
 
-    while samples.len() < live_points && attempts < max_attempts {
-        attempts += 1;
-        let mut position = bounds.sample(rng, expansion_factor);
-        bounds.clamp(&mut position);
-        let log_likelihood = -evaluate(problem, &position);
-        if !log_likelihood.is_finite() {
-            continue;
+    if parallel {
+        while samples.len() < live_points && attempts < max_attempts {
+            let mut batch = Vec::with_capacity(INITIAL_EVAL_BATCH_SIZE);
+            while samples.len().saturating_add(batch.len()) < live_points
+                && attempts < max_attempts
+                && batch.len() < INITIAL_EVAL_BATCH_SIZE
+            {
+                attempts = attempts.saturating_add(1);
+                let mut position = bounds.sample(rng, expansion_factor);
+                bounds.clamp(&mut position);
+                batch.push(position);
+            }
+
+            if batch.is_empty() {
+                continue;
+            }
+
+            let results = problem.evaluate_population(&batch);
+            for (position, result) in batch.into_iter().zip(results.into_iter()) {
+                let log_likelihood = match result {
+                    Ok(value) => {
+                        let ll = -value;
+                        if ll.is_finite() {
+                            ll
+                        } else {
+                            continue;
+                        }
+                    }
+                    Err(_) => continue,
+                };
+
+                samples.push(LivePoint::new(position, log_likelihood));
+                if samples.len() >= live_points {
+                    break;
+                }
+            }
         }
-        samples.push(LivePoint::new(position, log_likelihood));
+    } else {
+        while samples.len() < live_points && attempts < max_attempts {
+            attempts += 1;
+            let mut position = bounds.sample(rng, expansion_factor);
+            bounds.clamp(&mut position);
+            let log_likelihood = -evaluate(problem, &position);
+            if !log_likelihood.is_finite() {
+                continue;
+            }
+            samples.push(LivePoint::new(position, log_likelihood));
+        }
     }
 
     samples

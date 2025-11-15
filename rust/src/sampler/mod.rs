@@ -2,7 +2,7 @@ use crate::problem::Problem;
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand_distr::StandardNormal;
-use rayon::prelude::*;
+use std::time::{Duration, Instant};
 
 mod dynamic_nested;
 
@@ -18,14 +18,16 @@ pub struct Samples {
     chains: Vec<Vec<Vec<f64>>>,
     mean_x: Vec<f64>,
     draws: usize,
+    time: Duration,
 }
 
 impl Samples {
-    pub fn new(chains: Vec<Vec<Vec<f64>>>, mean_x: Vec<f64>, draws: usize) -> Self {
+    pub fn new(chains: Vec<Vec<Vec<f64>>>, mean_x: Vec<f64>, draws: usize, time: Duration) -> Self {
         Self {
             chains,
             mean_x,
             draws,
+            time,
         }
     }
 
@@ -40,12 +42,15 @@ impl Samples {
     pub fn draws(&self) -> usize {
         self.draws
     }
+
+    pub fn time(&self) -> Duration {
+        self.time
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct MetropolisHastings {
     num_chains: usize,
-    parallel: bool,
     iterations: usize,
     step_size: f64,
     seed: Option<u64>,
@@ -55,7 +60,6 @@ impl MetropolisHastings {
     pub fn new() -> Self {
         Self {
             num_chains: 1,
-            parallel: false,
             iterations: 1_000,
             step_size: 0.1,
             seed: None,
@@ -69,11 +73,6 @@ impl MetropolisHastings {
 
     pub fn with_iterations(mut self, iterations: usize) -> Self {
         self.iterations = iterations;
-        self
-    }
-
-    pub fn with_parallel(mut self, parallel: bool) -> Self {
-        self.parallel = parallel;
         self
     }
 
@@ -96,6 +95,8 @@ impl Default for MetropolisHastings {
 
 impl Sampler for MetropolisHastings {
     fn run(&self, problem: &Problem, initial: Vec<f64>) -> Samples {
+        let start_time = Instant::now();
+
         let dimension = match (problem.dimension(), initial.len()) {
             (d, _) if d > 0 => d,
             (0, len) if len > 0 => len,
@@ -131,12 +132,14 @@ impl Sampler for MetropolisHastings {
 
         let seeds: Vec<u64> = (0..num_chains).map(|_| seed_rng.gen()).collect();
         let initial_state = start.clone();
+        let problem_parallel = problem
+            .get_config("parallel")
+            .copied()
+            .map(|value| value != 0.0)
+            .unwrap_or(false);
 
-        let chains: Vec<Vec<Vec<f64>>> = if self.parallel && num_chains > 1 {
-            seeds
-                .into_par_iter()
-                .map(|seed| run_chain(problem, &initial_state, iterations, step_size, seed))
-                .collect()
+        let chains: Vec<Vec<Vec<f64>>> = if num_chains > 1 && problem_parallel {
+            run_chains_batched(problem, &initial_state, iterations, step_size, &seeds)
         } else {
             seeds
                 .into_iter()
@@ -164,7 +167,9 @@ impl Sampler for MetropolisHastings {
             mean_x = last;
         }
 
-        Samples::new(chains, mean_x, draws)
+        let time = start_time.elapsed();
+
+        Samples::new(chains, mean_x, draws, time)
     }
 }
 
@@ -208,6 +213,91 @@ fn run_chain(
         }
 
         samples.push(current.clone());
+    }
+
+    samples
+}
+
+fn run_chains_batched(
+    problem: &Problem,
+    initial: &[f64],
+    iterations: usize,
+    step_size: f64,
+    seeds: &[u64],
+) -> Vec<Vec<Vec<f64>>> {
+    let num_chains = seeds.len();
+
+    let mut rngs: Vec<StdRng> = seeds
+        .iter()
+        .map(|&seed| StdRng::seed_from_u64(seed))
+        .collect();
+
+    let mut currents: Vec<Vec<f64>> = (0..num_chains).map(|_| initial.to_vec()).collect();
+
+    // Evaluate initial state for all chains in a single population call.
+    let initial_values: Vec<f64> = problem
+        .evaluate_population(&currents)
+        .into_iter()
+        .map(|res| match res {
+            Ok(value) => value,
+            Err(_) => f64::INFINITY,
+        })
+        .collect();
+
+    let mut current_vals = initial_values;
+
+    let mut samples: Vec<Vec<Vec<f64>>> = (0..num_chains)
+        .map(|idx| {
+            let mut chain = Vec::with_capacity(iterations.saturating_add(1));
+            chain.push(currents[idx].clone());
+            chain
+        })
+        .collect();
+
+    for _ in 0..iterations {
+        // Propose one candidate for each chain.
+        let mut proposals: Vec<Vec<f64>> = Vec::with_capacity(num_chains);
+        for (idx, current) in currents.iter().enumerate() {
+            let mut proposal = current.clone();
+            for value in &mut proposal {
+                let noise: f64 = rngs[idx].sample(StandardNormal);
+                *value += step_size * noise;
+            }
+            proposals.push(proposal);
+        }
+
+        // Evaluate all proposals in a single batched call.
+        let proposal_vals: Vec<f64> = problem
+            .evaluate_population(&proposals)
+            .into_iter()
+            .map(|res| match res {
+                Ok(value) => value,
+                Err(_) => f64::INFINITY,
+            })
+            .collect();
+
+        for idx in 0..num_chains {
+            let proposal_val = proposal_vals[idx];
+
+            let accept = if !proposal_val.is_finite() {
+                false
+            } else {
+                let acceptance_log = current_vals[idx] - proposal_val;
+                if acceptance_log >= 0.0 {
+                    true
+                } else {
+                    let u: f64 = rngs[idx].gen();
+                    u < acceptance_log.exp()
+                }
+            };
+
+            if accept {
+                currents[idx] = proposals[idx].clone();
+                current_vals[idx] = proposal_val;
+            }
+
+            samples[idx].push(currents[idx].clone());
+        }
     }
 
     samples

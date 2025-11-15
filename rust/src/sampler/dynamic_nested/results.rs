@@ -1,5 +1,6 @@
 use super::state::PosteriorSample;
 use crate::sampler::Samples;
+use std::time::Duration;
 
 /// Posterior sample with its likelihood and log-weight contribution.
 #[derive(Clone, Debug)]
@@ -27,6 +28,7 @@ pub struct NestedSamples {
     draws: usize,
     log_z: f64,
     information: f64,
+    time: Duration,
 }
 
 impl NestedSamples {
@@ -91,6 +93,7 @@ impl NestedSamples {
             draws: posterior.len(),
             log_z,
             information,
+            time: Duration::default(),
         }
     }
 
@@ -102,6 +105,7 @@ impl NestedSamples {
             draws: 0,
             log_z: f64::NEG_INFINITY,
             information: 0.0,
+            time: Duration::default(),
         }
     }
 
@@ -110,6 +114,16 @@ impl NestedSamples {
         let mut result = Self::build(state.posterior(), state.dimension());
         result.mean = mean;
         result
+    }
+
+    /// Record the elapsed execution time for the run.
+    pub fn set_time(&mut self, time: Duration) {
+        self.time = time;
+    }
+
+    /// Elapsed execution time for the run.
+    pub fn time(&self) -> Duration {
+        self.time
     }
 
     /// Posterior samples retained by the run.
@@ -144,7 +158,7 @@ impl NestedSamples {
             .iter()
             .map(|sample| sample.position.clone())
             .collect::<Vec<_>>()];
-        Samples::new(chains, self.mean.clone(), self.draws)
+        Samples::new(chains, self.mean.clone(), self.draws, self.time)
     }
 }
 

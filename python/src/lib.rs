@@ -93,12 +93,18 @@ impl PySamples {
         self.inner.draws()
     }
 
+    #[getter]
+    fn time(&self) -> Duration {
+        self.inner.time()
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "Samples(draws={}, mean_x={:?}, chains={})",
+            "Samples(draws={}, mean_x={:?}, chains={}, time={:?})",
             self.inner.draws(),
             self.inner.mean_x(),
-            self.inner.chains().len()
+            self.inner.chains().len(),
+            self.inner.time()
         )
     }
 }
@@ -147,6 +153,11 @@ impl PyNestedSamples {
     #[getter]
     fn information(&self) -> f64 {
         self.inner.information()
+    }
+
+    #[getter]
+    fn time(&self) -> Duration {
+        self.inner.time()
     }
 
     fn to_samples(&self) -> PySamples {
@@ -203,11 +214,6 @@ impl PyMetropolisHastings {
         Self::with_iterations(slf, steps)
     }
 
-    fn with_parallel(mut slf: PyRefMut<'_, Self>, parallel: bool) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).with_parallel(parallel);
-        slf
-    }
-
     fn with_step_size(mut slf: PyRefMut<'_, Self>, step_size: f64) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_step_size(step_size);
         slf
@@ -261,16 +267,6 @@ impl PyDynamicNestedSampler {
     ) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_termination_tolerance(tolerance);
         slf
-    }
-
-    fn with_parallel(mut slf: PyRefMut<'_, Self>, parallel: bool) -> PyRefMut<'_, Self> {
-        slf.inner = std::mem::take(&mut slf.inner).with_parallel(parallel);
-        slf
-    }
-
-    #[pyo3(name = "enable_parallel")]
-    fn enable_parallel(slf: PyRefMut<'_, Self>, parallel: bool) -> PyRefMut<'_, Self> {
-        Self::with_parallel(slf, parallel)
     }
 
     fn with_seed(mut slf: PyRefMut<'_, Self>, seed: u64) -> PyRefMut<'_, Self> {
@@ -648,8 +644,10 @@ impl PyDiffsolBuilder {
         Ok(slf)
     }
 
-    /// Enable or disable parallel evaluation of candidate populations.
-    fn with_parallel(mut slf: PyRefMut<'_, Self>, parallel: bool) -> PyRefMut<'_, Self> {
+    /// Opt into parallel proposal generation when supported by the backend.
+    #[pyo3(signature = (parallel=None))]
+    fn with_parallel(mut slf: PyRefMut<'_, Self>, parallel: Option<bool>) -> PyRefMut<'_, Self> {
+        let parallel = parallel.unwrap_or(true);
         slf.inner = std::mem::take(&mut slf.inner).with_parallel(parallel);
         slf
     }

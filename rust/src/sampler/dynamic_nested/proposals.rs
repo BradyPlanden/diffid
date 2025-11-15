@@ -8,6 +8,8 @@ use rand_distr::StandardNormal;
 
 const MAX_ATTEMPTS_FACTOR: usize = 64;
 const MAX_UNIFORM_ATTEMPTS: usize = 32;
+const MIN_BATCH_SIZE: usize = 4;
+const MAX_BATCH_SIZE: usize = 64;
 
 /// Generates new live-point proposals using local perturbations and periodic uniform draws.
 #[derive(Clone, Debug)]
@@ -33,7 +35,7 @@ impl ProposalEngine {
         live_points: &[LivePoint],
         bounds: &Bounds,
         threshold: f64,
-        _parallel: bool,
+        parallel: bool,
     ) -> Option<LivePoint> {
         if live_points.is_empty() {
             return None;
@@ -42,38 +44,107 @@ impl ProposalEngine {
         let step_sizes = compute_scales(live_points, bounds, self.expansion_factor);
         let max_attempts = MAX_ATTEMPTS_FACTOR.saturating_mul(self.dimension).max(64);
 
-        for attempt in 0..max_attempts {
-            // Periodically try a fresh uniform draw in the bounding box to avoid stagnation.
-            let candidate = if attempt % MAX_UNIFORM_ATTEMPTS == 0 {
-                let mut position = bounds.sample(rng, self.expansion_factor);
-                bounds.clamp(&mut position);
-                position
-            } else {
-                match live_points.choose(rng) {
-                    Some(anchor) => {
-                        let mut proposal = anchor.position.clone();
-                        for (value, scale) in proposal.iter_mut().zip(step_sizes.iter()) {
-                            let perturb = rng.sample::<f64, _>(StandardNormal) * scale;
-                            *value += perturb;
-                        }
-                        bounds.clamp(&mut proposal);
-                        proposal
+        if parallel {
+            // Adaptive batch sizing based on problem dimension and available live points
+            let optimal_batch_size = (self.dimension * 2)
+                .clamp(MIN_BATCH_SIZE, MAX_BATCH_SIZE)
+                .min(live_points.len().max(MIN_BATCH_SIZE));
+
+            let mut attempts = 0usize;
+            let mut candidates = Vec::with_capacity(optimal_batch_size);
+
+            while attempts < max_attempts {
+                // Generate a full batch of candidates
+                candidates.clear();
+                for _ in 0..optimal_batch_size {
+                    attempts += 1;
+                    if attempts > max_attempts {
+                        break;
                     }
-                    None => continue,
+
+                    let candidate = if attempts.is_multiple_of(MAX_UNIFORM_ATTEMPTS) {
+                        let mut position = bounds.sample(rng, self.expansion_factor);
+                        bounds.clamp(&mut position);
+                        position
+                    } else {
+                        match live_points.choose(rng) {
+                            Some(anchor) => {
+                                let mut proposal = anchor.position.clone();
+                                for (value, scale) in proposal.iter_mut().zip(step_sizes.iter()) {
+                                    let perturb = rng.sample::<f64, _>(StandardNormal) * scale;
+                                    *value += perturb;
+                                }
+                                bounds.clamp(&mut proposal);
+                                proposal
+                            }
+                            None => continue,
+                        }
+                    };
+                    candidates.push(candidate);
                 }
-            };
 
-            let log_likelihood = -evaluate(problem, &candidate);
-            if !log_likelihood.is_finite() {
-                continue;
+                if candidates.is_empty() {
+                    break;
+                }
+
+                // Evaluate entire batch in parallel
+                let results = problem.evaluate_population(&candidates);
+
+                // Process results and look for acceptable points
+                for (position, result) in candidates.drain(..).zip(results.into_iter()) {
+                    let log_likelihood = match result {
+                        Ok(value) => {
+                            let ll = -value;
+                            if ll.is_finite() {
+                                ll
+                            } else {
+                                continue;
+                            }
+                        }
+                        Err(_) => continue,
+                    };
+
+                    if log_likelihood > threshold || live_points.len() < MIN_LIVE_POINTS {
+                        return Some(LivePoint::new(position, log_likelihood));
+                    }
+                }
             }
 
-            if log_likelihood > threshold || live_points.len() < MIN_LIVE_POINTS {
-                return Some(LivePoint::new(candidate, log_likelihood));
+            None
+        } else {
+            for attempt in 0..max_attempts {
+                // Periodically try a fresh uniform draw in the bounding box to avoid stagnation.
+                let candidate = if attempt.is_multiple_of(MAX_UNIFORM_ATTEMPTS) {
+                    let mut position = bounds.sample(rng, self.expansion_factor);
+                    bounds.clamp(&mut position);
+                    position
+                } else {
+                    match live_points.choose(rng) {
+                        Some(anchor) => {
+                            let mut proposal = anchor.position.clone();
+                            for (value, scale) in proposal.iter_mut().zip(step_sizes.iter()) {
+                                let perturb = rng.sample::<f64, _>(StandardNormal) * scale;
+                                *value += perturb;
+                            }
+                            bounds.clamp(&mut proposal);
+                            proposal
+                        }
+                        None => continue,
+                    }
+                };
+
+                let log_likelihood = -evaluate(problem, &candidate);
+                if !log_likelihood.is_finite() {
+                    continue;
+                }
+
+                if log_likelihood > threshold || live_points.len() < MIN_LIVE_POINTS {
+                    return Some(LivePoint::new(candidate, log_likelihood));
+                }
             }
+
+            None
         }
-
-        None
     }
 }
 

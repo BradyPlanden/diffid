@@ -91,9 +91,9 @@ class DiffsolBuilder:
         r"""
         Choose whether to use dense or sparse diffusion solvers.
         """
-    def with_parallel(self, parallel: builtins.bool) -> DiffsolBuilder:
+    def with_parallel(self, parallel: builtins.bool | None = None) -> DiffsolBuilder:
         r"""
-        Enable or disable parallel evaluation of candidate populations.
+        Opt into parallel proposal generation when supported by the backend.
         """
     def with_config(
         self, config: typing.Mapping[builtins.str, builtins.float]
@@ -288,10 +288,7 @@ class Problem:
             builtins.float,
             tuple[builtins.float, builtins.float] | None,
         ]
-    ]:
-        r"""
-        Return the configured optimisation parameters as (name, initial_value, bounds) tuples.
-        """
+    ]: ...
     def default_parameters(self) -> builtins.list[builtins.float]:
         r"""
         Return the default parameter vector implied by the builder.

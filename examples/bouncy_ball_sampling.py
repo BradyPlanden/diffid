@@ -38,7 +38,8 @@ builder = (
     .with_parameter("h", initial_values[1])
     .with_rtol(1e-6)
     .with_atol(1e-6)
-    .with_cost(chron.costs.GaussianNLL(variance=0.01))
+    .with_parallel(True)
+    .with_cost(chron.cost.GaussianNLL(variance=0.01))
 )
 
 problem = builder.build()
@@ -46,10 +47,9 @@ problem = builder.build()
 # Setup sampler
 sampler = (
     chron.sampler.MetropolisHastings()
-    .with_num_chains(2)
+    .with_num_chains(100)
     .with_num_steps(1000)
     .with_step_size(0.25)
-    .with_parallel(True)
     .with_seed(1234)
 )
 

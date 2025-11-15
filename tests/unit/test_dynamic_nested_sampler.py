@@ -563,12 +563,13 @@ def test_information_increases_with_constraint():
             .build()
         )
 
-    sampler_config = lambda seed: (
-        chron.sampler.DynamicNestedSampler()
-        .with_live_points(128)
-        .with_expansion_factor(0.2)
-        .with_seed(seed)
-    )
+    def sampler_config(seed):
+        return (
+            chron.sampler.DynamicNestedSampler()
+            .with_live_points(128)
+            .with_expansion_factor(0.2)
+            .with_seed(seed)
+        )
 
     # Wide posterior (low information)
     wide_problem = make_gaussian_problem(sigma=2.0)

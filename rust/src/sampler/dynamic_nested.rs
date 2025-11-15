@@ -9,6 +9,7 @@ use super::{evaluate, Sampler, Samples};
 use crate::problem::Problem;
 use rand::prelude::*;
 use rand::rngs::StdRng;
+use std::time::Instant;
 
 mod proposals;
 mod results;
@@ -29,7 +30,6 @@ pub struct DynamicNestedSampler {
     live_points: usize,
     expansion_factor: f64,
     termination_tol: f64,
-    parallel: bool,
     seed: Option<u64>,
 }
 
@@ -41,7 +41,6 @@ impl DynamicNestedSampler {
             live_points: DEFAULT_LIVE_POINTS,
             expansion_factor: DEFAULT_EXPANSION_FACTOR,
             termination_tol: DEFAULT_TERMINATION_TOL,
-            parallel: false,
             seed: None,
         }
     }
@@ -61,12 +60,6 @@ impl DynamicNestedSampler {
     /// Set the threshold for evidence convergence that drives termination.
     pub fn with_termination_tolerance(mut self, tolerance: f64) -> Self {
         self.termination_tol = tolerance.abs().max(1e-8);
-        self
-    }
-
-    /// Opt into parallel proposal generation when supported by the backend.
-    pub fn with_parallel(mut self, parallel: bool) -> Self {
-        self.parallel = parallel;
         self
     }
 
@@ -97,6 +90,17 @@ impl DynamicNestedSampler {
             }
         };
 
+        let parallel_enabled = problem
+            .get_config("parallel")
+            .copied()
+            .map(|value| value != 0.0)
+            .unwrap_or(false);
+
+        #[cfg(test)]
+        eprintln!("run_nested parallel enabled: {}", parallel_enabled);
+
+        let start_time = Instant::now();
+
         let bounds = state::Bounds::from_problem(problem, &initial, dimension);
         let live_points = state::initial_live_points(
             problem,
@@ -104,6 +108,7 @@ impl DynamicNestedSampler {
             &mut rng,
             self.live_points,
             self.expansion_factor,
+            parallel_enabled,
         );
 
         if live_points.len() < MIN_LIVE_POINTS {
@@ -124,11 +129,11 @@ impl DynamicNestedSampler {
             .saturating_mul(sampler_state.dimension().max(1));
 
         let config = RunLoopConfig {
-            parallel: self.parallel,
+            parallel: parallel_enabled,
             max_iterations,
         };
 
-        run_loop(
+        let mut result = run_loop(
             problem,
             &bounds,
             &mut sampler_state,
@@ -137,7 +142,11 @@ impl DynamicNestedSampler {
             config,
             &mut rng,
         )
-        .unwrap_or_else(|state| NestedSamples::degenerate_with_state(initial, state))
+        .unwrap_or_else(|state| NestedSamples::degenerate_with_state(initial, state));
+
+        result.set_time(start_time.elapsed());
+
+        result
     }
 }
 

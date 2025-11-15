@@ -16,10 +16,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-#[cfg(not(feature = "diffsol-llvm"))]
 type CG = diffsol::CraneliftJitModule;
-#[cfg(feature = "diffsol-llvm")]
-type CG = diffsol::LlvmModule;
 
 type DenseEqn = DiffSl<NalgebraMat<f64>, CG>;
 type SparseEqn = DiffSl<FaerSparseMat<f64>, CG>;
@@ -116,7 +113,8 @@ impl DiffsolProblem {
     where
         F: FnMut(&mut BackendProblem) -> Result<R, String>,
     {
-        #[cfg(test)]
+        // Create ProbeGuard for both unit tests (cfg(test)) and integration tests
+        // The ProbeGuard will only be active if a probe is registered
         let _probe_guard = test_support::ProbeGuard::new();
 
         let id = self.id;
@@ -222,6 +220,10 @@ impl DiffsolProblem {
         FAILED_SOLVE_PENALTY
     }
 
+    pub fn is_parallel(&self) -> bool {
+        self.config.parallel
+    }
+
     pub fn calculate_cost(&self, solution: &DMatrix<f64>) -> Result<f64, String> {
         let sol_rows = solution.nrows();
         let sol_cols = solution.ncols();
@@ -312,8 +314,7 @@ impl Drop for DiffsolProblem {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod test_support {
+pub mod test_support {
     use super::*;
     use std::sync::{atomic::Ordering, Mutex};
     use std::time::Duration;
@@ -381,6 +382,12 @@ pub(crate) mod test_support {
     }
 
     pub struct ProbeGuard(Option<ConcurrencyProbe>);
+
+    impl Default for ProbeGuard {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 
     impl ProbeGuard {
         pub fn new() -> Self {

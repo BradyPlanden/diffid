@@ -196,3 +196,52 @@ F_i { (r * y) * (1 - (y / k)) }
 
     with pytest.raises(ValueError):
         chron.cost.GaussianNLL(0.0)
+
+
+def test_diffsol_bicycle_model_neldermead_recovers_wheelbase() -> None:
+    ds = """
+in = [L]
+L { 2.5 } v { 5.0 } delta { 0.05 }
+u_i {
+    y = 0.0,
+    psi = 0.0,
+}
+F_i {
+    v * psi,
+    v / L * delta,
+}
+"""
+
+    true_L = 2.5
+    v = 5.0
+    delta = 0.05
+
+    t_span = np.linspace(0.0, 2.0, 51)
+    psi_true = (v / true_L) * delta * t_span
+    y_true = 0.5 * v * (v / true_L) * delta * t_span**2
+
+    stacked_data = np.column_stack((t_span, y_true, psi_true))
+
+    builder = (
+        chron.DiffsolBuilder()
+        .with_diffsl(ds)
+        .with_data(stacked_data)
+        .with_rtol(1e-6)
+        .with_atol(1e-8)
+        .with_parameter("L", 4.0)
+    )
+
+    problem = builder.build()
+
+    optimiser = (
+        chron.NelderMead()
+        .with_max_iter(500)
+        .with_threshold(1e-10)
+        .with_position_tolerance(1e-8)
+    )
+
+    result = problem.optimize(optimiser=optimiser)
+
+    assert result.success
+    assert pytest.approx(true_L, rel=1e-2, abs=1e-2) == result.x[0]
+    assert result.fun < 1e-6

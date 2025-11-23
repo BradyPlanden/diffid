@@ -36,7 +36,6 @@ jobs:
 
       # Install LLVM on host for Windows and macOS
       - name: Install LLVM (Windows/macOS)
-        id: install-llvm
         if: matrix.platform.runner != 'ubuntu-24.04'
         uses: KyleMayes/install-llvm-action@v2
         with:
@@ -46,9 +45,6 @@ jobs:
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
-        env:
-          # Set LLVM path for Windows and macOS (host builds)
-          LLVM_SYS_181_PREFIX: ${{ matrix.platform.runner != 'ubuntu-24.04' && steps.install-llvm.outputs.llvm-path || '' }}
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
@@ -78,6 +74,10 @@ jobs:
             
             # Verify installation
             /opt/llvm/bin/llvm-config --version
+        env:
+          # Set LLVM path for Windows and macOS (host builds)
+          # LLVM_PATH is set by install-llvm-action and persists across steps
+          LLVM_SYS_181_PREFIX: ${{ env.LLVM_PATH }}
 
       - name: Upload wheels
         uses: actions/upload-artifact@v5
@@ -90,7 +90,7 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: .venv
           # Ensure LLVM is available for tests on Windows/macOS
-          LLVM_SYS_181_PREFIX: ${{ matrix.platform.runner != 'ubuntu-24.04' && steps.install-llvm.outputs.llvm-path || '' }}
+          LLVM_SYS_181_PREFIX: ${{ env.LLVM_PATH }}
         run: |
           uv sync --group dev && uv run pytest -v
 
@@ -103,18 +103,17 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
       - name: Install LLVM
-        id: install-llvm
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "18"
       - name: Generate Python stubs
         env:
-          LLVM_SYS_181_PREFIX: ${{ steps.install-llvm.outputs.llvm-path }}
+          LLVM_SYS_181_PREFIX: ${{ env.LLVM_PATH }}
         run: cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         env:
-          LLVM_SYS_181_PREFIX: ${{ steps.install-llvm.outputs.llvm-path }}
+          LLVM_SYS_181_PREFIX: ${{ env.LLVM_PATH }}
         with:
           command: sdist
           args: --out dist

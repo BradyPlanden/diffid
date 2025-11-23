@@ -214,7 +214,7 @@ impl EvaluatedPoint {
 }
 
 fn evaluate_point(problem: &Problem, point: &[f64]) -> Result<f64, String> {
-    problem.evaluate(point)
+    problem.evaluate(point, false)
 }
 
 fn build_results(

@@ -1,5 +1,6 @@
 use super::{DiffsolBackend, DiffsolConfig};
 use crate::cost::CostMetric;
+use diffsol::ode_solver::sensitivities::SensitivitiesOdeSolverMethod;
 use diffsol::op::Op;
 use diffsol::{
     DiffSl, FaerSparseLU, FaerSparseMat, FaerVec, Matrix, MatrixCommon, NalgebraLU, NalgebraMat,
@@ -16,7 +17,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-type CG = diffsol::CraneliftJitModule;
+type CG = diffsol::LlvmModule;
 
 type DenseEqn = DiffSl<NalgebraMat<f64>, CG>;
 type SparseEqn = DiffSl<FaerSparseMat<f64>, CG>;
@@ -59,12 +60,13 @@ pub struct DiffsolProblem {
 
 pub enum SimulationResult {
     Solution(DMatrix<f64>),
+    SolutionWithSensitivities(DMatrix<f64>, Vec<DMatrix<f64>>),
     Penalty,
 }
 
 impl DiffsolProblem {
     pub fn new(
-        problem: BackendProblem,
+        diffsol_problem: BackendProblem,
         dsl: String,
         config: DiffsolConfig,
         t_span: Vec<f64>,
@@ -72,7 +74,7 @@ impl DiffsolProblem {
         cost_metric: Arc<dyn CostMetric>,
     ) -> Self {
         let id = NEXT_DIFFSOL_PROBLEM_ID.fetch_add(1, Ordering::Relaxed);
-        let solver = Self {
+        let chron_problem = Self {
             id,
             dsl,
             config,
@@ -80,8 +82,8 @@ impl DiffsolProblem {
             data,
             cost_metric,
         };
-        solver.seed_initial_problem(problem);
-        solver
+        chron_problem.seed_initial_problem(diffsol_problem);
+        chron_problem
     }
 
     fn build_problem(&self) -> Result<BackendProblem, String> {
@@ -143,7 +145,7 @@ impl DiffsolProblem {
         })
     }
 
-    fn simulate_with_problem(
+    fn simulate_diffsol(
         problem: &mut BackendProblem,
         params: &[f64],
         t_span: &[f64],
@@ -188,9 +190,76 @@ impl DiffsolProblem {
         }
     }
 
-    pub fn simulate(&self, params: &[f64]) -> Result<SimulationResult, String> {
+    fn simulate_diffsol_with_grad(
+        problem: &mut BackendProblem,
+        params: &[f64],
+        t_span: &[f64],
+    ) -> Result<SimulationResult, String> {
+        match problem {
+            BackendProblem::Dense(problem) => {
+                let ctx = problem.eqn().context().clone();
+                let params_vec = DenseVector::from_vec(params.to_vec(), ctx);
+                problem.eqn_mut().set_params(&params_vec);
+
+                let mut solver = problem
+                    .bdf_sens::<DenseSolver>()
+                    .map_err(|e| format!("Failed to create BDF sensitivities solver: {}", e))?;
+
+                let solve_result = catch_unwind(AssertUnwindSafe(|| {
+                    solver.solve_dense_sensitivities(t_span)
+                }));
+
+                match solve_result {
+                    Ok(Ok((solution, sensitivities))) => {
+                        let solution_dm = Self::matrix_to_dmatrix(&solution);
+                        let sensitivities_dm =
+                            sensitivities.iter().map(Self::matrix_to_dmatrix).collect();
+                        Ok(SimulationResult::SolutionWithSensitivities(
+                            solution_dm,
+                            sensitivities_dm,
+                        ))
+                    }
+                    _ => Ok(SimulationResult::Penalty),
+                }
+            }
+            BackendProblem::Sparse(problem) => {
+                let ctx = problem.eqn().context().clone();
+                let params_vec = SparseVector::from_vec(params.to_vec(), ctx);
+                problem.eqn_mut().set_params(&params_vec);
+
+                let mut solver = problem
+                    .bdf_sens::<SparseSolver>()
+                    .map_err(|e| format!("Failed to create BDF sensitivities solver: {}", e))?;
+
+                let solve_result = catch_unwind(AssertUnwindSafe(|| {
+                    solver.solve_dense_sensitivities(t_span)
+                }));
+
+                match solve_result {
+                    Ok(Ok((solution, sensitivities))) => {
+                        let solution_dm = Self::matrix_to_dmatrix(&solution);
+                        let sensitivities_dm =
+                            sensitivities.iter().map(Self::matrix_to_dmatrix).collect();
+                        Ok(SimulationResult::SolutionWithSensitivities(
+                            solution_dm,
+                            sensitivities_dm,
+                        ))
+                    }
+                    _ => Ok(SimulationResult::Penalty),
+                }
+            }
+        }
+    }
+
+    /// Simulate the ODE model with the given parameters and return the solution.
+    /// If gradient is true, the gradient of the solution with respect to the parameters is also returned.
+    pub fn simulate(&self, params: &[f64], gradient: bool) -> Result<SimulationResult, String> {
         self.with_thread_local_problem(|problem| {
-            Self::simulate_with_problem(problem, params, &self.t_span)
+            if gradient {
+                Self::simulate_diffsol_with_grad(problem, params, &self.t_span)
+            } else {
+                Self::simulate_diffsol(problem, params, &self.t_span)
+            }
         })
     }
 
@@ -200,7 +269,7 @@ impl DiffsolProblem {
                 .par_iter()
                 .map(|param| {
                     self.with_thread_local_problem(|problem| {
-                        Self::simulate_with_problem(problem, param, &self.t_span)
+                        Self::simulate_diffsol(problem, param, &self.t_span)
                     })
                 })
                 .collect()
@@ -209,7 +278,7 @@ impl DiffsolProblem {
                 .iter()
                 .map(|param| {
                     self.with_thread_local_problem(|problem| {
-                        Self::simulate_with_problem(problem, param, &self.t_span)
+                        Self::simulate_diffsol(problem, param, &self.t_span)
                     })
                 })
                 .collect()
@@ -224,42 +293,66 @@ impl DiffsolProblem {
         self.config.parallel
     }
 
-    pub fn calculate_cost(&self, solution: &DMatrix<f64>) -> Result<f64, String> {
-        let sol_rows = solution.nrows();
-        let sol_cols = solution.ncols();
-        let data_rows = self.data.nrows();
-        let data_cols = self.data.ncols();
+    fn build_residuals(&self, solution: &DMatrix<f64>) -> Result<Vec<f64>, String> {
+        let (sol_rows, sol_cols) = solution.shape();
+        let (data_rows, data_cols) = self.data.shape();
 
-        let residuals = if sol_rows == data_rows && sol_cols == data_cols {
-            let mut residuals = Vec::with_capacity(sol_rows * sol_cols);
-            for row in 0..sol_rows {
-                for col in 0..sol_cols {
-                    residuals.push(solution[(row, col)] - self.data[(row, col)]);
+        let (transpose_data, expected_rows, expected_cols) =
+            match (sol_rows, sol_cols, data_rows, data_cols) {
+                (sr, sc, dr, dc) if sr == dr && sc == dc => (false, sr, sc),
+                (sr, sc, dr, dc) if sr == dc && sc == dr => (true, sr, sc),
+                (sr, sc, dr, dc) => {
+                    return Err(format!(
+                        "Solution shape {}x{} does not match data shape {}x{}",
+                        sr, sc, dr, dc
+                    ))
                 }
-            }
-            residuals
-        } else if sol_rows == data_cols && sol_cols == data_rows {
-            let mut residuals = Vec::with_capacity(sol_rows * sol_cols);
-            for row in 0..sol_rows {
-                for col in 0..sol_cols {
+            };
+
+        let mut residuals = Vec::with_capacity(expected_rows * expected_cols);
+
+        if transpose_data {
+            for col in 0..expected_cols {
+                for row in 0..expected_rows {
                     residuals.push(solution[(row, col)] - self.data[(col, row)]);
                 }
             }
-            residuals
         } else {
-            return Err(format!(
-                "Solution shape {}x{} does not match data shape {}x{}",
-                sol_rows, sol_cols, data_rows, data_cols
-            ));
-        };
+            residuals.extend(solution.iter().zip(self.data.iter()).map(|(s, d)| s - d));
+        }
 
+        Ok(residuals)
+    }
+
+    pub fn calculate_cost(&self, solution: &DMatrix<f64>) -> Result<f64, String> {
+        let residuals = self.build_residuals(solution)?;
         Ok(self.cost_metric.evaluate(&residuals))
     }
 
-    pub fn evaluate(&self, params: &[f64]) -> Result<f64, String> {
-        match self.simulate(params)? {
+    pub fn calculate_cost_with_grad(
+        &self,
+        solution: &DMatrix<f64>,
+        sensitivities: &[DMatrix<f64>],
+    ) -> Result<(f64, Vec<f64>), String> {
+        let residuals = self.build_residuals(solution)?;
+        self.cost_metric
+            .evaluate_with_sensitivities(&residuals, sensitivities)
+            .ok_or_else(|| {
+                format!(
+                    "Cost metric '{}' does not support gradient evaluation",
+                    self.cost_metric.name()
+                )
+            })
+    }
+
+    pub fn evaluate(&self, params: &[f64], gradient: bool) -> Result<f64, String> {
+        match self.simulate(params, gradient)? {
             SimulationResult::Solution(solution) => self.calculate_cost(&solution),
-            SimulationResult::Penalty => Ok(DiffsolProblem::failed_solve_penalty()),
+            SimulationResult::SolutionWithSensitivities(solution, sensitivities) => {
+                let (cost, _gradient) = self.calculate_cost_with_grad(&solution, &sensitivities)?;
+                Ok(cost)
+            }
+            SimulationResult::Penalty => Err("Diffsol solve failed".to_string()),
         }
     }
 
@@ -271,6 +364,10 @@ impl DiffsolProblem {
                 .into_par_iter()
                 .map(|result| match result {
                     Ok(SimulationResult::Solution(solution)) => self.calculate_cost(&solution),
+                    Ok(SimulationResult::SolutionWithSensitivities(solution, sensitivities)) => {
+                        self.calculate_cost_with_grad(&solution, &sensitivities)
+                            .map(|(cost, _gradient)| cost)
+                    }
                     Ok(SimulationResult::Penalty) => Ok(DiffsolProblem::failed_solve_penalty()),
                     Err(err) => Err(err),
                 })
@@ -280,6 +377,10 @@ impl DiffsolProblem {
                 .into_iter()
                 .map(|result| match result {
                     Ok(SimulationResult::Solution(solution)) => self.calculate_cost(&solution),
+                    Ok(SimulationResult::SolutionWithSensitivities(solution, sensitivities)) => {
+                        self.calculate_cost_with_grad(&solution, &sensitivities)
+                            .map(|(cost, _gradient)| cost)
+                    }
                     Ok(SimulationResult::Penalty) => Ok(DiffsolProblem::failed_solve_penalty()),
                     Err(err) => Err(err),
                 })
@@ -409,6 +510,223 @@ pub mod test_support {
             if let Some(probe) = &self.0 {
                 probe.exit();
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cost::{GaussianNll, SumSquaredError};
+
+    fn build_logistic_problem(backend: DiffsolBackend) -> DiffsolProblem {
+        let dsl = r#"
+in = [r, k]
+r { 1 }
+k { 1 }
+u_i { y = 0.1 }
+F_i { (r * y) * (1 - (y / k)) }
+"#;
+
+        let t_span: Vec<f64> = (0..6).map(|i| i as f64 * 0.2).collect();
+        let data_values: Vec<f64> = t_span.iter().map(|t| 0.1 * (*t).exp()).collect();
+        let data = DMatrix::from_vec(t_span.len(), 1, data_values);
+
+        let config = DiffsolConfig::default().with_backend(backend);
+
+        let backend_problem = match config.backend {
+            DiffsolBackend::Dense => OdeBuilder::<NalgebraMat<f64>>::new()
+                .atol([config.atol])
+                .rtol(config.rtol)
+                .build_from_diffsl(dsl)
+                .map_err(|e| format!("Failed to build ODE model: {}", e))
+                .map(|problem| BackendProblem::Dense(Box::new(problem)))
+                .expect("failed to build dense diffsol problem"),
+            DiffsolBackend::Sparse => OdeBuilder::<FaerSparseMat<f64>>::new()
+                .atol([config.atol])
+                .rtol(config.rtol)
+                .build_from_diffsl(dsl)
+                .map_err(|e| format!("Failed to build ODE model: {}", e))
+                .map(|problem| BackendProblem::Sparse(Box::new(problem)))
+                .expect("failed to build sparse diffsol problem"),
+        };
+
+        DiffsolProblem::new(
+            backend_problem,
+            dsl.to_string(),
+            config,
+            t_span,
+            data,
+            Arc::new(SumSquaredError),
+        )
+    }
+
+    fn finite_difference<F>(x: &mut [f64], idx: usize, eps: f64, f: F) -> f64
+    where
+        F: Fn(&[f64]) -> f64,
+    {
+        let original = x[idx];
+
+        x[idx] = original + eps;
+        let f_plus = f(x);
+
+        x[idx] = original - eps;
+        let f_minus = f(x);
+
+        x[idx] = original;
+
+        (f_plus - f_minus) / (2.0 * eps)
+    }
+
+    #[test]
+    fn test_gradient_with_empty_sensitivities() {
+        let metric = SumSquaredError;
+        let residuals = vec![1.0, 2.0];
+        let (cost, grad) = metric
+            .evaluate_with_sensitivities(&residuals, &[])
+            .expect("SumSquaredError should support gradient evaluation");
+        assert_eq!(cost, 5.0);
+        assert!(grad.is_empty());
+    }
+
+    #[test]
+    fn test_gradient_dimensions_mismatch() {
+        let metric = SumSquaredError;
+        let residuals = vec![1.0, 2.0, 3.0];
+        let wrong_size_sens = DMatrix::from_vec(2, 1, vec![0.5, 0.5]);
+
+        let result = std::panic::catch_unwind(|| {
+            metric
+                .evaluate_with_sensitivities(&residuals, &[wrong_size_sens])
+                .unwrap();
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_gaussian_nll_gradient_correctness() {
+        let variance = 2.0;
+        let metric = GaussianNll::new(variance);
+        let residuals = vec![1.0, -2.0, 0.5];
+
+        // Gradient should be residual/variance
+        let sensitivities: Vec<DMatrix<f64>> = (0..3)
+            .map(|param_idx| {
+                let mut m = DMatrix::zeros(3, 1);
+                m[(param_idx, 0)] = 1.0;
+                m
+            })
+            .collect();
+
+        let (_, grad) = metric
+            .evaluate_with_sensitivities(&residuals, &sensitivities)
+            .expect("GaussianNll should support gradient evaluation");
+
+        for (i, r) in residuals.iter().enumerate() {
+            assert!((grad[i] - r / variance).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn diffsol_simulate_produces_sensitivities() {
+        let problem = build_logistic_problem(DiffsolBackend::Dense);
+        let params = [1.0_f64, 1.0_f64];
+
+        let result = problem
+            .simulate(&params, true)
+            .expect("simulation with sensitivities failed");
+
+        let (solution, sensitivities) = match result {
+            SimulationResult::SolutionWithSensitivities(solution, sensitivities) => {
+                (solution, sensitivities)
+            }
+            _ => panic!("expected solution with sensitivities"),
+        };
+
+        let (rows, cols) = solution.shape();
+        assert_eq!(sensitivities.len(), params.len());
+        for sens in &sensitivities {
+            assert_eq!(sens.nrows(), rows);
+            assert_eq!(sens.ncols(), cols);
+        }
+
+        let row = 0;
+        let col = 0;
+        let eps = 1e-5_f64;
+
+        let mut params_fd = params;
+        let fd = finite_difference(&mut params_fd, 0, eps, |p| {
+            let result = problem
+                .simulate(p, false)
+                .expect("finite-difference simulation failed");
+            let solution = match result {
+                SimulationResult::Solution(solution) => solution,
+                _ => panic!("expected solution without sensitivities"),
+            };
+            solution[(row, col)]
+        });
+
+        let sens_value = sensitivities[0][(row, col)];
+        let diff = (fd - sens_value).abs();
+        assert!(
+            diff < 1e-6,
+            "sensitivity mismatch: fd={} sens={} diff={}",
+            fd,
+            sens_value,
+            diff
+        );
+    }
+
+    #[test]
+    fn diffsol_cost_gradient_matches_finite_difference() {
+        let problem = build_logistic_problem(DiffsolBackend::Dense);
+        let params = [1.1_f64, 0.9_f64];
+
+        let result = problem
+            .simulate(&params, true)
+            .expect("simulation with sensitivities failed");
+
+        let (solution, sensitivities) = match result {
+            SimulationResult::SolutionWithSensitivities(solution, sensitivities) => {
+                (solution, sensitivities)
+            }
+            _ => panic!("expected solution with sensitivities"),
+        };
+
+        let (cost, grad) = problem
+            .calculate_cost_with_grad(&solution, &sensitivities)
+            .expect("cost with gradient calculation failed");
+
+        assert!(cost.is_finite());
+        assert_eq!(grad.len(), params.len());
+
+        let eps = 1e-5_f64;
+
+        for i in 0..params.len() {
+            let mut params_fd = params;
+            let fd = finite_difference(&mut params_fd, i, eps, |p| {
+                let result = problem
+                    .simulate(p, false)
+                    .expect("finite-difference simulation failed");
+                let solution = match result {
+                    SimulationResult::Solution(solution) => solution,
+                    _ => panic!("expected solution without sensitivities"),
+                };
+                problem
+                    .calculate_cost(&solution)
+                    .expect("cost calculation failed")
+            });
+
+            let g = grad[i];
+            let diff = (fd - g).abs();
+            assert!(
+                diff < 1e-6,
+                "gradient mismatch for param {}: fd={} grad={} diff={}",
+                i,
+                fd,
+                g,
+                diff
+            );
         }
     }
 }

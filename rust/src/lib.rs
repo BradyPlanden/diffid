@@ -73,7 +73,7 @@ F_i { (r * y) * (1 - (y / k)) }
 
         // Test that we can evaluate the problem
         let x0 = vec![1.0, 1.0]; // r, k parameters
-        let cost = problem.evaluate(&x0);
+        let cost = problem.evaluate(&x0, false);
 
         // Cost should be finite and non-negative
         assert!(

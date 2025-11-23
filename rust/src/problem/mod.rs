@@ -189,10 +189,10 @@ impl Problem {
         })
     }
 
-    pub fn evaluate(&self, x: &[f64]) -> Result<f64, String> {
+    pub fn evaluate(&self, x: &[f64], gradient: bool) -> Result<f64, String> {
         match &self.kind {
             ProblemKind::Callable(callable) => Ok(callable.evaluate(x)),
-            ProblemKind::Diffsol(problem) => problem.evaluate(x),
+            ProblemKind::Diffsol(problem) => problem.evaluate(x, gradient),
             ProblemKind::Vector(vector) => vector.evaluate(x),
         }
     }
@@ -325,7 +325,11 @@ F_i { (r * y) * (1 - (y / k)) }
 
             let sequential: Vec<f64> = population
                 .iter()
-                .map(|x| problem.evaluate(x).expect("sequential evaluation failed"))
+                .map(|x| {
+                    problem
+                        .evaluate(x, false)
+                        .expect("sequential evaluation failed")
+                })
                 .collect();
 
             let batched: Vec<f64> = problem
@@ -417,11 +421,15 @@ F_i { (r * y) * (1 - (y / k)) }
         .expect("failed to create vector problem");
 
         // Perfect fit should have zero cost (a=1, b=1 gives [1,2,3,4,5])
-        let cost = problem.evaluate(&[1.0, 1.0]).expect("evaluation failed");
+        let cost = problem
+            .evaluate(&[1.0, 1.0], false)
+            .expect("evaluation failed");
         assert!(cost.abs() < 1e-10, "expected near-zero cost, got {}", cost);
 
         // Non-perfect fit should have positive cost
-        let cost = problem.evaluate(&[0.5, 0.5]).expect("evaluation failed");
+        let cost = problem
+            .evaluate(&[0.5, 0.5], false)
+            .expect("evaluation failed");
         assert!(cost > 0.0, "expected positive cost, got {}", cost);
     }
 
@@ -460,7 +468,7 @@ F_i { (r * y) * (1 - (y / k)) }
 
         // Test with true parameters
         let cost = problem
-            .evaluate(&[true_r, true_y0])
+            .evaluate(&[true_r, true_y0], false)
             .expect("evaluation failed");
         assert!(
             cost.abs() < 1e-10,
@@ -469,7 +477,9 @@ F_i { (r * y) * (1 - (y / k)) }
         );
 
         // Test with wrong parameters
-        let cost = problem.evaluate(&[1.0, 1.0]).expect("evaluation failed");
+        let cost = problem
+            .evaluate(&[1.0, 1.0], false)
+            .expect("evaluation failed");
         assert!(cost > 0.0, "expected positive cost with wrong params");
     }
 
@@ -491,7 +501,7 @@ F_i { (r * y) * (1 - (y / k)) }
         )
         .expect("failed to create vector problem");
 
-        let result = problem.evaluate(&[1.0]);
+        let result = problem.evaluate(&[1.0], false);
         assert!(result.is_err(), "expected error for dimension mismatch");
         assert!(result.unwrap_err().contains("produced 5 elements but data"));
     }
@@ -519,7 +529,11 @@ F_i { (r * y) * (1 - (y / k)) }
 
         let sequential: Vec<f64> = population
             .iter()
-            .map(|x| problem.evaluate(x).expect("sequential evaluation failed"))
+            .map(|x| {
+                problem
+                    .evaluate(x, false)
+                    .expect("sequential evaluation failed")
+            })
             .collect();
 
         let batched: Vec<f64> = problem
@@ -554,11 +568,11 @@ F_i { (r * y) * (1 - (y / k)) }
         .expect("failed to create vector problem");
 
         // Perfect fit
-        let cost = problem.evaluate(&[0.0]).expect("evaluation failed");
+        let cost = problem.evaluate(&[0.0], false).expect("evaluation failed");
         assert!(cost.abs() < 1e-10);
 
         // Offset of 1.0 should give RMSE of 1.0
-        let cost = problem.evaluate(&[1.0]).expect("evaluation failed");
+        let cost = problem.evaluate(&[1.0], false).expect("evaluation failed");
         assert!(
             (cost - 1.0).abs() < 1e-10,
             "expected RMSE of 1.0, got {}",
@@ -582,7 +596,7 @@ F_i { (r * y) * (1 - (y / k)) }
             .build()
             .expect("failed to build vector problem");
 
-        let cost = problem.evaluate(&[1.0]).expect("evaluation failed");
+        let cost = problem.evaluate(&[1.0], false).expect("evaluation failed");
         assert!(cost.abs() < 1e-10);
     }
 
@@ -637,5 +651,26 @@ F_i { (r * y) * (1 - (y / k)) }
         assert!(result.is_err(), "expected error for invalid shape");
         let err_msg = result.err().unwrap();
         assert!(err_msg.contains("does not match provided shape"));
+    }
+
+    #[test]
+    fn scalar_problem_exposes_gradient_from_builder() {
+        let problem = ScalarProblemBuilder::new()
+            .with_objective_and_gradient(
+                |x: &[f64]| x[0] * x[0] + 3.0 * x[0] * x[1] + 2.0 * x[1] * x[1],
+                |x: &[f64]| vec![2.0 * x[0] + 3.0 * x[1], 3.0 * x[0] + 4.0 * x[1]],
+            )
+            .build()
+            .expect("failed to build scalar problem");
+
+        let x = [1.0_f64, 2.0_f64];
+        let grad = problem
+            .gradient()
+            .expect("expected gradient to be available for scalar problem");
+        let g = grad(&x);
+
+        assert_eq!(g.len(), 2);
+        assert!((g[0] - (2.0 * x[0] + 3.0 * x[1])).abs() < 1e-12);
+        assert!((g[1] - (3.0 * x[0] + 4.0 * x[1])).abs() < 1e-12);
     }
 }

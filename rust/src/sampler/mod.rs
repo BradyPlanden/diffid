@@ -304,7 +304,7 @@ fn run_chains_batched(
 }
 
 pub(super) fn evaluate(problem: &Problem, x: &[f64]) -> f64 {
-    match problem.evaluate(x) {
+    match problem.evaluate(x, false) {
         Ok(value) => value,
         Err(_) => f64::INFINITY,
     }

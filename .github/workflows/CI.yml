@@ -2,8 +2,7 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: ["main"]
   pull_request:
   workflow_dispatch:
 
@@ -27,7 +26,7 @@ jobs:
           - runner: macos-latest
             target: aarch64
     steps:
-      - uses: actions/checkout@v4  # v5 doesn't exist yet, v4 is standard
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
@@ -36,18 +35,17 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      # --- LLVM SETUP START ---
-
-      # 1. Install LLVM for Host (Windows/macOS)
+      # --- WINDOWS & MACOS SETUP ---
+      # Only run this on Host machines (not Linux, which uses Docker)
       - name: Install LLVM (Windows/macOS)
         if: matrix.platform.runner != 'ubuntu-24.04'
         uses: KyleMayes/install-llvm-action@v2
         with:
-          version: "18.1" # Be specific to match llvm-sys requirements
+          version: "18.1"
           directory: ${{ runner.temp }}/llvm
 
-      # 2. Explicitly set ENV for Windows/macOS
-      # This fixes the issue where the env var wasn't resolving in the maturin step
+      # Set Environment Variables explicitly into GITHUB_ENV for Host builds.
+      # We DO NOT put these in the `env:` block of the maturin step to avoid leaking them into the Linux Docker container.
       - name: Set LLVM Env Vars (Host)
         if: matrix.platform.runner != 'ubuntu-24.04'
         shell: bash
@@ -55,8 +53,7 @@ jobs:
           echo "LLVM_SYS_181_PREFIX=${LLVM_PATH}" >> $GITHUB_ENV
           echo "LLVM_SYS_181_LINK_STATIC=1" >> $GITHUB_ENV
 
-      # --- LLVM SETUP END ---
-
+      # --- LINUX & CROSS-PLATFORM BUILD ---
       - uses: astral-sh/setup-uv@v3
 
       - name: Build wheels
@@ -66,26 +63,29 @@ jobs:
           args: --release --out dist
           interpreter: python${{ matrix.python-version }}
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          # Use a newer manylinux image (AlmaLinux 8 based) for better toolchain support
+          # Use AlmaLinux 8 based image (modern enough for LLVM 18)
           manylinux: manylinux_2_28
 
-          # Docker options: Map the variable specifically for the container
+          # Pass environment variables explicitly to the container here
           docker-options: -e LLVM_SYS_181_PREFIX=/opt/llvm -e LLVM_SYS_181_LINK_STATIC=1
 
           before-script-linux: |
-            # Install dependencies required to RUN llvm-config and LINK against it
-            # ncurses-compat-libs is CRITICAL: prebuilt LLVM binaries often need libtinfo.so.5
-            yum install -y wget xz ncurses-compat-libs libxml2-devel zlib-devel libzstd-devel
+            # 1. Install dependencies
+            # ncurses-devel: REQUIRED for CMake to find "Terminfo" linking targets
+            # mpfr-devel: REQUIRED for diffsl/Enzyme math support
+            yum install -y wget xz ncurses-compat-libs ncurses-devel libxml2-devel zlib-devel libzstd-devel mpfr-devel
             
+            # 2. Setup LLVM directory
             mkdir -p /opt/llvm
             
-            # Download LLVM 18.1.8 (Ubuntu 18.04 binary is generally portable enough if deps are installed)
+            # 3. Download LLVM 18.1 (Ubuntu 18.04 binary works if deps are installed)
             wget -q -O llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
             
+            # 4. Extract
             tar -xf llvm.tar.xz --strip-components=1 -C /opt/llvm
             rm llvm.tar.xz
             
-            # Verify llvm-config runs (if this fails, deps are missing)
+            # 5. Verify
             /opt/llvm/bin/llvm-config --version
 
       - name: Upload wheels
@@ -98,7 +98,7 @@ jobs:
         shell: bash
         env:
           UV_PROJECT_ENVIRONMENT: .venv
-          # LLVM_SYS... is already in GITHUB_ENV for Windows/macOS from the earlier step
+          # LLVM_SYS_... vars are already set in GITHUB_ENV for Windows/Mac
         run: |
           uv sync --group dev 
           uv run pytest -v
@@ -112,22 +112,20 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install LLVM
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "18.1"
+      # Setup specific dependencies for Ubuntu 24.04 Host
+      - name: Install LLVM and Deps (Ubuntu)
+        run: |
+          sudo apt-get update
+          # libncurses5-dev is needed for LLVM < 19 compat on Ubuntu 24.04
+          sudo apt-get install -y llvm-18 llvm-18-dev libclang-18-dev libzstd-dev libncurses5-dev libxml2-dev
+          echo "LLVM_SYS_181_PREFIX=/usr/lib/llvm-18" >> $GITHUB_ENV
+          echo "LLVM_SYS_181_LINK_STATIC=1" >> $GITHUB_ENV
 
       - name: Generate Python stubs
-        env:
-          LLVM_SYS_181_PREFIX: ${{ env.LLVM_PATH }}
-          LLVM_SYS_181_LINK_STATIC: 1
         run: cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
 
       - name: Build sdist
         uses: PyO3/maturin-action@v1
-        env:
-          LLVM_SYS_181_PREFIX: ${{ env.LLVM_PATH }}
-          LLVM_SYS_181_LINK_STATIC: 1
         with:
           command: sdist
           args: --out dist

@@ -890,7 +890,7 @@ impl PyProblem {
     /// Evaluate the configured objective function at `x`.
     fn evaluate(&self, x: Vec<f64>) -> PyResult<f64> {
         self.inner
-            .evaluate(&x)
+            .evaluate(&x, false)
             .map_err(|e| PyValueError::new_err(format!("Evaluation failed: {}", e)))
     }
 

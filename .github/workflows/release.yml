@@ -32,6 +32,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
           architecture: ${{ matrix.platform.runner == 'windows-latest' && matrix.platform.target || null }}
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install LLVM
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18"
       - uses: astral-sh/setup-uv@v3
       - name: Build wheels
         uses: PyO3/maturin-action@v1
@@ -54,6 +58,10 @@ jobs:
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install LLVM
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18"
       - name: Generate Python stubs
         run: cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
       - name: Build sdist

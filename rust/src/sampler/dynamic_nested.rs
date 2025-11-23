@@ -24,7 +24,7 @@ const DEFAULT_EXPANSION_FACTOR: f64 = 0.5;
 const DEFAULT_TERMINATION_TOL: f64 = 1e-3;
 const MAX_ITERATION_MULTIPLIER: usize = 1024;
 
-/// Configurable Dynamic Nested Sampling engine that integrates with [`Sampler`].
+/// Configurable Dynamic Nested Sampling engine
 #[derive(Clone, Debug)]
 pub struct DynamicNestedSampler {
     live_points: usize,
@@ -33,7 +33,7 @@ pub struct DynamicNestedSampler {
     seed: Option<u64>,
 }
 
-/// Builder-style configuration and execution entry points for [`DynamicNestedSampler`].
+/// Builder-style configuration and execution entry points
 impl DynamicNestedSampler {
     /// Create a sampler with default live-point budget and tolerances.
     pub fn new() -> Self {

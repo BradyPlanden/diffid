@@ -134,5 +134,5 @@ pre-commit run --all-files
 
 ```bash
 uv run maturin develop && uv run pytest -v # Python tests
-cargo test                 # Rust tests
+cargo test # Rust tests
 ```

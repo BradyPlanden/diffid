@@ -30,7 +30,7 @@ problem = builder.build()
 
 optimised = problem.optimize()
 
-sampler = chron.DynamicNestedSampler().with_live_points(4096).with_seed(1234)
+sampler = chron.DynamicNestedSampler().with_live_points(512).with_seed(1234)
 samples = sampler.run(problem, initial=optimised.x)
 
 print("time       :", samples.time)

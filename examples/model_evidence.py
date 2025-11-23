@@ -23,7 +23,7 @@ optimised = problem.optimize()
 
 sampler = (
     chron.DynamicNestedSampler()
-    .with_live_points(1024)
+    .with_live_points(512)
     .with_seed(1234)
     .with_parallel(True)
 )

@@ -34,12 +34,15 @@ jobs:
           architecture: ${{ matrix.platform.runner == 'windows-latest' && matrix.platform.target || null }}
       - uses: dtolnay/rust-toolchain@stable
       - name: Install LLVM
+        if: matrix.platform.runner != 'macos-15-intel'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "18"
       - uses: astral-sh/setup-uv@v3
       - name: Build wheels
         uses: PyO3/maturin-action@v1
+        env:
+          LLVM_SYS_181_PREFIX: ${{ env.LLVM_PATH }}
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
@@ -66,13 +69,18 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
       - name: Install LLVM
+        if: matrix.platform.runner != 'macos-15-intel'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "18"
       - name: Generate Python stubs
+        env:
+          LLVM_SYS_181_PREFIX: ${{ env.LLVM_PATH }}
         run: cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
       - name: Build sdist
         uses: PyO3/maturin-action@v1
+        env:
+          LLVM_SYS_181_PREFIX: ${{ env.LLVM_PATH }}
         with:
           command: sdist
           args: --out dist

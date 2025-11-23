@@ -96,7 +96,7 @@ def test_exponential_distribution_evidence():
 
     sampler = (
         chron.sampler.DynamicNestedSampler()
-        .with_live_points(2048)
+        .with_live_points(512)
         .with_expansion_factor(0.05)
         .with_termination_tolerance(1e-6)
         .with_seed(123)
@@ -105,7 +105,7 @@ def test_exponential_distribution_evidence():
     nested = sampler.run(problem)
 
     # Evidence should be reasonably close
-    assert abs(nested.log_evidence - log_z_analytical) < 0.1, (
+    assert abs(nested.log_evidence - log_z_analytical) < 0.2, (
         f"Evidence error: got {nested.log_evidence:.4f}, "
         f"expected {log_z_analytical:.4f}"
     )

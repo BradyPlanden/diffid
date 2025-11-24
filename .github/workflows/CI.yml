@@ -92,11 +92,13 @@ jobs:
             # Install build dependencies
             yum install -y gcc gcc-c++ make wget xz zlib-devel libzstd-devel libxml2-devel
             
-            # Download and install LLVM 18.1.8
-            cd /tmp
-            wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-            tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-            mv clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04 /opt/llvm-18
+            # Download and install LLVM 18.1.8 (in a subshell to preserve working directory)
+            (
+              cd /tmp
+              wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+              tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+              mv clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04 /opt/llvm-18
+            )
             
             # Verify it works (this would fail without ncurses-compat-libs)
             /opt/llvm-18/bin/llvm-config --version

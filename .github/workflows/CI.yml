@@ -89,8 +89,8 @@ jobs:
             # Critical: Install ncurses5 compatibility library
             yum install -y ncurses-compat-libs
             
-            # Install build dependencies (including ncurses-devel for Terminfo)
-            yum install -y gcc gcc-c++ make wget xz zlib-devel libzstd-devel libxml2-devel ncurses-devel
+            # Install build dependencies (including ncurses-devel for Terminfo, libffi-devel for FFI)
+            yum install -y gcc gcc-c++ make wget xz zlib-devel libzstd-devel libxml2-devel ncurses-devel libffi-devel
             
             # Download and install LLVM 18.1.8 (in a subshell to preserve working directory)
             (

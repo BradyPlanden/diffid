@@ -51,16 +51,21 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          echo "LLVM_SYS_181_PREFIX=${{ steps.install-llvm.outputs.LLVM_PATH }}" >> $GITHUB_ENV
+          echo "LLVM_SYS_181_PREFIX=${LLVM_PATH}" >> $GITHUB_ENV
           echo "LLVM_SYS_181_LINK_STATIC=1" >> $GITHUB_ENV
-          echo "LIBCLANG_PATH=${{ steps.install-llvm.outputs.LLVM_PATH }}/lib" >> $GITHUB_ENV
-          echo "${{ steps.install-llvm.outputs.LLVM_PATH }}/bin" >> $GITHUB_PATH
+          echo "LIBCLANG_PATH=${LLVM_PATH}/lib" >> $GITHUB_ENV
+          echo "${LLVM_PATH}/bin" >> $GITHUB_PATH
 
       - name: Set LLVM Env Vars (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $llvmPath = "${{ steps.install-llvm.outputs.LLVM_PATH }}"
+          $llvmPath = $env:LLVM_PATH
+          if (-not $llvmPath) {
+            choco install llvm --version 18.1.8 -y --allow-downgrade
+            $env:LLVM_PATH = 'C:\Program Files\LLVM'
+            $llvmPath = $env:LLVM_PATH
+          }
           "LLVM_SYS_181_PREFIX=$llvmPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "LLVM_SYS_181_LINK_STATIC=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $libclang = Join-Path $llvmPath "lib"
@@ -84,8 +89,14 @@ jobs:
           docker-options: -e LLVM_SYS_181_PREFIX=/opt/llvm -e LLVM_SYS_181_LINK_STATIC=1 -e LIBCLANG_PATH=/opt/llvm/lib
 
           before-script-linux: |
-            # 1. Install dependencies
-            yum install -y wget xz ncurses-compat-libs ncurses-devel libxml2-devel zlib-devel libzstd-devel mpfr-devel glibc-devel glibc-headers
+            set -eux
+            # 1. Install dependencies and headers required by libclang/bindgen
+            yum install -y yum-utils
+            yum groupinstall -y "Development Tools"
+            yum install -y wget xz ncurses-compat-libs ncurses-devel libxml2-devel zlib-devel libzstd-devel mpfr-devel glibc-devel glibc-headers kernel-headers
+            GCC_INCLUDE=$(gcc -print-file-name=include)
+            export BINDGEN_EXTRA_CLANG_ARGS="-isystem ${GCC_INCLUDE}"
+            printf 'BINDGEN_EXTRA_CLANG_ARGS=%s\n' "$BINDGEN_EXTRA_CLANG_ARGS" >> $GITHUB_ENV
             
             # 2. Setup LLVM directory
             mkdir -p /opt/llvm

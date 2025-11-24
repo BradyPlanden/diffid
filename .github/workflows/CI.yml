@@ -36,29 +36,95 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      # Cache the LLVM download from llvm-sys
-      - name: Cache LLVM
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/cache
-            ~/.cargo/registry/index
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ matrix.platform.target }}-llvm-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.platform.target }}-llvm-cargo-
+      # ============================================================
+      # MACOS: Use Homebrew LLVM
+      # ============================================================
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@18
+          LLVM_PATH="$(brew --prefix llvm@18)"
+          echo "LLVM_SYS_181_PREFIX=${LLVM_PATH}" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=${LLVM_PATH}/lib" >> $GITHUB_ENV
+          echo "${LLVM_PATH}/bin" >> $GITHUB_PATH
+
+      # ============================================================
+      # WINDOWS: Use Chocolatey with force downgrade
+      # ============================================================
+      - name: Install LLVM (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install llvm --version 18.1.8 -y --force --allow-downgrade
+          $llvmPath = "C:\Program Files\LLVM"
+          "LLVM_SYS_181_PREFIX=$llvmPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "LIBCLANG_PATH=$llvmPath\lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "$llvmPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # ============================================================
+      # UBUNTU: Use system packages (for host builds only)
+      # ============================================================
+      - name: Install LLVM (Ubuntu - for tests)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang-18 \
+            llvm-18 \
+            llvm-18-dev \
+            libclang-18-dev \
+            libzstd-dev \
+            libncurses5-dev
+          echo "LLVM_SYS_181_PREFIX=/usr/lib/llvm-18" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> $GITHUB_ENV
 
       - uses: astral-sh/setup-uv@v3
 
-      - name: Build wheels
+      # ============================================================
+      # BUILD: Different approaches for Linux (manylinux) vs others
+      # ============================================================
+      - name: Build wheels (Linux - manylinux)
+        if: runner.os == 'Linux'
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --features llvm-sys-download
+          args: --release --out dist
           interpreter: python${{ matrix.python-version }}
           sccache: 'true'
-          manylinux: auto
+          manylinux: '2_28'
+          before-script-linux: |
+            # Install LLVM in the manylinux container
+            yum install -y yum-utils epel-release
+            yum install -y wget xz tar
+            
+            # Download and install LLVM 18.1.8 prebuilt binary
+            cd /tmp
+            wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+            tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+            
+            # Move to standard location
+            mv clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04 /opt/llvm-18
+            
+            # Set up environment for the container build
+            export LLVM_SYS_181_PREFIX=/opt/llvm-18
+            export LIBCLANG_PATH=/opt/llvm-18/lib
+            export PATH="/opt/llvm-18/bin:$PATH"
+            export LD_LIBRARY_PATH="/opt/llvm-18/lib:${LD_LIBRARY_PATH}"
+            
+            # Verify installation
+            /opt/llvm-18/bin/llvm-config --version
+            
+            # Install build dependencies
+            yum install -y gcc gcc-c++ make ncurses-devel libzstd-devel libxml2-devel
+
+      - name: Build wheels (Windows/macOS)
+        if: runner.os != 'Linux'
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist
+          interpreter: python${{ matrix.python-version }}
+          sccache: 'true'
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -66,6 +132,9 @@ jobs:
           name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}-py${{ matrix.python-version }}
           path: dist
 
+      # ============================================================
+      # TESTS: Run on host (where LLVM is already installed)
+      # ============================================================
       - name: Run tests
         shell: bash
         run: |
@@ -84,6 +153,19 @@ jobs:
           python-version: '3.12'
 
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM and Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang-18 \
+            llvm-18 \
+            llvm-18-dev \
+            libclang-18-dev \
+            libzstd-dev \
+            libncurses5-dev
+          echo "LLVM_SYS_181_PREFIX=/usr/lib/llvm-18" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> $GITHUB_ENV
 
       - name: Generate Python stubs
         run: cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs

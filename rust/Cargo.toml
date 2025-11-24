@@ -22,6 +22,3 @@ llvm-sys = "181"
 
 [dev-dependencies]
 proptest = { version = "1.4", default-features = false, features = ["std"] }
-
-[features]
-llvm-sys-download = ["llvm-sys/force-dynamic"]

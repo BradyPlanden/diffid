@@ -37,10 +37,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       # ============================================================
-      # WINDOWS & MACOS: Use install-llvm-action (works great on host)
+      # WINDOWS & MACOS: Use install-llvm-action
       # ============================================================
       - name: Install LLVM (Windows/macOS)
-        if: runner.os != 'Linux'
+        if: matrix.platform.runner == 'windows-latest' || matrix.platform.runner == 'macos-latest'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "18.1"

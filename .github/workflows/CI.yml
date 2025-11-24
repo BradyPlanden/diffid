@@ -133,6 +133,7 @@ jobs:
           uv run pytest -v
         env:
           UV_PROJECT_ENVIRONMENT: .venv
+          RUSTC_WRAPPER: ""  # Clear sccache wrapper set by maturin-action
 
   sdist:
     runs-on: ubuntu-24.04

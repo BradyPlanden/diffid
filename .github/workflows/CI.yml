@@ -72,7 +72,7 @@ jobs:
         shell: pwsh
         run: |
           # Install via Chocolatey (includes dev files)
-          choco install llvm --version=18.1.8 -y --no-progress
+          choco install llvm --version=18.1.8 -y --no-progress --allow-downgrade
           
           $llvmPath = "C:\Program Files\LLVM"
           
@@ -149,17 +149,17 @@ jobs:
       - name: Install wheel and test
         shell: bash
         run: |
-          # Install the pre-built wheel into uv's cache
           uv venv .test-venv
           source .test-venv/bin/activate || source .test-venv/Scripts/activate
           
-          # First install the wheel (this caches it)
+          # Install the wheel we built
           uv pip install dist/*.whl --reinstall
           
-          # Now sync only the dev/test dependencies, excluding the main package
-          # This uses pyproject.toml's dependency groups
-          uv sync --no-install-project --group dev --active
-          uv run pytest -v
+          # Install dev dependencies from pyproject.toml using pip interface
+          uv pip install --group dev
+          
+          # Run tests directly
+          pytest -v
 
       # ===== Upload =====
       - name: Upload wheels

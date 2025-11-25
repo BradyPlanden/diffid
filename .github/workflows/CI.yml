@@ -37,13 +37,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: astral-sh/setup-uv@v3
 
-      # LLVM for non-Linux (Linux handled in manylinux container)
-      - name: Install LLVM
-        if: matrix.platform.runner == 'windows-latest' || matrix.platform.runner == 'macos-latest'
+      # LLVM for Windows
+      - name: Install LLVM (Windows)
+        if: runner.os == 'Windows'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: ${{ env.LLVM_VERSION }}
           directory: ${{ runner.temp }}/llvm
+
+      # LLVM for macOS via homebrew
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@18
+          echo "LLVM_SYS_181_PREFIX=$(brew --prefix llvm@18)" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=$(brew --prefix llvm@18)/lib" >> $GITHUB_ENV
 
       # Linux: LLVM for tests (wheel built in container)
       - name: Install LLVM (Linux tests)
@@ -63,6 +71,8 @@ jobs:
         env:
           LLVM_SYS_181_PREFIX: ${{ runner.temp }}/llvm
           LIBCLANG_PATH: ${{ runner.temp }}/llvm/bin
+          LIBCLANG_STATIC_PATH: ${{ runner.temp }}/llvm/lib
+          LLVM_CONFIG_PATH: ${{ runner.temp }}/llvm/bin/llvm-config.exe
 
       # macOS build
       - name: Build wheels (macOS)
@@ -72,9 +82,6 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
           sccache: 'true'
-        env:
-          LLVM_SYS_181_PREFIX: ${{ runner.temp }}/llvm
-          LIBCLANG_PATH: ${{ runner.temp }}/llvm/lib
 
       # Linux build
       - name: Build wheels (Linux)
@@ -119,8 +126,6 @@ jobs:
           uv run pytest -v
         env:
           RUSTC_WRAPPER: ""
-          LLVM_SYS_181_PREFIX: ${{ runner.temp }}/llvm
-          LIBCLANG_PATH: ${{ runner.temp }}/llvm/lib
 
       # Tests - Linux
       - name: Run tests (Linux)

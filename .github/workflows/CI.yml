@@ -116,6 +116,7 @@ jobs:
             export LIBCLANG_PATH=/opt/llvm-18/lib
             GCC_VERSION=$(gcc -dumpversion)
             export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=/usr -I/opt/rh/gcc-toolset-14/root/usr/lib/gcc/x86_64-redhat-linux/${GCC_VERSION}/include"
+            export LLVM_LINK_STATIC=1
 
       - name: Install wheel and test
         shell: bash

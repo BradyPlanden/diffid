@@ -14,22 +14,57 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
-  wheels:
+  wheels-linux:
+    runs-on: ubuntu-24.04
+    container:
+      image: quay.io/pypa/manylinux_2_28_x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies and LLVM
+        run: |
+          yum install -y zlib-devel libzstd-devel libxml2-devel ncurses-devel libffi-devel
+          curl -sL https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz | tar -xJ -C /opt
+          mv /opt/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04 /opt/llvm-18
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Build wheel
+        run: |
+          source $HOME/.cargo/env
+          pip3.12 install maturin
+          maturin build --release --out dist -i python3.12
+        env:
+          LLVM_SYS_181_PREFIX: /opt/llvm-18
+          LIBCLANG_PATH: /opt/llvm-18/lib
+          LLVM_LINK_STATIC: "1"
+
+      - name: Test wheel
+        run: |
+          pip3.12 install dist/*.whl
+          pip3.12 install pytest
+          pytest -v --ignore=tests/integration/test_diffsol_dynamic_nested_parallel.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-x86_64
+          path: dist
+
+  wheels-other:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       fail-fast: false
       matrix:
         platform:
-          - runner: ubuntu-24.04
-            target: x86_64
-          # Windows LLVM dev libs unavailable in prebuilt form
-          # - runner: windows-latest
-          #   target: x64
+          - runner: windows-latest
+            target: x64
 #          - runner: macos-15-intel
 #            target: x86_64
 #          - runner: macos-latest
 #            target: aarch64
-
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -38,36 +73,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: astral-sh/setup-uv@v3
 
-      # ===== LLVM Installation =====
-      - name: Install LLVM (Windows)
-        if: runner.os == 'Windows'
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: ${{ env.LLVM_VERSION }}
-          directory: C:\llvm
-
-      - name: Configure LLVM (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Verify installation
-          Write-Host "LLVM Directory Contents:"
-          Get-ChildItem -Path "C:\llvm" -Recurse -Depth 2 | Select-Object FullName
-
-          # Verify llvm-config exists
-          if (Test-Path "C:\llvm\bin\llvm-config.exe") {
-            Write-Host "llvm-config.exe found"
-            & "C:\llvm\bin\llvm-config.exe" --version
-          } else {
-            Write-Host "WARNING: llvm-config.exe not found!"
-          }
-
-          # Set environment variables for subsequent steps
-          echo "LLVM_SYS_181_PREFIX=C:\llvm" >> $env:GITHUB_ENV
-          echo "LIBCLANG_PATH=C:\llvm\bin" >> $env:GITHUB_ENV
-          echo "LIBCLANG_STATIC_PATH=C:\llvm\lib" >> $env:GITHUB_ENV
-          echo "LLVM_CONFIG_PATH=C:\llvm\bin\llvm-config.exe" >> $env:GITHUB_ENV
-
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -75,48 +80,12 @@ jobs:
           echo "LLVM_SYS_181_PREFIX=$(brew --prefix llvm@18)" >> $GITHUB_ENV
           echo "LIBCLANG_PATH=$(brew --prefix llvm@18)/lib" >> $GITHUB_ENV
 
-      - name: Install LLVM (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y llvm-18-dev libclang-18-dev libzstd-dev libpolly-18-dev
-          echo "LLVM_SYS_181_PREFIX=/usr/lib/llvm-18" >> $GITHUB_ENV
-          echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> $GITHUB_ENV
-
-      # ===== Build Wheel =====
-      - name: Build wheel (Windows)
-        if: runner.os == 'Windows'
+      - name: Build wheel
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
           sccache: 'true'
-
-      - name: Build wheel (macOS)
-        if: runner.os == 'macOS'
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist
-          sccache: 'true'
-
-      - name: Build wheel (Linux)
-        if: runner.os == 'Linux'
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist -i python${{ env.PYTHON_VERSION }}
-          sccache: 'true'
-          manylinux: '2_28'
-          before-script-linux: |
-            yum install -y ncurses-compat-libs zlib-devel libzstd-devel libxml2-devel ncurses-devel libffi-devel
-            curl -sL https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz | tar -xJ -C /opt
-            mv /opt/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04 /opt/llvm-18
-            export LLVM_SYS_181_PREFIX=/opt/llvm-18
-            export LIBCLANG_PATH=/opt/llvm-18/lib
-            GCC_VERSION=$(gcc -dumpversion)
-            export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=/usr -I/opt/rh/gcc-toolset-14/root/usr/lib/gcc/x86_64-redhat-linux/${GCC_VERSION}/include"
-            export LLVM_LINK_STATIC=1
 
       - name: Install wheel and test
         shell: bash
@@ -142,9 +111,7 @@ jobs:
           # Then try the parallel test separately with more debug info
           pytest -v tests/integration/test_diffsol_dynamic_nested_parallel.py -x || echo "Parallel test failed"
 
-      # ===== Upload =====
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}
           path: dist
@@ -174,8 +141,7 @@ jobs:
           command: sdist
           args: --out dist
 
-      - name: Upload sdist
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: wheels-sdist
           path: dist

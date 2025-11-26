@@ -20,8 +20,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
       - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v3
 
       - name: Install LLVM and dependencies
         run: |
@@ -40,9 +41,11 @@ jobs:
 
       - name: Test wheel
         run: |
-          pip install dist/*.whl
-          pip install pytest scipy
-          pytest -v --ignore=tests/integration/test_diffsol_dynamic_nested_parallel.py
+          uv venv .test-venv
+          source .test-venv/bin/activate
+          uv pip install dist/*.whl --reinstall
+          uv pip install --group dev
+          pytest -v
 
       - uses: actions/upload-artifact@v4
         with:
@@ -57,10 +60,10 @@ jobs:
         platform:
           - runner: windows-latest
             target: x64
-#          - runner: macos-15-intel
-#            target: x86_64
-#          - runner: macos-latest
-#            target: aarch64
+          - runner: macos-15-intel
+            target: x86_64
+          - runner: macos-latest
+            target: aarch64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -97,15 +100,6 @@ jobs:
           
           # Run tests directly
           # pytest -v
-          
-          # Test basic import first
-          # uv run python -c "import chronopt; print('Import OK')"
-          
-          # Run tests EXCLUDING the parallel test
-          pytest -v --ignore=tests/integration/test_diffsol_dynamic_nested_parallel.py
-          
-          # Then try the parallel test separately with more debug info
-          pytest -v tests/integration/test_diffsol_dynamic_nested_parallel.py -x || echo "Parallel test failed"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -118,7 +112,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install LLVM

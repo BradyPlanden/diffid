@@ -19,12 +19,17 @@ name = "chronopt"
 crate-type = ["cdylib", "rlib"]
 [dependencies]
 pyo3 = { workspace = true, default-features = false, features = ["macros"] }
-chronopt_core = { package = "chronopt", path = "../rust" }
 nalgebra.workspace = true
 numpy = "0.26"
 pyo3-stub-gen = { version = "0.16", optional = true }
 pyo3-stub-gen-derive = { version = "0.16", optional = true }
 clap = { version = "4.5", optional = true, features = ["derive"] }
+
+[target.'cfg(not(windows))'.dependencies]
+chronopt_core = { package = "chronopt", path = "../rust" }
+
+[target.'cfg(windows)'.dependencies]
+chronopt_core = { package = "chronopt", path = "../rust", default-features = false, features = ["cranelift-backend"] }
 
 [build-dependencies]
 pyo3-build-config = "0.26"

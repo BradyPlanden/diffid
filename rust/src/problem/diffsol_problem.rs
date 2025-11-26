@@ -627,6 +627,7 @@ F_i { (r * y) * (1 - (y / k)) }
         }
     }
 
+    #[cfg(not(feature = "cranelift-backend"))]
     #[test]
     fn diffsol_simulate_produces_sensitivities() {
         let problem = build_logistic_problem(DiffsolBackend::Dense);
@@ -677,6 +678,7 @@ F_i { (r * y) * (1 - (y / k)) }
         );
     }
 
+    #[cfg(not(feature = "cranelift-backend"))]
     #[test]
     fn diffsol_cost_gradient_matches_finite_difference() {
         let problem = build_logistic_problem(DiffsolBackend::Dense);

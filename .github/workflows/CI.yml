@@ -34,7 +34,7 @@ jobs:
       # Manual build required for auditwheel manylinux compliance
       - name: Build wheel
         run: |
-          uv pip install maturin auditwheel
+          uv pip install --system maturin auditwheel
           maturin build --release --out dist-raw -i python
         env:
           LLVM_SYS_181_PREFIX: /usr/lib/llvm-18

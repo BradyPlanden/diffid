@@ -2,24 +2,70 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: ["main"]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
-  wheels:
+  wheels-linux:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install LLVM and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-18-dev libclang-18-dev libzstd-dev libpolly-18-dev patchelf
+
+      # Manual build required for auditwheel manylinux compliance
+      - name: Build wheel
+        run: |
+          uv pip install --system maturin auditwheel
+          maturin build --release --out dist-raw -i python
+        env:
+          LLVM_SYS_181_PREFIX: /usr/lib/llvm-18
+          LIBCLANG_PATH: /usr/lib/llvm-18/lib
+          LLVM_LINK_STATIC: "1"
+
+      - name: Repair wheel for manylinux
+        run: auditwheel repair dist-raw/*.whl -w dist --plat manylinux_2_39_x86_64
+
+      - name: Test wheel
+        run: |
+          uv venv .test-venv
+          source .test-venv/bin/activate
+          uv pip install dist/*.whl --reinstall
+          uv pip install --group dev
+          pytest -v
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: wheels-linux-x86_64
+          path: dist
+
+  wheels-other:
     runs-on: ${{ matrix.platform.runner }}
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.12']
         platform:
-          - runner: ubuntu-24.04
-            target: x86_64
           - runner: windows-latest
             target: x64
           - runner: macos-15-intel
@@ -30,63 +76,74 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
-          architecture: ${{ matrix.platform.runner == 'windows-latest' && matrix.platform.target || null }}
+          python-version: ${{ env.PYTHON_VERSION }}
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install LLVM
-        if: matrix.platform.runner != 'macos-15-intel'
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "18"
-        id: llvm
       - uses: astral-sh/setup-uv@v3
-      - name: Build wheels
+
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@18
+          echo "LLVM_SYS_181_PREFIX=$(brew --prefix llvm@18)" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=$(brew --prefix llvm@18)/lib" >> $GITHUB_ENV
+
+      - name: Build wheel
         uses: PyO3/maturin-action@v1
-        env:
-          LLVM_SYS_181_PREFIX: ${{ steps.llvm.outputs.llvm-path }}
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
-          interpreter: python${{ matrix.python-version }}
-          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-      - name: Upload wheels
-        uses: actions/upload-artifact@v5
-        with:
-          name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}-py${{ matrix.python-version }}
-          path: dist
-      - name: Run tests
+          sccache: 'true'
+
+      - name: Test wheel
         shell: bash
-        env:
-          UV_PROJECT_ENVIRONMENT: .venv
         run: |
-          uv sync --group dev && uv run pytest -v
+          uv venv .test-venv
+          source .test-venv/bin/activate || source .test-venv/Scripts/activate
+          
+          # Install the wheel we built
+          uv pip install dist/*.whl --reinstall
+          
+          # Install dev dependencies from pyproject.toml using pip interface
+          uv pip install --group dev
+          
+          # Run tests directly
+          pytest -v
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}
+          path: dist
 
   sdist:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
       - uses: dtolnay/rust-toolchain@stable
+
       - name: Install LLVM
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "18"
-        id: llvm
-      - name: Generate Python stubs
-        env:
-          LLVM_SYS_181_PREFIX: ${{ steps.llvm.outputs.llvm-path }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-18-dev libclang-18-dev libzstd-dev libpolly-18-dev patchelf
+
+      - name: Generate stubs
         run: cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
+        env:
+          LLVM_SYS_181_PREFIX: /usr/lib/llvm-18
+          LIBCLANG_PATH: /usr/lib/llvm-18/lib
+
       - name: Build sdist
         uses: PyO3/maturin-action@v1
-        env:
-          LLVM_SYS_181_PREFIX: ${{ steps.llvm.outputs.llvm-path }}
         with:
           command: sdist
           args: --out dist
-      - name: Upload sdist
-        uses: actions/upload-artifact@v5
+
+      - uses: actions/upload-artifact@v5
         with:
-          name: wheels-sdist
+          name: sdist
           path: dist

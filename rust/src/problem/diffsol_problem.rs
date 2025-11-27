@@ -17,6 +17,9 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+#[cfg(feature = "cranelift-backend")]
+type CG = diffsol::CraneliftJitModule;
+#[cfg(not(feature = "cranelift-backend"))]
 type CG = diffsol::LlvmModule;
 
 type DenseEqn = DiffSl<NalgebraMat<f64>, CG>;
@@ -627,6 +630,7 @@ F_i { (r * y) * (1 - (y / k)) }
         }
     }
 
+    #[cfg(not(feature = "cranelift-backend"))]
     #[test]
     fn diffsol_simulate_produces_sensitivities() {
         let problem = build_logistic_problem(DiffsolBackend::Dense);
@@ -677,6 +681,7 @@ F_i { (r * y) * (1 - (y / k)) }
         );
     }
 
+    #[cfg(not(feature = "cranelift-backend"))]
     #[test]
     fn diffsol_cost_gradient_matches_finite_difference() {
         let problem = build_logistic_problem(DiffsolBackend::Dense);

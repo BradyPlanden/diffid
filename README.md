@@ -23,7 +23,7 @@
 
 ## Installation
 
-Chronopt targets Python 3.11 or newer.
+Chronopt targets Python >= 3.11. Windows builds are currently marked experimental. 
 
 ```bash
 pip install chronopt

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from chronopt import plotting
 from chronopt._chronopt import (
+    Adam,
     CMAES,
     CostMetric,
     NelderMead,
@@ -38,6 +39,7 @@ __all__ = [
     "MetropolisHastings",
     "NestedSamples",
     "Samples",
+    "Adam",
     "CMAES",
     "CostMetric",
     "NelderMead",

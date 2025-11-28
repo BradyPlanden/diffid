@@ -348,12 +348,25 @@ impl DiffsolProblem {
             })
     }
 
-    pub fn evaluate(&self, params: &[f64], gradient: bool) -> Result<f64, String> {
-        match self.simulate(params, gradient)? {
+    pub fn evaluate(&self, params: &[f64]) -> Result<f64, String> {
+        match self.simulate(params, false)? {
             SimulationResult::Solution(solution) => self.calculate_cost(&solution),
             SimulationResult::SolutionWithSensitivities(solution, sensitivities) => {
                 let (cost, _gradient) = self.calculate_cost_with_grad(&solution, &sensitivities)?;
                 Ok(cost)
+            }
+            SimulationResult::Penalty => Err("Diffsol solve failed".to_string()),
+        }
+    }
+
+    pub fn evaluate_with_gradient(&self, params: &[f64]) -> Result<(f64, Vec<f64>), String> {
+        match self.simulate(params, true)? {
+            SimulationResult::SolutionWithSensitivities(solution, sensitivities) => {
+                self.calculate_cost_with_grad(&solution, &sensitivities)
+            }
+            SimulationResult::Solution(solution) => {
+                let cost = self.calculate_cost(&solution)?;
+                Ok((cost, Vec::new()))
             }
             SimulationResult::Penalty => Err("Diffsol solve failed".to_string()),
         }

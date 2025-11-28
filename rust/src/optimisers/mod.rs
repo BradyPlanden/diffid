@@ -214,7 +214,27 @@ impl EvaluatedPoint {
 }
 
 fn evaluate_point(problem: &Problem, point: &[f64]) -> Result<f64, String> {
-    problem.evaluate(point, false)
+    problem.evaluate(point)
+}
+
+fn evaluate_point_with_gradient(
+    problem: &Problem,
+    point: &[f64],
+) -> Result<(f64, Vec<f64>), String> {
+    let (cost, grad_opt) = problem.evaluate_with_gradient(point)?;
+    match grad_opt {
+        Some(grad) => {
+            if grad.len() != point.len() {
+                return Err(format!(
+                    "Gradient length {} does not match parameter dimension {}",
+                    grad.len(),
+                    point.len()
+                ));
+            }
+            Ok((cost, grad))
+        }
+        None => Err("Gradient-based optimiser Adam requires an available gradient".to_string()),
+    }
 }
 
 fn build_results(
@@ -247,6 +267,7 @@ fn build_results(
         TerminationReason::FunctionToleranceReached
             | TerminationReason::ParameterToleranceReached
             | TerminationReason::BothTolerancesReached
+            | TerminationReason::GradientToleranceReached
     );
 
     let message = reason.to_string();
@@ -270,6 +291,7 @@ fn build_results(
 pub enum TerminationReason {
     FunctionToleranceReached,
     ParameterToleranceReached,
+    GradientToleranceReached,
     BothTolerancesReached,
     MaxIterationsReached,
     MaxFunctionEvaluationsReached,
@@ -286,6 +308,9 @@ impl fmt::Display for TerminationReason {
             }
             TerminationReason::ParameterToleranceReached => {
                 write!(f, "Parameter tolerance met")
+            }
+            TerminationReason::GradientToleranceReached => {
+                write!(f, "Gradient tolerance met")
             }
             TerminationReason::BothTolerancesReached => {
                 write!(f, "Function and parameter tolerances met")
@@ -1132,6 +1157,225 @@ impl OptimisationResults {
     }
 }
 
+#[derive(Clone)]
+pub struct Adam {
+    max_iter: usize,
+    step_size: f64,
+    beta1: f64,
+    beta2: f64,
+    eps: f64,
+    threshold: f64,
+    patience: Option<Duration>,
+}
+
+impl Adam {
+    pub fn new() -> Self {
+        Self {
+            max_iter: 1000,
+            step_size: 1e-2,
+            beta1: 0.9,
+            beta2: 0.999,
+            eps: 1e-8,
+            threshold: 1e-6,
+            patience: None,
+        }
+    }
+
+    pub fn with_step_size(mut self, step_size: f64) -> Self {
+        if step_size.is_finite() && step_size > 0.0 {
+            self.step_size = step_size;
+        }
+        self
+    }
+
+    pub fn with_betas(mut self, beta1: f64, beta2: f64) -> Self {
+        if (1e-10..1.0).contains(&beta1) && (1e-10..1.0).contains(&beta2) {
+            self.beta1 = beta1;
+            self.beta2 = beta2;
+        }
+        self
+    }
+
+    pub fn with_eps(mut self, eps: f64) -> Self {
+        if eps.is_finite() && eps > 0.0 {
+            self.eps = eps;
+        }
+        self
+    }
+
+    pub fn run(&self, problem: &Problem, initial: Vec<f64>) -> OptimisationResults {
+        let start_time = Instant::now();
+        let bounds = extract_bounds(problem);
+        let bounds_ref = bounds.as_ref();
+
+        let (mut x, _start_value, mut nfev) = match initialise_start(problem, initial, bounds_ref) {
+            InitialState::Finished(results) => return results,
+            InitialState::Ready {
+                start,
+                start_value,
+                nfev,
+            } => (start, start_value, nfev),
+        };
+
+        let dim = x.len();
+        if dim == 0 {
+            return build_results(
+                &[EvaluatedPoint::new(x, 0.0)],
+                0,
+                nfev,
+                start_time.elapsed(),
+                TerminationReason::BothTolerancesReached,
+                None,
+            );
+        }
+
+        let mut m = vec![0.0; dim];
+        let mut v = vec![0.0; dim];
+        let mut beta1_pow = 1.0_f64;
+        let mut beta2_pow = 1.0_f64;
+
+        let mut points: Vec<EvaluatedPoint> = Vec::new();
+        let mut nit = 0usize;
+        let mut termination = TerminationReason::MaxIterationsReached;
+
+        loop {
+            if let Some(patience) = self.patience {
+                if start_time.elapsed() >= patience {
+                    termination = TerminationReason::PatienceElapsed;
+                    break;
+                }
+            }
+
+            if nit >= self.max_iter {
+                break;
+            }
+
+            let (cost, grad) = match evaluate_point_with_gradient(problem, &x) {
+                Ok(res) => res,
+                Err(msg) => {
+                    points.push(EvaluatedPoint::new(x.clone(), f64::NAN));
+                    return build_results(
+                        &points,
+                        nit,
+                        nfev,
+                        start_time.elapsed(),
+                        TerminationReason::FunctionEvaluationFailed(msg),
+                        None,
+                    );
+                }
+            };
+            nfev += 1;
+
+            // Validate gradient
+            if !grad.iter().all(|g| g.is_finite()) {
+                return build_results(
+                    &points,
+                    nit,
+                    nfev,
+                    start_time.elapsed(),
+                    TerminationReason::FunctionEvaluationFailed(
+                        "Gradient contained non-finite values".to_string(),
+                    ),
+                    None,
+                );
+            }
+            points.push(EvaluatedPoint::new(x.clone(), cost));
+
+            // Gradient termination
+            let grad_norm = grad.iter().map(|g| g * g).sum::<f64>().sqrt();
+            if grad_norm <= self.threshold {
+                termination = TerminationReason::GradientToleranceReached;
+                break;
+            }
+
+            // Cost termination
+            if points.len() >= 2 {
+                let prev_cost = points[points.len() - 2].value;
+                if (prev_cost - cost).abs() < self.threshold {
+                    // ToDo: split threshold
+                    termination = TerminationReason::FunctionToleranceReached;
+                    break;
+                }
+            }
+
+            beta1_pow *= self.beta1;
+            beta2_pow *= self.beta2;
+
+            let bias_correction1 = (1.0 - beta1_pow).max(1e-12);
+            let bias_correction2 = (1.0 - beta2_pow).max(1e-12);
+
+            for (i, g) in grad.iter().enumerate() {
+                m[i] = self.beta1 * m[i] + (1.0 - self.beta1) * g;
+                v[i] = self.beta2 * v[i] + (1.0 - self.beta2) * g * g;
+
+                let m_hat = m[i] / bias_correction1;
+                let v_hat = v[i] / bias_correction2;
+
+                let denom = v_hat.sqrt() + self.eps;
+                x[i] -= self.step_size * m_hat / denom;
+            }
+
+            apply_bounds(&mut x, bounds_ref);
+            nit += 1;
+        }
+
+        if points.is_empty() {
+            match evaluate_point(problem, &x) {
+                Ok(value) => {
+                    points.push(EvaluatedPoint::new(x, value));
+                    nfev += 1;
+                }
+                Err(msg) => {
+                    return build_results(
+                        &[EvaluatedPoint::new(x, f64::NAN)],
+                        nit,
+                        nfev,
+                        start_time.elapsed(),
+                        TerminationReason::FunctionEvaluationFailed(msg),
+                        None,
+                    );
+                }
+            }
+        }
+
+        build_results(&points, nit, nfev, start_time.elapsed(), termination, None)
+    }
+}
+
+impl Optimiser for Adam {
+    fn run(&self, problem: &Problem, initial: Vec<f64>) -> OptimisationResults {
+        self.run(problem, initial)
+    }
+}
+
+impl WithMaxIter for Adam {
+    fn set_max_iter(&mut self, max_iter: usize) {
+        self.max_iter = max_iter;
+    }
+}
+
+impl WithThreshold for Adam {
+    fn set_threshold(&mut self, threshold: f64) {
+        self.threshold = threshold.max(0.0);
+    }
+}
+
+impl WithPatience for Adam {
+    fn set_patience(&mut self, patience_seconds: f64) {
+        if patience_seconds.is_finite() && patience_seconds > 0.0 {
+            self.patience = Some(Duration::from_secs_f64(patience_seconds));
+        } else {
+            self.patience = None;
+        }
+    }
+}
+
+impl Default for Adam {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1294,6 +1538,107 @@ mod tests {
             TerminationReason::PatienceElapsed
         );
         assert!(!result.success);
+    }
+
+    #[test]
+    fn adam_minimises_quadratic_with_gradient() {
+        let problem = ScalarProblemBuilder::new()
+            .with_objective_and_gradient(
+                |x: &[f64]| {
+                    let x0 = x[0] - 1.5;
+                    let x1 = x[1] + 0.5;
+                    x0 * x0 + x1 * x1
+                },
+                |x: &[f64]| vec![2.0 * (x[0] - 1.5), 2.0 * (x[1] + 0.5)],
+            )
+            .build()
+            .unwrap();
+
+        let optimiser = Adam::new()
+            .with_step_size(0.1)
+            .with_max_iter(500)
+            .with_threshold(1e-8);
+
+        let result = optimiser.run(&problem, vec![5.0, -4.0]);
+
+        assert!(result.success, "Expected success: {}", result.message);
+        assert!((result.x[0] - 1.5).abs() < 1e-3);
+        assert!((result.x[1] + 0.5).abs() < 1e-3);
+        assert!(result.fun < 1e-6, "Final value too large: {}", result.fun);
+    }
+
+    #[test]
+    fn adam_respects_max_iterations() {
+        let problem = ScalarProblemBuilder::new()
+            .with_objective_and_gradient(
+                |x: &[f64]| x.iter().map(|xi| xi * xi).sum(),
+                |x: &[f64]| x.iter().map(|xi| 2.0 * xi).collect(),
+            )
+            .build()
+            .unwrap();
+
+        let optimiser = Adam::new()
+            .with_step_size(0.1)
+            .with_max_iter(1)
+            .with_threshold(1e-12);
+
+        let result = optimiser.run(&problem, vec![10.0, -10.0]);
+
+        assert_eq!(
+            result.termination_reason,
+            TerminationReason::MaxIterationsReached
+        );
+        assert!(!result.success);
+        assert!(result.nit <= 1);
+    }
+
+    #[test]
+    fn adam_respects_patience() {
+        let problem = ScalarProblemBuilder::new()
+            .with_objective_and_gradient(
+                |x: &[f64]| {
+                    std::thread::sleep(Duration::from_millis(5));
+                    x.iter().map(|xi| xi * xi).sum()
+                },
+                |x: &[f64]| {
+                    std::thread::sleep(Duration::from_millis(5));
+                    x.iter().map(|xi| 2.0 * xi).collect()
+                },
+            )
+            .build()
+            .unwrap();
+
+        let optimiser = Adam::new()
+            .with_step_size(0.1)
+            .with_max_iter(100)
+            .with_patience(0.01);
+
+        let result = optimiser.run(&problem, vec![5.0, -5.0]);
+
+        assert_eq!(
+            result.termination_reason,
+            TerminationReason::PatienceElapsed
+        );
+        assert!(!result.success);
+    }
+
+    #[test]
+    fn adam_fails_without_gradient() {
+        let problem = ScalarProblemBuilder::new()
+            .with_objective(|x: &[f64]| x.iter().map(|xi| xi * xi).sum())
+            .build()
+            .unwrap();
+
+        let optimiser = Adam::new().with_max_iter(10);
+        let result = optimiser.run(&problem, vec![1.0, 2.0]);
+
+        assert!(!result.success);
+        match result.termination_reason {
+            TerminationReason::FunctionEvaluationFailed(ref msg) => {
+                assert!(msg.contains("requires an available gradient"));
+            }
+            other => panic!("expected FunctionEvaluationFailed, got {:?}", other),
+        }
     }
 
     // Edge case tests

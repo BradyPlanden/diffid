@@ -52,7 +52,7 @@ fn convert_array_to_dmatrix(data: &PyReadonlyArrayDyn<'_, f64>) -> PyResult<DMat
 }
 
 #[cfg(feature = "stubgen")]
-pyo3_stub_gen::impl_stub_type!(Optimiser = PyNelderMead | PyCMAES);
+pyo3_stub_gen::impl_stub_type!(Optimiser = PyNelderMead | PyCMAES | PyAdam);
 
 // ============================================================================
 // Optimiser Enum for Polymorphic Types
@@ -62,6 +62,7 @@ pyo3_stub_gen::impl_stub_type!(Optimiser = PyNelderMead | PyCMAES);
 enum Optimiser {
     NelderMead(NelderMead),
     Cmaes(CMAES),
+    Adam(Adam),
 }
 
 // ============================================================================
@@ -287,17 +288,20 @@ impl PyDynamicNestedSampler {
 fn optimiser_type_info() -> TypeInfo {
     TypeInfo::unqualified("chronopt._chronopt.NelderMead")
         | TypeInfo::unqualified("chronopt._chronopt.CMAES")
+        | TypeInfo::unqualified("chronopt._chronopt.Adam")
 }
 
 impl<'py> FromPyObject<'py> for Optimiser {
     fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
         if let Ok(nm) = ob.extract::<PyRef<PyNelderMead>>() {
-            Ok(Optimiser::NelderMead(nm.inner.clone()))
+            Ok(Optimiser::NelderMead((*nm).inner.clone()))
         } else if let Ok(cma) = ob.extract::<PyRef<PyCMAES>>() {
-            Ok(Optimiser::Cmaes(cma.inner.clone()))
+            Ok(Optimiser::Cmaes((*cma).inner.clone()))
+        } else if let Ok(adam) = ob.extract::<PyRef<PyAdam>>() {
+            Ok(Optimiser::Adam((*adam).inner.clone()))
         } else {
             Err(PyTypeError::new_err(
-                "Optimiser must be an instance of NelderMead or CMAES",
+                "Optimiser must be an instance of NelderMead, CMAES, or Adam",
             ))
         }
     }
@@ -490,6 +494,9 @@ impl PyScalarBuilder {
             }
             Optimiser::Cmaes(cma) => {
                 slf.inner = std::mem::take(&mut slf.inner).with_optimiser(cma.clone());
+            }
+            Optimiser::Adam(adam) => {
+                slf.inner = std::mem::take(&mut slf.inner).with_optimiser(adam.clone());
             }
         }
 
@@ -717,6 +724,9 @@ impl PyDiffsolBuilder {
             Optimiser::Cmaes(cma) => {
                 inner = inner.with_optimiser(cma.clone());
             }
+            Optimiser::Adam(adam) => {
+                inner = inner.with_optimiser(adam.clone());
+            }
         }
         slf.inner = inner;
 
@@ -856,6 +866,9 @@ impl PyVectorBuilder {
             Optimiser::Cmaes(cma) => {
                 inner = inner.with_optimiser(cma.clone());
             }
+            Optimiser::Adam(adam) => {
+                inner = inner.with_optimiser(adam.clone());
+            }
         }
         slf.inner = inner;
         slf.default_optimiser = Some(optimiser);
@@ -890,7 +903,7 @@ impl PyProblem {
     /// Evaluate the configured objective function at `x`.
     fn evaluate(&self, x: Vec<f64>) -> PyResult<f64> {
         self.inner
-            .evaluate(&x, false)
+            .evaluate(&x)
             .map_err(|e| PyValueError::new_err(format!("Evaluation failed: {}", e)))
     }
 
@@ -917,6 +930,7 @@ impl PyProblem {
         let result = match optimiser.as_ref().or(self.default_optimiser.as_ref()) {
             Some(Optimiser::NelderMead(nm)) => self.inner.optimize(initial, Some(nm)),
             Some(Optimiser::Cmaes(cma)) => self.inner.optimize(initial, Some(cma)),
+            Some(Optimiser::Adam(adam)) => self.inner.optimize(initial, Some(adam)),
             None => self.inner.optimize(initial, None),
         };
 
@@ -1098,8 +1112,72 @@ impl PyCMAES {
 }
 
 // ============================================================================
-// Optimisation Results
+// Adam Optimiser
 // ============================================================================
+
+/// Adaptive Moment Estimation (Adam) gradient-based optimiser.
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
+#[pyclass(name = "Adam")]
+#[derive(Clone)]
+pub struct PyAdam {
+    inner: Adam,
+}
+
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
+#[pymethods]
+impl PyAdam {
+    /// Create an Adam optimiser with library defaults.
+    #[new]
+    fn new() -> Self {
+        Self { inner: Adam::new() }
+    }
+
+    /// Limit the maximum number of optimisation iterations.
+    fn with_max_iter(mut slf: PyRefMut<'_, Self>, max_iter: usize) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_max_iter(max_iter);
+        slf
+    }
+
+    /// Set the stopping threshold on the gradient norm.
+    fn with_threshold(mut slf: PyRefMut<'_, Self>, threshold: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_threshold(threshold);
+        slf
+    }
+
+    /// Configure the base learning rate / step size.
+    fn with_step_size(mut slf: PyRefMut<'_, Self>, step_size: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_step_size(step_size);
+        slf
+    }
+
+    /// Override the exponential decay rates for the first and second moments.
+    fn with_betas(mut slf: PyRefMut<'_, Self>, beta1: f64, beta2: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_betas(beta1, beta2);
+        slf
+    }
+
+    /// Override the numerical stability constant added to the denominator.
+    fn with_eps(mut slf: PyRefMut<'_, Self>, eps: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_eps(eps);
+        slf
+    }
+
+    /// Abort the run once the patience window has elapsed.
+    fn with_patience(mut slf: PyRefMut<'_, Self>, patience_seconds: f64) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_patience(patience_seconds);
+        slf
+    }
+
+    /// Optimise the given problem using Adam starting from the provided point.
+    fn run(&self, problem: &PyProblem, initial: Vec<f64>) -> PyOptimisationResults {
+        let result = self.inner.run(&problem.inner, initial);
+        PyOptimisationResults { inner: result }
+    }
+}
+
+// ============================================================================
+// Optimisation Results
+// ====================================================================================
 
 /// Container for optimiser outputs and diagnostic metadata.
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
@@ -1248,6 +1326,7 @@ fn chronopt(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyProblem>()?;
     m.add_class::<PyNelderMead>()?;
     m.add_class::<PyCMAES>()?;
+    m.add_class::<PyAdam>()?;
     m.add_class::<PyOptimisationResults>()?;
     m.add_class::<PyDiffsolBuilder>()?;
     m.add_class::<PyVectorBuilder>()?;

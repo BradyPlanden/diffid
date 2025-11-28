@@ -6,7 +6,7 @@ pub mod sampler;
 // Convenience re-exports so users can `use chronopt::prelude::*;`
 pub mod prelude {
     pub use crate::optimisers::{
-        NelderMead, OptimisationResults, Optimiser, WithMaxIter, WithPatience, WithSigma0,
+        Adam, NelderMead, OptimisationResults, Optimiser, WithMaxIter, WithPatience, WithSigma0,
         WithThreshold, CMAES,
     };
     pub use crate::problem::builders::{BuilderOptimiserExt, BuilderParameterExt};
@@ -73,7 +73,7 @@ F_i { (r * y) * (1 - (y / k)) }
 
         // Test that we can evaluate the problem
         let x0 = vec![1.0, 1.0]; // r, k parameters
-        let cost = problem.evaluate(&x0, false);
+        let cost = problem.evaluate(&x0);
 
         // Cost should be finite and non-negative
         assert!(

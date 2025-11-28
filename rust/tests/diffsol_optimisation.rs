@@ -42,7 +42,7 @@ F_i { a * y }
     let problem = builder.build().expect("problem should build");
 
     let true_cost = problem
-        .evaluate(&[true_param], false)
+        .evaluate(&[true_param])
         .expect("evaluation at true parameter should succeed");
     assert!(
         true_cost < 1e-10,
@@ -51,7 +51,7 @@ F_i { a * y }
 
     let initial_guess = 0.5;
     let initial_cost = problem
-        .evaluate(&[initial_guess], false)
+        .evaluate(&[initial_guess])
         .expect("evaluation at initial guess should succeed");
     assert!(initial_cost > true_cost);
 

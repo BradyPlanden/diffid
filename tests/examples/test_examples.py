@@ -31,14 +31,14 @@ class ExampleConfig:
 # Define special handling for specific example patterns
 EXAMPLE_CONFIGS: list[ExampleConfig] = [
     ExampleConfig(
-        pattern="predator_prey",
-        timeout=240.0,
-        required_import="diffrax",
-    ),
-    ExampleConfig(
         pattern="diffeqpy",
         skip_condition=is_ci,
         skip_reason="Skipping Julia/diffeqpy example in CI (Julia installation too heavy)",
+    ),
+    ExampleConfig(
+        pattern="predator_prey",
+        timeout=240.0,
+        required_import="diffrax",
     ),
     ExampleConfig(
         pattern="bouncy_ball",

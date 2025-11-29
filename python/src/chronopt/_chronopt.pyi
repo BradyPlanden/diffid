@@ -3,10 +3,49 @@
 
 import builtins
 import datetime
-import typing
-
 import numpy
 import numpy.typing
+import typing
+
+@typing.final
+class Adam:
+    r"""
+    Adaptive Moment Estimation (Adam) gradient-based optimiser.
+    """
+    def __new__(cls) -> Adam:
+        r"""
+        Create an Adam optimiser with library defaults.
+        """
+    def with_max_iter(self, max_iter: builtins.int) -> Adam:
+        r"""
+        Limit the maximum number of optimisation iterations.
+        """
+    def with_threshold(self, threshold: builtins.float) -> Adam:
+        r"""
+        Set the stopping threshold on the gradient norm.
+        """
+    def with_step_size(self, step_size: builtins.float) -> Adam:
+        r"""
+        Configure the base learning rate / step size.
+        """
+    def with_betas(self, beta1: builtins.float, beta2: builtins.float) -> Adam:
+        r"""
+        Override the exponential decay rates for the first and second moments.
+        """
+    def with_eps(self, eps: builtins.float) -> Adam:
+        r"""
+        Override the numerical stability constant added to the denominator.
+        """
+    def with_patience(self, patience_seconds: builtins.float) -> Adam:
+        r"""
+        Abort the run once the patience window has elapsed.
+        """
+    def run(
+        self, problem: Problem, initial: typing.Sequence[builtins.float]
+    ) -> OptimisationResults:
+        r"""
+        Optimise the given problem using Adam starting from the provided point.
+        """
 
 @typing.final
 class CMAES:
@@ -91,7 +130,9 @@ class DiffsolBuilder:
         r"""
         Choose whether to use dense or sparse diffusion solvers.
         """
-    def with_parallel(self, parallel: builtins.bool | None = None) -> DiffsolBuilder:
+    def with_parallel(
+        self, parallel: typing.Optional[builtins.bool] = None
+    ) -> DiffsolBuilder:
         r"""
         Opt into parallel proposal generation when supported by the backend.
         """
@@ -110,7 +151,7 @@ class DiffsolBuilder:
         self,
         name: builtins.str,
         initial_value: builtins.float,
-        bounds: tuple[builtins.float, builtins.float] | None = None,
+        bounds: typing.Optional[tuple[builtins.float, builtins.float]] = None,
     ) -> DiffsolBuilder:
         r"""
         Register a named optimisation variable in the order it appears in vectors.
@@ -127,7 +168,7 @@ class DiffsolBuilder:
         r"""
         Reset the cost metric to the default sum of squared errors.
         """
-    def with_optimiser(self, optimiser: NelderMead | CMAES) -> DiffsolBuilder:
+    def with_optimiser(self, optimiser: NelderMead | CMAES | Adam) -> DiffsolBuilder:
         r"""
         Configure the default optimiser used when `Problem.optimize` omits one.
         """
@@ -240,7 +281,7 @@ class OptimisationResults:
     @property
     def covariance(
         self,
-    ) -> builtins.list[builtins.list[builtins.float]] | None:
+    ) -> typing.Optional[builtins.list[builtins.list[builtins.float]]]:
         r"""
         Estimated covariance of the search distribution, if available.
         """
@@ -260,19 +301,19 @@ class Problem:
         """
     def evaluate_gradient(
         self, x: typing.Sequence[builtins.float]
-    ) -> builtins.list[builtins.float] | None:
+    ) -> typing.Optional[builtins.list[builtins.float]]:
         r"""
         Evaluate the gradient of the objective function at `x` if available.
         """
     def optimize(
         self,
-        initial: typing.Sequence[builtins.float] | None = None,
-        optimiser: NelderMead | CMAES | None = None,
+        initial: typing.Optional[typing.Sequence[builtins.float]] = None,
+        optimiser: typing.Optional[NelderMead | CMAES | Adam] = None,
     ) -> OptimisationResults:
         r"""
         Solve the problem starting from `initial` using the supplied optimiser.
         """
-    def get_config(self, key: builtins.str) -> builtins.float | None:
+    def get_config(self, key: builtins.str) -> typing.Optional[builtins.float]:
         r"""
         Return the numeric configuration value stored under `key` if present.
         """
@@ -286,7 +327,7 @@ class Problem:
         tuple[
             builtins.str,
             builtins.float,
-            tuple[builtins.float, builtins.float] | None,
+            typing.Optional[tuple[builtins.float, builtins.float]],
         ]
     ]: ...
     def default_parameters(self) -> builtins.list[builtins.float]:
@@ -307,7 +348,7 @@ class ScalarBuilder:
         r"""
         Create an empty builder with no objective, parameters, or default optimiser.
         """
-    def with_optimiser(self, optimiser: NelderMead | CMAES) -> ScalarBuilder:
+    def with_optimiser(self, optimiser: NelderMead | CMAES | Adam) -> ScalarBuilder:
         r"""
         Configure the default optimiser used when `Problem.optimize` omits one.
         """
@@ -323,7 +364,7 @@ class ScalarBuilder:
         self,
         name: builtins.str,
         initial_value: builtins.float,
-        bounds: tuple[builtins.float, builtins.float] | None = None,
+        bounds: typing.Optional[tuple[builtins.float, builtins.float]] = None,
     ) -> ScalarBuilder:
         r"""
         Register a named optimisation variable in the order it appears in vectors.
@@ -364,7 +405,7 @@ class VectorBuilder:
         self,
         name: builtins.str,
         initial_value: builtins.float,
-        bounds: tuple[builtins.float, builtins.float] | None = None,
+        bounds: typing.Optional[tuple[builtins.float, builtins.float]] = None,
     ) -> VectorBuilder:
         r"""
         Register a named optimisation variable in the order it appears in vectors.
@@ -381,7 +422,7 @@ class VectorBuilder:
         r"""
         Reset the cost metric to the default sum of squared errors.
         """
-    def with_optimiser(self, optimiser: NelderMead | CMAES) -> VectorBuilder:
+    def with_optimiser(self, optimiser: NelderMead | CMAES | Adam) -> VectorBuilder:
         r"""
         Configure the default optimiser used when `Problem.optimize` omits one.
         """

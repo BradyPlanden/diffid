@@ -2,7 +2,6 @@ use super::state::{Bounds, LivePoint};
 use super::{evaluate, MIN_LIVE_POINTS};
 use crate::problem::Problem;
 use rand::rngs::StdRng;
-use rand::seq::SliceRandom;
 use rand::Rng;
 use rand_distr::StandardNormal;
 
@@ -67,18 +66,15 @@ impl ProposalEngine {
                         bounds.clamp(&mut position);
                         position
                     } else {
-                        match live_points.choose(rng) {
-                            Some(anchor) => {
-                                let mut proposal = anchor.position.clone();
-                                for (value, scale) in proposal.iter_mut().zip(step_sizes.iter()) {
-                                    let perturb = rng.sample::<f64, _>(StandardNormal) * scale;
-                                    *value += perturb;
-                                }
-                                bounds.clamp(&mut proposal);
-                                proposal
-                            }
-                            None => continue,
+                        let anchor_idx = rng.random_range(0..live_points.len());
+                        let anchor = &live_points[anchor_idx];
+                        let mut proposal = anchor.position.clone();
+                        for (value, scale) in proposal.iter_mut().zip(step_sizes.iter()) {
+                            let perturb = rng.sample::<f64, _>(StandardNormal) * scale;
+                            *value += perturb;
                         }
+                        bounds.clamp(&mut proposal);
+                        proposal
                     };
                     candidates.push(candidate);
                 }
@@ -119,18 +115,15 @@ impl ProposalEngine {
                     bounds.clamp(&mut position);
                     position
                 } else {
-                    match live_points.choose(rng) {
-                        Some(anchor) => {
-                            let mut proposal = anchor.position.clone();
-                            for (value, scale) in proposal.iter_mut().zip(step_sizes.iter()) {
-                                let perturb = rng.sample::<f64, _>(StandardNormal) * scale;
-                                *value += perturb;
-                            }
-                            bounds.clamp(&mut proposal);
-                            proposal
-                        }
-                        None => continue,
+                    let anchor_idx = rng.random_range(0..live_points.len());
+                    let anchor = &live_points[anchor_idx];
+                    let mut proposal = anchor.position.clone();
+                    for (value, scale) in proposal.iter_mut().zip(step_sizes.iter()) {
+                        let perturb = rng.sample::<f64, _>(StandardNormal) * scale;
+                        *value += perturb;
                     }
+                    bounds.clamp(&mut proposal);
+                    proposal
                 };
 
                 let log_likelihood = -evaluate(problem, &candidate);

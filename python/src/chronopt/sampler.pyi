@@ -4,7 +4,6 @@
 import builtins
 import datetime
 import typing
-
 from chronopt._chronopt import Problem
 
 @typing.final
@@ -24,7 +23,7 @@ class DynamicNestedSampler:
     def run(
         self,
         problem: Problem,
-        initial: typing.Sequence[builtins.float] | None = None,
+        initial: typing.Optional[typing.Sequence[builtins.float]] = None,
     ) -> NestedSamples: ...
 
 @typing.final

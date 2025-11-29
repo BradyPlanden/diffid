@@ -85,9 +85,7 @@ impl DynamicNestedSampler {
 
         let mut rng = match self.seed {
             Some(seed) => StdRng::seed_from_u64(seed),
-            None => {
-                StdRng::from_rng(rand::thread_rng()).unwrap_or_else(|_| StdRng::seed_from_u64(0))
-            }
+            None => StdRng::from_rng(&mut rand::rng()),
         };
 
         let parallel_enabled = problem

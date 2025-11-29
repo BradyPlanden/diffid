@@ -21,7 +21,7 @@ fn dynamic_nested_sampler_integration() {
         .with_live_points(32)
         .with_expansion_factor(0.2)
         .with_termination_tolerance(1e-4)
-        .with_seed(1337);
+        .with_seed(37);
 
     let result = sampler.run_nested(&problem, vec![0.5]);
 

@@ -1,6 +1,7 @@
 use crate::problem::Problem;
 use rand::prelude::*;
 use rand::rngs::StdRng;
+use rand::SeedableRng;
 use rand_distr::StandardNormal;
 use std::time::{Duration, Instant};
 
@@ -125,12 +126,10 @@ impl Sampler for MetropolisHastings {
 
         let mut seed_rng: StdRng = match self.seed {
             Some(seed) => StdRng::seed_from_u64(seed),
-            None => {
-                StdRng::from_rng(rand::thread_rng()).unwrap_or_else(|_| StdRng::seed_from_u64(0))
-            }
+            None => StdRng::from_os_rng(),
         };
 
-        let seeds: Vec<u64> = (0..num_chains).map(|_| seed_rng.gen()).collect();
+        let seeds: Vec<u64> = (0..num_chains).map(|_| seed_rng.random()).collect();
         let initial_state = start.clone();
         let problem_parallel = problem
             .get_config("parallel")
@@ -202,7 +201,7 @@ fn run_chain(
             if acceptance_log >= 0.0 {
                 true
             } else {
-                let u: f64 = rng.gen();
+                let u: f64 = rng.random();
                 u < acceptance_log.exp()
             }
         };
@@ -286,7 +285,7 @@ fn run_chains_batched(
                 if acceptance_log >= 0.0 {
                     true
                 } else {
-                    let u: f64 = rngs[idx].gen();
+                    let u: f64 = rngs[idx].random();
                     u < acceptance_log.exp()
                 }
             };

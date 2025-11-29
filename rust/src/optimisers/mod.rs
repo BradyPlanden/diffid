@@ -2,6 +2,7 @@ use crate::problem::Problem;
 use nalgebra::{DMatrix, DVector};
 use rand::prelude::*;
 use rand::rngs::StdRng;
+use rand::SeedableRng;
 use rand_distr::StandardNormal;
 use std::cmp::Ordering;
 use std::fmt;
@@ -854,7 +855,7 @@ impl CMAES {
 
         let mut rng: StdRng = match self.seed {
             Some(seed) => StdRng::seed_from_u64(seed),
-            None => StdRng::from_entropy(),
+            None => StdRng::from_os_rng(),
         };
 
         let lambda = self.population_size(dim);

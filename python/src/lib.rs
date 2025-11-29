@@ -291,13 +291,15 @@ fn optimiser_type_info() -> TypeInfo {
         | TypeInfo::unqualified("chronopt._chronopt.Adam")
 }
 
-impl<'py> FromPyObject<'py> for Optimiser {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        if let Ok(nm) = ob.extract::<PyRef<PyNelderMead>>() {
+impl FromPyObject<'_, '_> for Optimiser {
+    type Error = PyErr;
+
+    fn extract(obj: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
+        if let Ok(nm) = obj.extract::<PyRef<PyNelderMead>>() {
             Ok(Optimiser::NelderMead((*nm).inner.clone()))
-        } else if let Ok(cma) = ob.extract::<PyRef<PyCMAES>>() {
+        } else if let Ok(cma) = obj.extract::<PyRef<PyCMAES>>() {
             Ok(Optimiser::Cmaes((*cma).inner.clone()))
-        } else if let Ok(adam) = ob.extract::<PyRef<PyAdam>>() {
+        } else if let Ok(adam) = obj.extract::<PyRef<PyAdam>>() {
             Ok(Optimiser::Adam((*adam).inner.clone()))
         } else {
             Err(PyTypeError::new_err(

@@ -110,7 +110,7 @@ impl Bounds {
         let scale = expansion_factor.abs().max(0.05);
         for (&lo, &hi) in self.lower.iter().zip(self.upper.iter()) {
             if lo.is_finite() && hi.is_finite() && lo < hi {
-                let base = rng.gen_range(lo..=hi);
+                let base = rng.random_range(lo..=hi);
                 let width = hi - lo;
                 let sigma = (width * scale).max(1e-6);
                 let draw = rng.sample::<f64, _>(StandardNormal);

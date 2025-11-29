@@ -104,7 +104,7 @@ jobs:
           uv pip install dist/*.whl --reinstall
           
           # Install dev dependencies from pyproject.toml using pip interface
-          uv pip install --group dev
+          uv pip install --group dev --group examples
           
           # Run tests directly
           pytest -v

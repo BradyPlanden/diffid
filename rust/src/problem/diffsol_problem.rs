@@ -298,8 +298,12 @@ impl DiffsolProblem {
         self.config.parallel
     }
 
-    fn build_residuals(&self, solution: &DMatrix<f64>) -> Result<Vec<f64>, String> {
-        let (sol_rows, sol_cols) = solution.shape();
+    fn build_residuals<M>(&self, solution: &M) -> Result<Vec<f64>, String>
+    where
+        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
+    {
+        let sol_rows = solution.nrows();
+        let sol_cols = solution.ncols();
         let (data_rows, data_cols) = self.data.shape();
 
         let (transpose_data, expected_rows, expected_cols) =
@@ -323,13 +327,20 @@ impl DiffsolProblem {
                 }
             }
         } else {
-            residuals.extend(solution.iter().zip(self.data.iter()).map(|(s, d)| s - d));
+            for row in 0..expected_rows {
+                for col in 0..expected_cols {
+                    residuals.push(solution[(row, col)] - self.data[(row, col)]);
+                }
+            }
         }
 
         Ok(residuals)
     }
 
-    pub fn calculate_cost(&self, solution: &DMatrix<f64>) -> Result<f64, String> {
+    fn calculate_cost<M>(&self, solution: &M) -> Result<f64, String>
+    where
+        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
+    {
         let residuals = self.build_residuals(solution)?;
         let total_cost = self
             .cost_metric
@@ -339,18 +350,62 @@ impl DiffsolProblem {
         Ok(total_cost)
     }
 
-    pub fn calculate_cost_with_grad(
+    fn calculate_cost_with_grad<M>(
         &self,
-        solution: &DMatrix<f64>,
-        sensitivities: &[DMatrix<f64>],
-    ) -> Result<(f64, Vec<f64>), String> {
+        solution: &M,
+        sensitivities: &[M],
+    ) -> Result<(f64, Vec<f64>), String>
+    where
+        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
+    {
         let residuals = self.build_residuals(solution)?;
+
+        // No conversion needed - call generic method directly
+        self.cost_metric
+            .iter()
+            .try_fold((0.0, Vec::new()), |(acc_cost, acc_grad), metric| {
+                let (cost, grad) = metric
+                    .evaluate_with_sensitivities_generic(&residuals, sensitivities)
+                    .ok_or_else(|| {
+                        format!(
+                            "Cost metric '{}' does not support gradient evaluation",
+                            metric.name()
+                        )
+                    })?;
+
+                let new_grad = if acc_grad.is_empty() {
+                    grad
+                } else {
+                    acc_grad
+                        .iter()
+                        .zip(grad.iter())
+                        .map(|(a, b)| a + b)
+                        .collect()
+                };
+
+                Ok((acc_cost + cost, new_grad))
+            })
+    }
+
+
+    fn calculate_cost_with_grad_from_generic_matrix<M>(
+        &self,
+        solution: &M,
+        sensitivities: &[M],
+    ) -> Result<(f64, Vec<f64>), String>
+    where
+        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
+    {
+        let residuals = self.build_residuals(solution)?;
+
+        let sensitivities_dm: Vec<DMatrix<f64>> =
+            sensitivities.iter().map(Self::matrix_to_dmatrix).collect();
 
         self.cost_metric
             .iter()
             .try_fold((0.0, Vec::new()), |(acc_cost, acc_grad), metric| {
                 let (cost, grad) = metric
-                    .evaluate_with_sensitivities(&residuals, sensitivities)
+                    .evaluate_with_sensitivities(&residuals, &sensitivities_dm)
                     .ok_or_else(|| {
                         format!(
                             "Cost metric '{}' does not support gradient evaluation",
@@ -373,59 +428,121 @@ impl DiffsolProblem {
     }
 
     pub fn evaluate(&self, params: &[f64]) -> Result<f64, String> {
-        match self.simulate(params, false)? {
-            SimulationResult::Solution(solution) => self.calculate_cost(&solution),
-            SimulationResult::SolutionWithSensitivities(solution, sensitivities) => {
-                let (cost, _gradient) = self.calculate_cost_with_grad(&solution, &sensitivities)?;
-                Ok(cost)
+        self.with_thread_local_problem(|problem| match problem {
+            BackendProblem::Dense(p) => {
+                let ctx = *p.eqn().context();
+                p.eqn_mut().set_params(&DenseVector::from_vec(params.to_vec(), ctx));
+
+                let mut solver = p.bdf::<DenseSolver>()
+                    .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
+
+                catch_unwind(AssertUnwindSafe(|| solver.solve_dense(&self.t_span)))
+                    .ok()
+                    .and_then(|r| r.ok())
+                    .ok_or_else(|| "Diffsol solve failed".to_string())
+                    .and_then(|solution| self.calculate_cost(&solution))
             }
-            SimulationResult::Penalty => Err("Diffsol solve failed".to_string()),
-        }
+            BackendProblem::Sparse(p) => {
+                let ctx = *p.eqn().context();
+                p.eqn_mut().set_params(&SparseVector::from_vec(params.to_vec(), ctx));
+
+                let mut solver = p.bdf::<SparseSolver>()
+                    .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
+
+                catch_unwind(AssertUnwindSafe(|| solver.solve_dense(&self.t_span)))
+                    .ok()
+                    .and_then(|r| r.ok())
+                    .ok_or_else(|| "Diffsol solve failed".to_string())
+                    .and_then(|solution| self.calculate_cost(&solution))
+            }
+        })
     }
 
     pub fn evaluate_with_gradient(&self, params: &[f64]) -> Result<(f64, Vec<f64>), String> {
-        match self.simulate(params, true)? {
-            SimulationResult::SolutionWithSensitivities(solution, sensitivities) => {
-                self.calculate_cost_with_grad(&solution, &sensitivities)
+        self.with_thread_local_problem(|problem| match problem {
+            BackendProblem::Dense(p) => {
+                let ctx = *p.eqn().context();
+                p.eqn_mut().set_params(&DenseVector::from_vec(params.to_vec(), ctx));
+
+                let mut solver = p.bdf_sens::<DenseSolver>()
+                    .map_err(|e| format!("Failed to create BDF sensitivities solver: {}", e))?;
+
+                catch_unwind(AssertUnwindSafe(|| solver.solve_dense_sensitivities(&self.t_span)))
+                    .ok()
+                    .and_then(|r| r.ok())
+                    .ok_or_else(|| "Diffsol solve failed".to_string())
+                    .and_then(|(solution, sensitivities)| {
+                        self.calculate_cost_with_grad(&solution, &sensitivities)
+                    })
             }
-            SimulationResult::Solution(solution) => {
-                let cost = self.calculate_cost(&solution)?;
-                Ok((cost, Vec::new()))
+            BackendProblem::Sparse(p) => {
+                let ctx = *p.eqn().context();
+                p.eqn_mut().set_params(&SparseVector::from_vec(params.to_vec(), ctx));
+
+                let mut solver = p.bdf_sens::<SparseSolver>()
+                    .map_err(|e| format!("Failed to create BDF sensitivities solver: {}", e))?;
+
+                catch_unwind(AssertUnwindSafe(|| solver.solve_dense_sensitivities(&self.t_span)))
+                    .ok()
+                    .and_then(|r| r.ok())
+                    .ok_or_else(|| "Diffsol solve failed".to_string())
+                    .and_then(|(solution, sensitivities)| {
+                        self.calculate_cost_with_grad(&solution, &sensitivities)
+                    })
             }
-            SimulationResult::Penalty => Err("Diffsol solve failed".to_string()),
-        }
+        })
     }
 
     pub fn evaluate_population(&self, params: &[&[f64]]) -> Vec<Result<f64, String>> {
-        let simulate_results = self.simulate_population(params);
+        let eval_fn = |param: &&[f64]| {
+            self.with_thread_local_problem(|problem| {
+                self.evaluate_single_with_penalty(problem, param)
+            })
+        };
 
         if self.config.parallel {
-            simulate_results
-                .into_par_iter()
-                .map(|result| match result {
-                    Ok(SimulationResult::Solution(solution)) => self.calculate_cost(&solution),
-                    Ok(SimulationResult::SolutionWithSensitivities(solution, sensitivities)) => {
-                        self.calculate_cost_with_grad(&solution, &sensitivities)
-                            .map(|(cost, _gradient)| cost)
-                    }
-                    Ok(SimulationResult::Penalty) => Ok(DiffsolProblem::failed_solve_penalty()),
-                    Err(err) => Err(err),
-                })
-                .collect()
+            params.par_iter().map(eval_fn).collect()
         } else {
-            simulate_results
-                .into_iter()
-                .map(|result| match result {
-                    Ok(SimulationResult::Solution(solution)) => self.calculate_cost(&solution),
-                    Ok(SimulationResult::SolutionWithSensitivities(solution, sensitivities)) => {
-                        self.calculate_cost_with_grad(&solution, &sensitivities)
-                            .map(|(cost, _gradient)| cost)
-                    }
-                    Ok(SimulationResult::Penalty) => Ok(DiffsolProblem::failed_solve_penalty()),
-                    Err(err) => Err(err),
-                })
-                .collect()
+            params.iter().map(eval_fn).collect()
         }
+    }
+
+    // Helper to avoid code duplication in evaluate_population
+    fn evaluate_single_with_penalty(
+        &self,
+        problem: &mut BackendProblem,
+        params: &[f64],
+    ) -> Result<f64, String> {
+        let result = match problem {
+            BackendProblem::Dense(p) => {
+                let ctx = *p.eqn().context();
+                p.eqn_mut().set_params(&DenseVector::from_vec(params.to_vec(), ctx));
+
+                p.bdf::<DenseSolver>()
+                    .ok()
+                    .and_then(|mut solver| {
+                        catch_unwind(AssertUnwindSafe(|| solver.solve_dense(&self.t_span)))
+                            .ok()
+                            .and_then(|r| r.ok())
+                    })
+                    .and_then(|solution| self.calculate_cost(&solution).ok())
+            }
+            BackendProblem::Sparse(p) => {
+                let ctx = *p.eqn().context();
+                p.eqn_mut().set_params(&SparseVector::from_vec(params.to_vec(), ctx));
+
+                p.bdf::<SparseSolver>()
+                    .ok()
+                    .and_then(|mut solver| {
+                        catch_unwind(AssertUnwindSafe(|| solver.solve_dense(&self.t_span)))
+                            .ok()
+                            .and_then(|r| r.ok())
+                    })
+                    .and_then(|solution| self.calculate_cost(&solution).ok())
+            }
+        };
+
+        Ok(result.unwrap_or_else(|| Self::failed_solve_penalty()))
     }
 
     fn matrix_to_dmatrix<M>(matrix: &M) -> DMatrix<f64>

@@ -1,6 +1,4 @@
-use nalgebra::DMatrix;
-use diffsol::{Matrix, MatrixCommon, NalgebraMat};
-use std::ops::Index;
+use diffsol::{MatrixCommon, NalgebraMat};
 use std::f64::consts::PI;
 
 /// Trait for cost metrics applied to residuals between simulated and observed data.
@@ -8,19 +6,11 @@ pub trait CostMetric: Send + Sync {
     fn evaluate(&self, residuals: &[f64]) -> f64;
     fn name(&self) -> &'static str;
 
-    /// Generic method that works with any matrix type.
-    ///
-    /// Implementations that support analytical gradients should override this and
-    /// return `Some((cost, gradient))`. The default implementation returns
-    /// `None`, indicating that gradient computation is not available.
-    fn evaluate_with_sensitivities<M>(
+    fn evaluate_with_sensitivities(
         &self,
         _residuals: &[f64],
-        _sensitivities: &[M],
-    ) -> Option<(f64, Vec<f64>)>
-    where
-        M: Matrix + MatrixCommon + Index<(usize, usize), Output=f64>,
-    {
+        _sensitivities: &[NalgebraMat<f64>],
+    ) -> Option<(f64, Vec<f64>)> {
         None
     }
 }
@@ -53,14 +43,11 @@ impl CostMetric for SumSquaredError {
         "sse"
     }
 
-    fn evaluate_with_sensitivities<M>(
+    fn evaluate_with_sensitivities(
         &self,
         residuals: &[f64],
-        sensitivities: &[M],
-    ) -> Option<(f64, Vec<f64>)>
-    where
-        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
-    {
+        sensitivities: &[NalgebraMat<f64>],
+    ) -> Option<(f64, Vec<f64>)> {
         let cost = self.evaluate(residuals);
 
         if sensitivities.is_empty() {
@@ -128,14 +115,11 @@ impl CostMetric for RootMeanSquaredError {
         "rmse"
     }
 
-    fn evaluate_with_sensitivities<M>(
+    fn evaluate_with_sensitivities(
         &self,
         residuals: &[f64],
-        sensitivities: &[M],
-    ) -> Option<(f64, Vec<f64>)>
-    where
-        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
-    {
+        sensitivities: &[NalgebraMat<f64>],
+    ) -> Option<(f64, Vec<f64>)> {
         if residuals.is_empty() {
             return Some((0.0, Vec::new()));
         }
@@ -250,14 +234,11 @@ impl CostMetric for GaussianNll {
         "gaussian_nll"
     }
 
-    fn evaluate_with_sensitivities<M>(
+    fn evaluate_with_sensitivities(
         &self,
         residuals: &[f64],
-        sensitivities: &[M],
-    ) -> Option<(f64, Vec<f64>)>
-    where
-        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
-    {
+        sensitivities: &[NalgebraMat<f64>],
+    ) -> Option<(f64, Vec<f64>)> {
         if residuals.is_empty() {
             return Some((0.0, Vec::new()));
         }
@@ -293,8 +274,8 @@ impl CostMetric for GaussianNll {
             grad_nll[param_idx] = dot;
         }
 
-        // Gradient: d(GaussianNll)/dp = d(GaussianNll)/dy * dy/dp
-        // Gradient: d(GaussianNll)/dp = residual/variance * sensitivities
+        // Gradient: d(NLL)/dp = d(NLL)/dy * dy/dp
+        // Gradient: d(NLL)/dp = residual/variance * sensitivities
         let gradient: Vec<f64> = grad_nll
             .into_iter()
             .map(|g| g / self.variance * self.weight)

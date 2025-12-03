@@ -227,32 +227,9 @@ impl DiffsolProblem {
                     _ => Ok(SimulationResult::Penalty),
                 }
             }
-            BackendProblem::Sparse(problem) => {
-                let ctx = *problem.eqn().context();
-                let params_vec = SparseVector::from_vec(params.to_vec(), ctx);
-                problem.eqn_mut().set_params(&params_vec);
-
-                let mut solver = problem
-                    .bdf_sens::<SparseSolver>()
-                    .map_err(|e| format!("Failed to create BDF sensitivities solver: {}", e))?;
-
-                let solve_result = catch_unwind(AssertUnwindSafe(|| {
-                    solver.solve_dense_sensitivities(&self.t_span)
-                }));
-
-                match solve_result {
-                    Ok(Ok((solution, sensitivities))) => {
-                        let solution_dm = Self::matrix_to_dmatrix(&solution);
-                        let sensitivities_dm =
-                            sensitivities.iter().map(Self::matrix_to_dmatrix).collect();
-                        Ok(SimulationResult::SolutionWithSensitivities(
-                            solution_dm,
-                            sensitivities_dm,
-                        ))
-                    }
-                    _ => Ok(SimulationResult::Penalty),
-                }
-            }
+            BackendProblem::Sparse(_problem) => Err(
+                "Sparse diffsol backend does not currently support gradient evaluation".to_string(),
+            ),
         }
     }
 
@@ -350,62 +327,18 @@ impl DiffsolProblem {
         Ok(total_cost)
     }
 
-    fn calculate_cost_with_grad<M>(
+    fn calculate_cost_with_grad(
         &self,
-        solution: &M,
-        sensitivities: &[M],
-    ) -> Result<(f64, Vec<f64>), String>
-    where
-        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
-    {
+        solution: &NalgebraMat<f64>,
+        sensitivities: &[NalgebraMat<f64>],
+    ) -> Result<(f64, Vec<f64>), String> {
         let residuals = self.build_residuals(solution)?;
-
-        // No conversion needed - call generic method directly
-        self.cost_metric
-            .iter()
-            .try_fold((0.0, Vec::new()), |(acc_cost, acc_grad), metric| {
-                let (cost, grad) = metric
-                    .evaluate_with_sensitivities_generic(&residuals, sensitivities)
-                    .ok_or_else(|| {
-                        format!(
-                            "Cost metric '{}' does not support gradient evaluation",
-                            metric.name()
-                        )
-                    })?;
-
-                let new_grad = if acc_grad.is_empty() {
-                    grad
-                } else {
-                    acc_grad
-                        .iter()
-                        .zip(grad.iter())
-                        .map(|(a, b)| a + b)
-                        .collect()
-                };
-
-                Ok((acc_cost + cost, new_grad))
-            })
-    }
-
-
-    fn calculate_cost_with_grad_from_generic_matrix<M>(
-        &self,
-        solution: &M,
-        sensitivities: &[M],
-    ) -> Result<(f64, Vec<f64>), String>
-    where
-        M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
-    {
-        let residuals = self.build_residuals(solution)?;
-
-        let sensitivities_dm: Vec<DMatrix<f64>> =
-            sensitivities.iter().map(Self::matrix_to_dmatrix).collect();
 
         self.cost_metric
             .iter()
             .try_fold((0.0, Vec::new()), |(acc_cost, acc_grad), metric| {
                 let (cost, grad) = metric
-                    .evaluate_with_sensitivities(&residuals, &sensitivities_dm)
+                    .evaluate_with_sensitivities(&residuals, sensitivities)
                     .ok_or_else(|| {
                         format!(
                             "Cost metric '{}' does not support gradient evaluation",
@@ -431,9 +364,11 @@ impl DiffsolProblem {
         self.with_thread_local_problem(|problem| match problem {
             BackendProblem::Dense(p) => {
                 let ctx = *p.eqn().context();
-                p.eqn_mut().set_params(&DenseVector::from_vec(params.to_vec(), ctx));
+                p.eqn_mut()
+                    .set_params(&DenseVector::from_vec(params.to_vec(), ctx));
 
-                let mut solver = p.bdf::<DenseSolver>()
+                let mut solver = p
+                    .bdf::<DenseSolver>()
                     .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
 
                 catch_unwind(AssertUnwindSafe(|| solver.solve_dense(&self.t_span)))
@@ -444,9 +379,11 @@ impl DiffsolProblem {
             }
             BackendProblem::Sparse(p) => {
                 let ctx = *p.eqn().context();
-                p.eqn_mut().set_params(&SparseVector::from_vec(params.to_vec(), ctx));
+                p.eqn_mut()
+                    .set_params(&SparseVector::from_vec(params.to_vec(), ctx));
 
-                let mut solver = p.bdf::<SparseSolver>()
+                let mut solver = p
+                    .bdf::<SparseSolver>()
                     .map_err(|e| format!("Failed to create BDF solver: {}", e))?;
 
                 catch_unwind(AssertUnwindSafe(|| solver.solve_dense(&self.t_span)))
@@ -462,34 +399,26 @@ impl DiffsolProblem {
         self.with_thread_local_problem(|problem| match problem {
             BackendProblem::Dense(p) => {
                 let ctx = *p.eqn().context();
-                p.eqn_mut().set_params(&DenseVector::from_vec(params.to_vec(), ctx));
+                p.eqn_mut()
+                    .set_params(&DenseVector::from_vec(params.to_vec(), ctx));
 
-                let mut solver = p.bdf_sens::<DenseSolver>()
+                let mut solver = p
+                    .bdf_sens::<DenseSolver>()
                     .map_err(|e| format!("Failed to create BDF sensitivities solver: {}", e))?;
 
-                catch_unwind(AssertUnwindSafe(|| solver.solve_dense_sensitivities(&self.t_span)))
-                    .ok()
-                    .and_then(|r| r.ok())
-                    .ok_or_else(|| "Diffsol solve failed".to_string())
-                    .and_then(|(solution, sensitivities)| {
-                        self.calculate_cost_with_grad(&solution, &sensitivities)
-                    })
+                catch_unwind(AssertUnwindSafe(|| {
+                    solver.solve_dense_sensitivities(&self.t_span)
+                }))
+                .ok()
+                .and_then(|r| r.ok())
+                .ok_or_else(|| "Diffsol solve failed".to_string())
+                .and_then(|(solution, sensitivities)| {
+                    self.calculate_cost_with_grad(&solution, &sensitivities)
+                })
             }
-            BackendProblem::Sparse(p) => {
-                let ctx = *p.eqn().context();
-                p.eqn_mut().set_params(&SparseVector::from_vec(params.to_vec(), ctx));
-
-                let mut solver = p.bdf_sens::<SparseSolver>()
-                    .map_err(|e| format!("Failed to create BDF sensitivities solver: {}", e))?;
-
-                catch_unwind(AssertUnwindSafe(|| solver.solve_dense_sensitivities(&self.t_span)))
-                    .ok()
-                    .and_then(|r| r.ok())
-                    .ok_or_else(|| "Diffsol solve failed".to_string())
-                    .and_then(|(solution, sensitivities)| {
-                        self.calculate_cost_with_grad(&solution, &sensitivities)
-                    })
-            }
+            BackendProblem::Sparse(_p) => Err(
+                "Sparse diffsol backend does not currently support gradient evaluation".to_string(),
+            ),
         })
     }
 
@@ -516,7 +445,8 @@ impl DiffsolProblem {
         let result = match problem {
             BackendProblem::Dense(p) => {
                 let ctx = *p.eqn().context();
-                p.eqn_mut().set_params(&DenseVector::from_vec(params.to_vec(), ctx));
+                p.eqn_mut()
+                    .set_params(&DenseVector::from_vec(params.to_vec(), ctx));
 
                 p.bdf::<DenseSolver>()
                     .ok()
@@ -529,7 +459,8 @@ impl DiffsolProblem {
             }
             BackendProblem::Sparse(p) => {
                 let ctx = *p.eqn().context();
-                p.eqn_mut().set_params(&SparseVector::from_vec(params.to_vec(), ctx));
+                p.eqn_mut()
+                    .set_params(&SparseVector::from_vec(params.to_vec(), ctx));
 
                 p.bdf::<SparseSolver>()
                     .ok()
@@ -542,7 +473,7 @@ impl DiffsolProblem {
             }
         };
 
-        Ok(result.unwrap_or_else(|| Self::failed_solve_penalty()))
+        Ok(result.unwrap_or_else(Self::failed_solve_penalty))
     }
 
     fn matrix_to_dmatrix<M>(matrix: &M) -> DMatrix<f64>
@@ -739,8 +670,9 @@ F_i { (r * y) * (1 - (y / k)) }
     fn test_gradient_with_empty_sensitivities() {
         let metric = SumSquaredError::default();
         let residuals = vec![1.0, 2.0];
+        let sensitivities: Vec<NalgebraMat<f64>> = Vec::new();
         let (cost, grad) = metric
-            .evaluate_with_sensitivities(&residuals, &[])
+            .evaluate_with_sensitivities(&residuals, &sensitivities)
             .expect("SumSquaredError should support gradient evaluation");
         assert_eq!(cost, 5.0);
         assert!(grad.is_empty());
@@ -750,7 +682,10 @@ F_i { (r * y) * (1 - (y / k)) }
     fn test_gradient_dimensions_mismatch() {
         let metric = SumSquaredError::default();
         let residuals = vec![1.0, 2.0, 3.0];
-        let wrong_size_sens = DMatrix::from_vec(2, 1, vec![0.5, 0.5]);
+        // Build a 2x1 sensitivity matrix (2 elements) which mismatches the 3 residuals
+        let triplets = vec![(0, 0, 0.5), (1, 0, 0.5)];
+        let wrong_size_sens: NalgebraMat<f64> =
+            Matrix::try_from_triplets(2, 1, triplets, Default::default()).unwrap();
 
         let result = std::panic::catch_unwind(|| {
             metric
@@ -767,11 +702,10 @@ F_i { (r * y) * (1 - (y / k)) }
         let residuals = vec![1.0, -2.0, 0.5];
 
         // Gradient should be residual/variance
-        let sensitivities: Vec<DMatrix<f64>> = (0..3)
+        let sensitivities: Vec<NalgebraMat<f64>> = (0..3)
             .map(|param_idx| {
-                let mut m = DMatrix::zeros(3, 1);
-                m[(param_idx, 0)] = 1.0;
-                m
+                let triplets = vec![(param_idx, 0, 1.0)];
+                Matrix::try_from_triplets(3, 1, triplets, Default::default()).unwrap()
             })
             .collect();
 
@@ -841,19 +775,9 @@ F_i { (r * y) * (1 - (y / k)) }
         let problem = build_logistic_problem(DiffsolBackend::Dense);
         let params = [1.1_f64, 0.9_f64];
 
-        let result = problem
-            .simulate(&params, true)
-            .expect("simulation with sensitivities failed");
-
-        let (solution, sensitivities) = match result {
-            SimulationResult::SolutionWithSensitivities(solution, sensitivities) => {
-                (solution, sensitivities)
-            }
-            _ => panic!("expected solution with sensitivities"),
-        };
-
+        // Use the public API to obtain the analytical gradient
         let (cost, grad) = problem
-            .calculate_cost_with_grad(&solution, &sensitivities)
+            .evaluate_with_gradient(&params)
             .expect("cost with gradient calculation failed");
 
         assert!(cost.is_finite());
@@ -861,19 +785,13 @@ F_i { (r * y) * (1 - (y / k)) }
 
         let eps = 1e-5_f64;
 
+        // Compare against finite-difference approximation of problem.evaluate
         for i in 0..params.len() {
             let mut params_fd = params;
             let fd = finite_difference(&mut params_fd, i, eps, |p| {
-                let result = problem
-                    .simulate(p, false)
-                    .expect("finite-difference simulation failed");
-                let solution = match result {
-                    SimulationResult::Solution(solution) => solution,
-                    _ => panic!("expected solution without sensitivities"),
-                };
                 problem
-                    .calculate_cost(&solution)
-                    .expect("cost calculation failed")
+                    .evaluate(p)
+                    .expect("finite-difference evaluation failed")
             });
 
             let g = grad[i];

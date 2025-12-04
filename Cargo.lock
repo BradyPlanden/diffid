@@ -270,7 +270,7 @@ dependencies = [
 
 [[package]]
 name = "chronopt"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "diffsol",
@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "chronopt-py"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chronopt",
  "clap 4.5.53",

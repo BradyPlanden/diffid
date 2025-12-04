@@ -43,11 +43,17 @@ dev = [
     "scipy>=1.16.2",
 ]
 examples = [
-    "diffrax>=0.7.0",
+    # macOS x86_64 + Python < 3.14: diffrax with pinned jax/jaxlib
+    "diffrax>=0.7.0; python_version < '3.14' and sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "jax==0.4.38; python_version < '3.14' and sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "jaxlib==0.4.38; python_version < '3.14' and sys_platform == 'darwin' and platform_machine == 'x86_64'",
+
+    # All other platforms + Python <= 3.14: diffrax only (jax/jaxlib as transitive deps)
+    "diffrax>=0.7.0; python_version <= '3.14' and (sys_platform != 'darwin' or platform_machine != 'x86_64')",
+
+    # Non-JAX dependencies
     "matplotlib>=3.8",
     "diffeqpy",
-    "jax==0.4.38; sys_platform == 'darwin' and platform_machine == 'x86_64'",
-    "jaxlib==0.4.38; sys_platform == 'darwin' and platform_machine == 'x86_64'",
 ]
 
 [tool.ruff]

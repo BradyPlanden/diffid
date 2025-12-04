@@ -3,7 +3,7 @@ import pathlib
 import subprocess
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 
@@ -25,20 +25,25 @@ class ExampleConfig:
     skip_condition: Callable[[], bool] | None = None
     skip_reason: str = ""
     timeout: float = 120.0
-    required_import: str | None = None
+    required_imports: tuple[str, ...] = field(default_factory=tuple)
+
+    # Backwards compatibility alias
+    @property
+    def required_import(self) -> str | None:
+        return self.required_imports[0] if self.required_imports else None
+
+
+# Common import groups for reuse
+JAX_IMPORTS = ("jax", "jaxlib")
+DIFFRAX_IMPORTS = ("jax", "jaxlib", "diffrax")
 
 
 # Define special handling for specific example patterns
 EXAMPLE_CONFIGS: list[ExampleConfig] = [
     ExampleConfig(
-        pattern="diffeqpy",
-        skip_condition=is_ci,
-        skip_reason="Skipping Julia/diffeqpy example in CI (Julia installation too heavy)",
-    ),
-    ExampleConfig(
         pattern="predator_prey",
-        timeout=240.0,
-        required_import="diffrax",
+        skip_condition=is_ci,
+        skip_reason="Skipping predator_prey sub-examples in CI",
     ),
     ExampleConfig(
         pattern="bouncy_ball",
@@ -57,6 +62,15 @@ def _get_config_for_path(relative_path: pathlib.Path) -> ExampleConfig | None:
     return None
 
 
+def _check_required_imports(config: ExampleConfig, relative_path: pathlib.Path) -> None:
+    """Check all required imports, skipping test if any are missing."""
+    for module in config.required_imports:
+        pytest.importorskip(
+            module,
+            reason=f"'{module}' not installed (required for {relative_path})",
+        )
+
+
 def _run_example(script: pathlib.Path, timeout: float = 120.0) -> None:
     """Run an example script and fail the test if it returns non-zero."""
     result = subprocess.run(
@@ -65,11 +79,10 @@ def _run_example(script: pathlib.Path, timeout: float = 120.0) -> None:
         capture_output=True,
         text=True,
         timeout=timeout,
-        cwd=script.parent,  # Run from script's directory for relative imports
+        cwd=script.parent,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
     )
     if result.returncode != 0:
-        # Truncate very long output
         max_output = 2000
         stdout = result.stdout[:max_output] + (
             "..." if len(result.stdout) > max_output else ""
@@ -109,12 +122,8 @@ def test_example_script(relative_path: pathlib.Path) -> None:
     config = _get_config_for_path(relative_path)
 
     if config:
-        # Check for required imports
-        if config.required_import:
-            pytest.importorskip(
-                config.required_import,
-                reason=f"{config.required_import} not installed for {relative_path}",
-            )
+        # Check for required imports (skip if any are missing)
+        _check_required_imports(config, relative_path)
 
         # Check skip conditions
         if config.skip_condition and config.skip_condition():

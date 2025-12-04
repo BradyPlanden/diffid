@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/github/license/bradyplanden/chronopt?color=blue)](https://github.com/bradyplanden/chronopt/blob/main/LICENSE)
 [![Releases](https://img.shields.io/github/v/release/bradyplanden/chronopt?color=gold)](https://github.com/bradyplanden/chronopt/releases)
 
-**chron**os-**opt**imum is a Rust-first toolkit for time-series inference and optimisation with ergonomic Python bindings. It couples high-performance solvers with builder APIs for modelling objective functions and differential systems.
+**chron**os-**opt**imum is a Rust-first toolkit for time-series inference and optimisation with ergonomic Python bindings. It couples high-performance solvers with a highly customisable builder API for identification and optimisation of differential systems.
 
 </div>
 
@@ -14,8 +14,8 @@
 - Modular components with informative diagnostics.
 - Batteries-included experience spanning optimisation, sampling, and plotting.
 
-## Key capabilities
-- Deterministic optimisers (Nelder-Mead, CMA-ES) with configurable stopping criteria.
+## Core capabilities
+- Gradient-free (Nelder-Mead, CMA-ES) and gradient-based (Adam) optimisers with configurable convergence criteria.
 - Paralleled differential equation fitting via [DiffSL](https://github.com/martinjrobins/diffsl) with dense or sparse [Diffsol](https://github.com/martinjrobins/diffsol) backends.
 - Customisable likelihood/cost metrics and Monte-Carlo sampling for posterior exploration.
 - Flexible integration with state-of-the-art differential solvers, such as [Diffrax](https://github.com/patrick-kidger/diffrax), [DifferentialEquations.jl](https://github.com/SciML/diffeqpy)

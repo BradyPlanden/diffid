@@ -1,4 +1,4 @@
-use super::{DiffsolBackend, DiffsolConfig};
+use super::{DiffsolBackend, DiffsolConfig, Objective};
 use crate::cost::CostMetric;
 use diffsol::error::DiffsolError;
 use diffsol::ode_solver::sensitivities::SensitivitiesOdeSolverMethod;
@@ -9,13 +9,10 @@ use diffsol::{
 };
 use nalgebra::DMatrix;
 
+use crate::problem::ProblemError;
 use rayon::prelude::*;
-use std::cell::RefCell;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 use std::ops::Index;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 #[cfg(feature = "cranelift-backend")]
@@ -25,199 +22,120 @@ type CG = diffsol::LlvmModule;
 
 type DenseEqn = DiffSl<NalgebraMat<f64>, CG>;
 type SparseEqn = DiffSl<FaerSparseMat<f64>, CG>;
-type DenseProblem = OdeSolverProblem<DenseEqn>;
-type SparseProblem = OdeSolverProblem<SparseEqn>;
+
+pub enum DiffsolSimulator {
+    Dense(OdeSolverProblem<DenseEqn>),
+    Sparse(OdeSolverProblem<SparseEqn>),
+}
 
 type DenseVector = NalgebraVec<f64>;
 type SparseVector = FaerVec<f64>;
 type DenseSolver = NalgebraLU<f64>;
 type SparseSolver = FaerSparseLU<f64>;
 
-pub enum BackendProblem {
-    Dense(Box<DenseProblem>),
-    Sparse(Box<SparseProblem>),
-}
-
-thread_local! {
-    static PROBLEM_CACHE: RefCell<HashMap<usize, BackendProblem>> = RefCell::new(HashMap::new());
-}
-
-static NEXT_DIFFSOL_PROBLEM_ID: AtomicUsize = AtomicUsize::new(1);
-
 const FAILED_SOLVE_PENALTY: f64 = 1e5;
 
-/// Solver for Diffsol problems maintaining per-thread cached ODE instances.
-///
-/// # Thread Safety
-///
-/// This type uses thread-local storage to maintain per-thread ODE solver
-/// problem instances, enabling safe parallel evaluation without locks.
-/// Each thread lazily initializes its own problem instance on first use.
-pub struct DiffsolProblem {
-    id: usize,
+/// Diffsol Objective
+pub struct DiffsolObjective {
     dsl: String,
-    config: DiffsolConfig,
     t_span: Vec<f64>,
     data: DMatrix<f64>,
-    cost_metric: Vec<Arc<dyn CostMetric>>,
+    config: DiffsolConfig,
+    costs: Vec<Arc<dyn CostMetric>>,
 }
 
-impl DiffsolProblem {
+impl DiffsolObjective {
     pub fn new(
-        diffsol_problem: BackendProblem,
         dsl: String,
-        config: DiffsolConfig,
         t_span: Vec<f64>,
         data: DMatrix<f64>,
-        cost_metric: Vec<Arc<dyn CostMetric>>,
+        config: DiffsolConfig,
+        costs: Vec<Arc<dyn CostMetric>>,
     ) -> Self {
-        let id = NEXT_DIFFSOL_PROBLEM_ID.fetch_add(1, Ordering::Relaxed);
-        let chron_problem = Self {
-            id,
+        Self {
             dsl,
-            config,
             t_span,
             data,
-            cost_metric,
-        };
-        chron_problem.seed_initial_problem(diffsol_problem);
-        chron_problem
+            config,
+            costs,
+        }
     }
-
-    fn build_problem(&self) -> Result<BackendProblem, String> {
+    fn build_simulator(&self) -> Result<DiffsolSimulator, ProblemError> {
         match self.config.backend {
-            DiffsolBackend::Dense => OdeBuilder::<NalgebraMat<f64>>::new()
-                .atol([self.config.atol])
-                .rtol(self.config.rtol)
-                .build_from_diffsl(&self.dsl)
-                .map_err(|e| format!("Failed to build ODE model: {}", e))
-                .map(|problem| BackendProblem::Dense(Box::new(problem))),
-            DiffsolBackend::Sparse => OdeBuilder::<FaerSparseMat<f64>>::new()
-                .atol([self.config.atol])
-                .rtol(self.config.rtol)
-                .build_from_diffsl(&self.dsl)
-                .map_err(|e| format!("Failed to build ODE model: {}", e))
-                .map(|problem| BackendProblem::Sparse(Box::new(problem))),
+            DiffsolBackend::Dense => {
+                let diff_system = OdeBuilder::<NalgebraMat<f64>>::new()
+                    .atol([self.config.atol])
+                    .rtol(self.config.rtol)
+                    .build_from_diffsl(&self.dsl)
+                    .map_err(|e| {
+                        ProblemError::BuildFailed(format!("Failed to build ODE model: {}", e))
+                    })?;
+                Ok(DiffsolSimulator::Dense(diff_system))
+            }
+            DiffsolBackend::Sparse => {
+                let diff_system = OdeBuilder::<FaerSparseMat<f64>>::new()
+                    .atol([self.config.atol])
+                    .rtol(self.config.rtol)
+                    .build_from_diffsl(&self.dsl)
+                    .map_err(|e| {
+                        ProblemError::BuildFailed(format!("Failed to build ODE model: {}", e))
+                    })?;
+                Ok(DiffsolSimulator::Sparse(diff_system))
+            }
         }
     }
 
-    fn seed_initial_problem(&self, problem: BackendProblem) {
-        let id = self.id;
-        PROBLEM_CACHE.with(|cache| {
-            let mut cache = cache.borrow_mut();
-            cache.insert(id, problem);
-        });
-    }
-
-    fn with_thread_local_problem<F, R>(&self, mut f: F) -> Result<R, String>
+    fn with_simulator<F, R>(&self, f: F) -> Result<R, ProblemError>
     where
-        F: FnMut(&mut BackendProblem) -> Result<R, String>,
+        F: FnOnce(&mut DiffsolSimulator) -> Result<R, ProblemError>,
     {
-        // Create ProbeGuard for both unit tests (cfg(test)) and integration tests
-        // The ProbeGuard will only be active if a probe is registered
-        let _probe_guard = test_support::ProbeGuard::new();
-
-        let id = self.id;
-        PROBLEM_CACHE.with(|cache| {
-            let mut cache = cache.borrow_mut();
-            if let Entry::Vacant(e) = cache.entry(id) {
-                e.insert(self.build_problem()?);
-            }
-            let problem = cache
-                .get_mut(&id)
-                .expect("problem cache must contain entry after insertion");
-            match catch_unwind(AssertUnwindSafe(|| f(problem))) {
-                Ok(result) => result,
-                Err(_) => {
-                    let rebuilt = self.build_problem()?;
-                    let entry = cache
-                        .get_mut(&id)
-                        .expect("problem cache must contain entry after rebuild");
-                    *entry = rebuilt;
-                    let problem = cache
-                        .get_mut(&id)
-                        .expect("problem cache must contain entry after rebuild");
-                    f(problem)
-                }
-            }
-        })
+        let mut simulator = self.build_simulator()?;
+        f(&mut simulator)
     }
 
-    pub fn failed_solve_penalty() -> f64 {
-        FAILED_SOLVE_PENALTY
+    /// Helper to solve with panic recovery
+    #[inline]
+    fn solve_safely<F, T>(solve_fn: F) -> Result<T, ProblemError>
+    where
+        F: FnOnce() -> Result<T, DiffsolError>,
+    {
+        catch_unwind(AssertUnwindSafe(solve_fn))
+            .map_err(|_| ProblemError::SolverError("Solver panicked".to_string()))?
+            .map_err(|e| ProblemError::SolverError(e.to_string()))
     }
 
-    pub fn is_parallel(&self) -> bool {
-        self.config.parallel
-    }
-
-    fn build_residuals<M>(&self, solution: &M) -> Result<Vec<f64>, String>
+    fn build_residuals<M>(&self, solution: &M) -> Result<Vec<f64>, ProblemError>
     where
         M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
     {
         let sol_rows = solution.nrows();
         let sol_cols = solution.ncols();
-        let (data_rows, data_cols) = self.data.shape();
+        let sol_size = sol_rows * sol_cols;
 
-        let (transpose_data, expected_rows, expected_cols) =
-            match (sol_rows, sol_cols, data_rows, data_cols) {
-                (sr, sc, dr, dc) if sr == dr && sc == dc => (false, sr, sc),
-                (sr, sc, dr, dc) if sr == dc && sc == dr => (true, sr, sc),
-                (sr, sc, dr, dc) => {
-                    return Err(format!(
-                        "Solution shape {}x{} does not match data shape {}x{}",
-                        sr, sc, dr, dc
-                    ))
-                }
-            };
+        if sol_size != self.data.len() {
+            return Err(ProblemError::DimensionMismatch {
+                expected: self.data.len(),
+                got: sol_size,
+            });
+        }
 
-        let mut residuals = Vec::with_capacity(expected_rows * expected_cols);
-
-        if transpose_data {
-            for col in 0..expected_cols {
-                for row in 0..expected_rows {
-                    residuals.push(solution[(row, col)] - self.data[(col, row)]);
-                }
-            }
-        } else {
-            for row in 0..expected_rows {
-                for col in 0..expected_cols {
-                    residuals.push(solution[(row, col)] - self.data[(row, col)]);
-                }
+        let mut residuals = Vec::with_capacity(sol_size);
+        for row in 0..sol_rows {
+            for col in 0..sol_cols {
+                residuals.push(solution[(row, col)] - self.data[(row, col)]);
             }
         }
 
         Ok(residuals)
     }
 
-    /// Helper to convert DiffsolError to String with context
     #[inline]
-    fn error_context<T>(result: Result<T, DiffsolError>, msg: &str) -> Result<T, String> {
-        result.map_err(|e| format!("{}: {}", msg, e))
-    }
-
-    /// Helper to solve with panic recovery
-    #[inline]
-    fn solve_safely<F, T>(solve_fn: F) -> Result<T, String>
-    where
-        F: FnOnce() -> Result<T, DiffsolError>,
-    {
-        catch_unwind(AssertUnwindSafe(solve_fn))
-            .map_err(|_| "Solver panicked".to_string())?
-            .map_err(|e| format!("Solve failed: {}", e))
-    }
-
-    #[inline]
-    fn calculate_cost<M>(&self, solution: &M) -> Result<f64, String>
+    fn calculate_cost<M>(&self, solution: &M) -> Result<f64, ProblemError>
     where
         M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
     {
         let residuals = self.build_residuals(solution)?;
-        let total_cost = self
-            .cost_metric
-            .iter()
-            .map(|metric| metric.evaluate(&residuals))
-            .sum();
+        let total_cost = self.costs.iter().map(|c| c.evaluate(&residuals)).sum();
         Ok(total_cost)
     }
 
@@ -225,236 +143,96 @@ impl DiffsolProblem {
         &self,
         solution: &NalgebraMat<f64>,
         sensitivities: &[NalgebraMat<f64>],
-    ) -> Result<(f64, Vec<f64>), String> {
+    ) -> Result<(f64, Option<Vec<f64>>), ProblemError> {
         let residuals = self.build_residuals(solution)?;
 
-        self.cost_metric
-            .iter()
-            .try_fold((0.0, Vec::new()), |(acc_cost, acc_grad), metric| {
-                let (cost, grad) = metric
-                    .evaluate_with_sensitivities(&residuals, sensitivities)
-                    .ok_or_else(|| {
-                        format!(
-                            "Cost metric '{}' does not support gradient evaluation",
-                            metric.name()
-                        )
-                    })?;
+        let mut total_cost = 0.0;
+        let mut total_grad: Option<Vec<f64>> = None;
 
-                let new_grad = if acc_grad.is_empty() {
-                    grad
-                } else {
-                    acc_grad
-                        .iter()
-                        .zip(grad.iter())
-                        .map(|(a, b)| a + b)
-                        .collect()
+        for metric in &self.costs {
+            let (cost, grad) = metric
+                .evaluate_with_sensitivities(&residuals, sensitivities)
+                .ok_or_else(|| {
+                    ProblemError::EvaluationFailed(format!(
+                        "Failed to evaluate metric: {}",
+                        metric.name()
+                    ))
+                })?;
+            total_cost += cost;
+
+            match &mut total_grad {
+                Some(acc) => acc.iter_mut().zip(&grad).for_each(|(a, b)| *a += b),
+                None => total_grad = Some(grad),
+            }
+        }
+        Ok((total_cost, total_grad))
+    }
+}
+
+impl Objective for DiffsolObjective {
+    fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
+        self.with_simulator(|problem| match problem {
+            DiffsolSimulator::Dense(p) => {
+                let ctx = *p.eqn().context();
+                p.eqn_mut()
+                    .set_params(&DenseVector::from_vec(x.to_vec(), ctx));
+
+                let solver_result = p.bdf::<DenseSolver>();
+                let mut solver = match solver_result {
+                    Ok(s) => s,
+                    Err(_) => return Ok(FAILED_SOLVE_PENALTY),
                 };
 
-                Ok((acc_cost + cost, new_grad))
-            })
-    }
-
-    pub fn evaluate(&self, params: &[f64]) -> Result<f64, String> {
-        self.with_thread_local_problem(|problem| match problem {
-            BackendProblem::Dense(p) => {
-                let ctx = *p.eqn().context();
-                p.eqn_mut()
-                    .set_params(&DenseVector::from_vec(params.to_vec(), ctx));
-
-                let mut solver =
-                    Self::error_context(p.bdf::<DenseSolver>(), "Failed to create BDF solver")?;
-                let solution = Self::solve_safely(|| solver.solve_dense(&self.t_span))?;
-                self.calculate_cost(&solution)
+                match Self::solve_safely(|| solver.solve_dense(&self.t_span)) {
+                    Ok(solution) => self.calculate_cost(&solution),
+                    Err(_) => Ok(FAILED_SOLVE_PENALTY),
+                }
             }
-            BackendProblem::Sparse(p) => {
+            DiffsolSimulator::Sparse(p) => {
                 let ctx = *p.eqn().context();
                 p.eqn_mut()
-                    .set_params(&SparseVector::from_vec(params.to_vec(), ctx));
+                    .set_params(&SparseVector::from_vec(x.to_vec(), ctx));
 
-                let mut solver =
-                    Self::error_context(p.bdf::<SparseSolver>(), "Failed to create BDF solver")?;
-                let solution = Self::solve_safely(|| solver.solve_dense(&self.t_span))?;
-                self.calculate_cost(&solution)
+                let solver_result = p.bdf::<SparseSolver>();
+                let mut solver = match solver_result {
+                    Ok(s) => s,
+                    Err(_) => return Ok(FAILED_SOLVE_PENALTY),
+                };
+
+                match Self::solve_safely(|| solver.solve_dense(&self.t_span)) {
+                    Ok(solution) => self.calculate_cost(&solution),
+                    Err(_) => Ok(FAILED_SOLVE_PENALTY),
+                }
             }
         })
     }
 
-    pub fn evaluate_with_gradient(&self, params: &[f64]) -> Result<(f64, Vec<f64>), String> {
-        self.with_thread_local_problem(|problem| match problem {
-            BackendProblem::Dense(p) => {
+    fn evaluate_with_gradient(&self, x: &[f64]) -> Result<(f64, Option<Vec<f64>>), ProblemError> {
+        self.with_simulator(|problem| match problem {
+            DiffsolSimulator::Dense(p) => {
                 let ctx = *p.eqn().context();
                 p.eqn_mut()
-                    .set_params(&DenseVector::from_vec(params.to_vec(), ctx));
+                    .set_params(&DenseVector::from_vec(x.to_vec(), ctx));
 
-                let mut solver = Self::error_context(
-                    p.bdf_sens::<DenseSolver>(),
-                    "Failed to create BDF sensitivities solver",
-                )?;
-
+                let mut solver = p
+                    .bdf_sens::<DenseSolver>()
+                    .map_err(|e| ProblemError::SolverError(e.to_string()))?;
                 let (solution, sensitivities) =
                     Self::solve_safely(|| solver.solve_dense_sensitivities(&self.t_span))?;
 
                 self.calculate_cost_with_grad(&solution, &sensitivities)
             }
-            BackendProblem::Sparse(_p) => Err(
+            DiffsolSimulator::Sparse(_p) => Err(ProblemError::EvaluationFailed(
                 "Sparse diffsol backend does not currently support gradient evaluation".to_string(),
-            ),
+            )),
         })
     }
 
-    pub fn evaluate_population(&self, params: &[&[f64]]) -> Vec<Result<f64, String>> {
-        let eval_fn = |param: &&[f64]| {
-            self.with_thread_local_problem(|problem| {
-                self.evaluate_single_with_penalty(problem, param)
-            })
-        };
-
+    fn evaluate_population(&self, params: &[Vec<f64>]) -> Vec<Result<f64, ProblemError>> {
         if self.config.parallel {
-            params.par_iter().map(eval_fn).collect()
+            params.par_iter().map(|x| self.evaluate(x)).collect()
         } else {
-            params.iter().map(eval_fn).collect()
-        }
-    }
-
-    // Helper to avoid code duplication in evaluate_population
-    fn evaluate_single_with_penalty(
-        &self,
-        problem: &mut BackendProblem,
-        params: &[f64],
-    ) -> Result<f64, String> {
-        let result = match problem {
-            BackendProblem::Dense(p) => {
-                let ctx = *p.eqn().context();
-                p.eqn_mut()
-                    .set_params(&DenseVector::from_vec(params.to_vec(), ctx));
-
-                Self::error_context(p.bdf::<DenseSolver>(), "Failed to create BDF solver")
-                    .and_then(|mut solver| Self::solve_safely(|| solver.solve_dense(&self.t_span)))
-                    .and_then(|solution| self.calculate_cost(&solution))
-                    .ok()
-            }
-            BackendProblem::Sparse(p) => {
-                let ctx = *p.eqn().context();
-                p.eqn_mut()
-                    .set_params(&SparseVector::from_vec(params.to_vec(), ctx));
-
-                Self::error_context(p.bdf::<SparseSolver>(), "Failed to create BDF solver")
-                    .and_then(|mut solver| Self::solve_safely(|| solver.solve_dense(&self.t_span)))
-                    .and_then(|solution| self.calculate_cost(&solution))
-                    .ok()
-            }
-        };
-
-        Ok(result.unwrap_or_else(|| Self::failed_solve_penalty()))
-    }
-}
-
-/// Clean-up for globally stored
-/// PROBLEM_CACHE HashMap
-impl Drop for DiffsolProblem {
-    fn drop(&mut self) {
-        let id = self.id;
-        PROBLEM_CACHE.with(|cache| {
-            cache.borrow_mut().remove(&id);
-        });
-    }
-}
-
-pub mod test_support {
-    use super::*;
-    use std::sync::{atomic::Ordering, Mutex};
-    use std::time::Duration;
-
-    #[derive(Clone)]
-    pub struct ConcurrencyProbe {
-        inner: std::sync::Arc<ProbeInner>,
-    }
-
-    struct ProbeInner {
-        active: AtomicUsize,
-        peak: AtomicUsize,
-        sleep: Duration,
-    }
-
-    impl ConcurrencyProbe {
-        pub fn new(sleep: Duration) -> Self {
-            Self {
-                inner: std::sync::Arc::new(ProbeInner {
-                    active: AtomicUsize::new(0),
-                    peak: AtomicUsize::new(0),
-                    sleep,
-                }),
-            }
-        }
-
-        fn enter(&self) {
-            let current = self.inner.active.fetch_add(1, Ordering::SeqCst) + 1;
-            self.inner.peak.fetch_max(current, Ordering::SeqCst);
-            if !self.inner.sleep.is_zero() {
-                std::thread::sleep(self.inner.sleep);
-            }
-        }
-
-        fn exit(&self) {
-            self.inner.active.fetch_sub(1, Ordering::SeqCst);
-        }
-
-        pub fn peak(&self) -> usize {
-            self.inner.peak.load(Ordering::SeqCst)
-        }
-    }
-
-    static PROBE_REGISTRY: Mutex<Option<ConcurrencyProbe>> = Mutex::new(None);
-
-    fn set_probe_internal(probe: Option<ConcurrencyProbe>) {
-        *PROBE_REGISTRY
-            .lock()
-            .expect("probe registry mutex poisoned") = probe;
-    }
-
-    pub struct ProbeInstall;
-
-    impl ProbeInstall {
-        pub fn new(probe: Option<ConcurrencyProbe>) -> Self {
-            set_probe_internal(probe);
-            Self
-        }
-    }
-
-    impl Drop for ProbeInstall {
-        fn drop(&mut self) {
-            set_probe_internal(None);
-        }
-    }
-
-    pub struct ProbeGuard(Option<ConcurrencyProbe>);
-
-    impl Default for ProbeGuard {
-        fn default() -> Self {
-            Self::new()
-        }
-    }
-
-    impl ProbeGuard {
-        pub fn new() -> Self {
-            let probe = PROBE_REGISTRY
-                .lock()
-                .expect("probe registry mutex poisoned")
-                .clone();
-            if let Some(probe) = probe {
-                probe.enter();
-                ProbeGuard(Some(probe))
-            } else {
-                ProbeGuard(None)
-            }
-        }
-    }
-
-    impl Drop for ProbeGuard {
-        fn drop(&mut self) {
-            if let Some(probe) = &self.0 {
-                probe.exit();
-            }
+            params.iter().map(|x| self.evaluate(x)).collect()
         }
     }
 }
@@ -464,7 +242,7 @@ mod tests {
     use super::*;
     use crate::cost::{GaussianNll, SumSquaredError};
 
-    fn build_logistic_problem(backend: DiffsolBackend) -> DiffsolProblem {
+    fn build_logistic_problem(backend: DiffsolBackend) -> DiffsolObjective {
         let dsl = r#"
 in = [r, k]
 r { 1 }
@@ -476,32 +254,13 @@ F_i { (r * y) * (1 - (y / k)) }
         let t_span: Vec<f64> = (0..6).map(|i| i as f64 * 0.2).collect();
         let data_values: Vec<f64> = t_span.iter().map(|t| 0.1 * (*t).exp()).collect();
         let data = DMatrix::from_vec(t_span.len(), 1, data_values);
-
         let config = DiffsolConfig::default().with_backend(backend);
 
-        let backend_problem = match config.backend {
-            DiffsolBackend::Dense => OdeBuilder::<NalgebraMat<f64>>::new()
-                .atol([config.atol])
-                .rtol(config.rtol)
-                .build_from_diffsl(dsl)
-                .map_err(|e| format!("Failed to build ODE model: {}", e))
-                .map(|problem| BackendProblem::Dense(Box::new(problem)))
-                .expect("failed to build dense diffsol problem"),
-            DiffsolBackend::Sparse => OdeBuilder::<FaerSparseMat<f64>>::new()
-                .atol([config.atol])
-                .rtol(config.rtol)
-                .build_from_diffsl(dsl)
-                .map_err(|e| format!("Failed to build ODE model: {}", e))
-                .map(|problem| BackendProblem::Sparse(Box::new(problem)))
-                .expect("failed to build sparse diffsol problem"),
-        };
-
-        DiffsolProblem::new(
-            backend_problem,
+        DiffsolObjective::new(
             dsl.to_string(),
-            config,
             t_span,
             data,
+            config,
             vec![Arc::new(SumSquaredError::default())],
         )
     }

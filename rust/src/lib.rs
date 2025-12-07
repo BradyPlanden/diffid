@@ -11,8 +11,8 @@ pub mod prelude {
     };
     pub use crate::problem::builders::{BuilderOptimiserExt, BuilderParameterExt};
     pub use crate::problem::{
-        DiffsolProblemBuilder, ParameterSet, ParameterSpec, Problem, ScalarProblemBuilder,
-        VectorProblemBuilder,
+        DiffsolProblemBuilder, Objective, ParameterSet, ParameterSpec, Problem,
+        ScalarProblemBuilder, VectorProblemBuilder,
     };
     pub use crate::sampler::{
         DynamicNestedSampler, MetropolisHastings, NestedSample, NestedSamples, Sampler, Samples,

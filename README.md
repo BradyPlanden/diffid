@@ -21,6 +21,11 @@
 - Flexible integration with state-of-the-art differential solvers, such as [Diffrax](https://github.com/patrick-kidger/diffrax), [DifferentialEquations.jl](https://github.com/SciML/diffeqpy)
 - Python builder APIs mirroring the Rust core plus generated type stubs for autocompletion.
 
+## Why Chronopt?
+- Optimisation based workflow run the forward simulation thousands of times, a performance improvement on the process can produce results hour or days earlier
+- With a rust core and python bindings, as the project expands, fewer runtime errors should be encountered
+- You can quickly integrate it into your python tools, and later use the rust crate directly for even higher performance
+
 ## Installation
 
 Chronopt targets Python >= 3.11. Windows builds are currently marked experimental. 

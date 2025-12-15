@@ -1,5 +1,6 @@
-use super::{DiffsolBackend, DiffsolConfig, Objective};
+use crate::builders::{DiffsolBackend, DiffsolConfig};
 use crate::cost::CostMetric;
+use crate::problem::{Objective, ProblemError};
 use diffsol::error::DiffsolError;
 use diffsol::ode_solver::sensitivities::SensitivitiesOdeSolverMethod;
 use diffsol::op::Op;
@@ -9,7 +10,6 @@ use diffsol::{
 };
 use nalgebra::DMatrix;
 
-use crate::problem::ProblemError;
 use rayon::prelude::*;
 use std::ops::Index;
 use std::panic::{catch_unwind, AssertUnwindSafe};

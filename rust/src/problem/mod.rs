@@ -1,21 +1,25 @@
+use diffsol::error::DiffsolError;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-pub mod builders;
 mod diffsol_problem;
 
-pub use crate::cost::{CostMetric, RootMeanSquaredError, SumSquaredError};
-pub use builders::{BuilderOptimiserExt, BuilderParameterExt};
-pub use builders::{
-    DiffsolBackend, DiffsolConfig, DiffsolProblemBuilder, OptimiserSlot, ParameterSet,
-    ParameterSpec, ScalarProblemBuilder, VectorProblemBuilder,
-};
+pub use crate::cost::CostMetric;
+use crate::cost::SumSquaredError;
+use crate::optimisers::{NelderMead, OptimisationResults, Optimiser};
+pub use diffsol_problem::DiffsolObjective;
 
-use diffsol::error::DiffsolError;
+pub struct NoGradient;
+pub struct NoFunction;
 
-#[derive(Debug, Clone)]
+/// A thread-safe, shared function that computes residuals
+pub type VectorFn =
+    Arc<dyn Fn(&[f64]) -> Result<Vec<f64>, Box<dyn std::error::Error + Send + Sync>> + Send + Sync>;
+
+#[derive(Debug)]
 pub enum ProblemError {
     DimensionMismatch { expected: usize, got: usize },
+    External(Box<dyn std::error::Error + Send + Sync>),
     EvaluationFailed(String),
     SolverError(String),
     BuildFailed(String),
@@ -24,6 +28,12 @@ pub enum ProblemError {
 impl From<DiffsolError> for ProblemError {
     fn from(e: DiffsolError) -> Self {
         ProblemError::BuildFailed(format!("{}", e))
+    }
+}
+
+impl From<Box<dyn std::error::Error + Send + Sync>> for ProblemError {
+    fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        ProblemError::External(err)
     }
 }
 
@@ -36,11 +46,69 @@ impl std::fmt::Display for ProblemError {
                 write!(f, "expected {} elements, got {}", expected, got)
             }
             Self::BuildFailed(msg) => write!(f, "build failed: {}", msg),
+            Self::External(err) => write!(f, "external error: {}", err),
         }
     }
 }
 
 impl std::error::Error for ProblemError {}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParameterSpec {
+    pub name: String,
+    pub initial_value: f64,
+    pub bounds: Option<(f64, f64)>,
+}
+
+impl ParameterSpec {
+    pub fn new<N>(name: N, initial_value: f64, bounds: Option<(f64, f64)>) -> Self
+    where
+        N: Into<String>,
+    {
+        Self {
+            name: name.into(),
+            initial_value,
+            bounds,
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct ParameterSet(Vec<ParameterSpec>);
+
+impl ParameterSet {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn specs(&self) -> &[ParameterSpec] {
+        &self.0
+    }
+
+    pub fn push(&mut self, spec: ParameterSpec) {
+        self.0.push(spec)
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear()
+    }
+
+    pub fn take(&mut self) -> Vec<ParameterSpec> {
+        std::mem::take(&mut self.0)
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, ParameterSpec> {
+        self.0.iter()
+    }
+}
 
 /// An Objective trait, used to define the core
 /// evaluation of a `problem`.
@@ -59,17 +127,20 @@ pub trait Objective: Send + Sync {
     }
 }
 
-pub struct ScalarObjective<F, G = fn(&[f64]) -> Vec<f64>> {
+pub struct ScalarObjective<F = NoFunction, G = NoGradient> {
     f: F,
-    grad: Option<G>,
+    grad: G,
 }
 
-impl<F> ScalarObjective<F, fn(&[f64]) -> Vec<f64>>
+impl<F> ScalarObjective<F, NoGradient>
 where
     F: Fn(&[f64]) -> f64 + Send + Sync,
 {
     pub fn new(f: F) -> Self {
-        Self { f, grad: None }
+        Self {
+            f,
+            grad: NoGradient,
+        }
     }
 }
 impl<F, G> ScalarObjective<F, G>
@@ -78,13 +149,21 @@ where
     G: Fn(&[f64]) -> Vec<f64> + Send + Sync,
 {
     pub fn with_gradient(f: F, grad: G) -> Self {
-        Self {
-            f,
-            grad: Some(grad),
-        }
+        Self { f, grad }
     }
 }
 
+/// Implement Objective for `NoGradient` state
+impl<F> Objective for ScalarObjective<F, NoGradient>
+where
+    F: Fn(&[f64]) -> f64 + Send + Sync,
+{
+    fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
+        Ok((self.f)(x))
+    }
+}
+
+/// Implement Objective for gradient state
 impl<F, G> Objective for ScalarObjective<F, G>
 where
     F: Fn(&[f64]) -> f64 + Send + Sync,
@@ -94,31 +173,25 @@ where
         Ok((self.f)(x))
     }
     fn gradient(&self, x: &[f64]) -> Option<Vec<f64>> {
-        self.grad.as_ref().map(|g| g(x))
+        Some((self.grad)(x))
     }
 }
 
-pub struct ResidualObjective<F> {
-    f: F,
+pub struct VectorObjective {
+    f: VectorFn,
     data: Vec<f64>,
     costs: Vec<Arc<dyn CostMetric>>,
 }
 
-impl<F> ResidualObjective<F>
-where
-    F: Fn(&[f64]) -> Result<Vec<f64>, ProblemError> + Send + Sync,
-{
-    pub fn new(f: F, data: Vec<f64>, costs: Vec<Arc<dyn CostMetric>>) -> Self {
+impl VectorObjective {
+    pub fn new(f: VectorFn, data: Vec<f64>, costs: Vec<Arc<dyn CostMetric>>) -> Self {
         Self { f, data, costs }
     }
 }
 
-impl<F> Objective for ResidualObjective<F>
-where
-    F: Fn(&[f64]) -> Result<Vec<f64>, ProblemError> + Send + Sync,
-{
+impl Objective for VectorObjective {
     fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
-        let pred = (self.f)(x)?;
+        let pred = (self.f)(x).map_err(ProblemError::from)?;
 
         if pred.len() != self.data.len() {
             return Err(ProblemError::DimensionMismatch {
@@ -137,24 +210,27 @@ where
     }
 }
 
-pub struct Problem<O: Objective> {
+pub struct Problem<O, Opt>
+where
+    O: Objective,
+    Opt: Optimiser + Send + Sync,
+{
     objective: O,
     parameters: ParameterSet,
-    config: HashMap<String, f64>,
+    optimiser: Opt,
 }
 
-impl<O: Objective> Problem<O> {
-    pub fn new(objective: O, parameters: ParameterSet) -> Self {
+impl<O, Opt> Problem<O, Opt>
+where
+    O: Objective,
+    Opt: Optimiser + Send + Sync,
+{
+    pub fn new(objective: O, parameters: ParameterSet, optimiser: Opt) -> Self {
         Self {
             objective,
             parameters,
-            config: HashMap::new(),
+            optimiser,
         }
-    }
-
-    pub fn with_config(mut self, config: HashMap<String, f64>) -> Self {
-        self.config = config;
-        self
     }
 
     pub fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
@@ -178,5 +254,195 @@ impl<O: Objective> Problem<O> {
 
     pub fn default_parameters(&self) -> Vec<f64> {
         self.parameters.iter().map(|s| s.initial_value).collect()
+    }
+
+    pub fn optimize(
+        &self,
+        initial: Option<Vec<f64>>,
+        optimiser: Option<&dyn Optimiser>,
+    ) -> OptimisationResults {
+        let x0 = match initial {
+            Some(v) => v,
+            None => self.default_parameters(),
+        };
+
+        if let Some(opt) = optimiser {
+            return opt.run(self, x0);
+        }
+
+        if let default = self.optimiser {
+            return default.run(self, x0);
+        }
+
+        // Default to NelderMead when nothing provided
+        let nm = NelderMead::new();
+        nm.run(self, x0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::cost::SumSquaredError;
+    use crate::prelude::*;
+    use std::collections::HashMap;
+    #[test]
+    fn vector_problem_exponential_model() {
+        // Exponential growth: y = y0 * exp(r * t)
+        let t_span: Vec<f64> = (0..10).map(|i| i as f64 * 0.1).collect();
+        let true_r = 1.5;
+        let true_y0 = 2.0;
+        let data: Vec<f64> = t_span
+            .iter()
+            .map(|&t| true_y0 * (true_r * t).exp())
+            .collect();
+
+        // let t_span_clone = t_span.clone();
+        let objective = Box::new(move |params: &[f64]| -> Result<Vec<f64>, String> {
+            let r = params[0];
+            let y0 = params[1];
+            Ok(t_span.iter().map(|&t| y0 * (r * t).exp()).collect())
+        });
+
+        let mut params = ParameterSet::new();
+        params.push(ParameterSpec::new("r", 1.0, Some((0.0, 3.0))));
+        params.push(ParameterSpec::new("y0", 1.0, Some((0.0, 5.0))));
+
+        let problem = Problem::new_vector(
+            objective,
+            data,
+            vec![10],
+            HashMap::new(),
+            params,
+            vec![Arc::new(SumSquaredError::default())],
+            None,
+        )
+        .expect("failed to create vector problem");
+
+        // Test with true parameters
+        let cost = problem
+            .evaluate(&[true_r, true_y0])
+            .expect("evaluation failed");
+        assert!(
+            cost.abs() < 1e-10,
+            "expected near-zero cost with true params, got {}",
+            cost
+        );
+
+        // Test with wrong parameters
+        let cost = problem.evaluate(&[1.0, 1.0]).expect("evaluation failed");
+        assert!(cost > 0.0, "expected positive cost with wrong params");
+    }
+
+    #[test]
+    fn vector_problem_dimension_mismatch() {
+        let data = vec![1.0, 2.0, 3.0];
+        let objective = Box::new(|_params: &[f64]| -> Result<Vec<f64>, String> {
+            Ok(vec![1.0, 2.0, 3.0, 4.0, 5.0]) // Wrong size!
+        });
+
+        let problem = Problem::new_vector(
+            objective,
+            data,
+            vec![3],
+            HashMap::new(),
+            ParameterSet::new(),
+            vec![Arc::new(SumSquaredError::default())],
+            None,
+        )
+        .expect("failed to create vector problem");
+
+        let result = problem.evaluate(&[1.0]);
+        assert!(result.is_err(), "expected error for dimension mismatch");
+        assert!(result.unwrap_err().contains("produced 5 elements but data"));
+    }
+
+    #[test]
+    fn vector_problem_population_evaluation() {
+        let data = vec![1.0, 2.0, 3.0];
+        let objective = Box::new(|params: &[f64]| -> Result<Vec<f64>, String> {
+            let scale = params[0];
+            Ok(vec![scale, 2.0 * scale, 3.0 * scale])
+        });
+
+        let problem = Problem::new_vector(
+            objective,
+            data,
+            vec![3],
+            HashMap::new(),
+            ParameterSet::new(),
+            vec![Arc::new(SumSquaredError::default())],
+            None,
+        )
+        .expect("failed to create vector problem");
+
+        let population = vec![vec![1.0], vec![0.5], vec![1.5], vec![2.0]];
+
+        let sequential: Vec<f64> = population
+            .iter()
+            .map(|x| problem.evaluate(x).expect("sequential evaluation failed"))
+            .collect();
+
+        let batched: Vec<f64> = problem
+            .evaluate_population(&population)
+            .into_iter()
+            .map(|res| res.expect("batched evaluation failed"))
+            .collect();
+
+        assert_eq!(sequential.len(), batched.len());
+        for (expected, actual) in sequential.iter().zip(batched.iter()) {
+            assert_eq!(expected, actual, "population evaluation mismatch");
+        }
+    }
+
+    #[test]
+    fn vector_problem_with_rmse_cost() {
+        let data = vec![1.0, 2.0, 3.0, 4.0];
+        let objective = Box::new(|params: &[f64]| -> Result<Vec<f64>, String> {
+            let offset = params[0];
+            Ok(vec![1.0 + offset, 2.0 + offset, 3.0 + offset, 4.0 + offset])
+        });
+
+        let problem = Problem::new_vector(
+            objective,
+            data,
+            vec![4],
+            HashMap::new(),
+            ParameterSet::new(),
+            vec![Arc::new(RootMeanSquaredError::default())],
+            None,
+        )
+        .expect("failed to create vector problem");
+
+        // Perfect fit
+        let cost = problem.evaluate(&[0.0]).expect("evaluation failed");
+        assert!(cost.abs() < 1e-10);
+
+        // Offset of 1.0 should give RMSE of 1.0
+        let cost = problem.evaluate(&[1.0]).expect("evaluation failed");
+        assert!(
+            (cost - 1.0).abs() < 1e-10,
+            "expected RMSE of 1.0, got {}",
+            cost
+        );
+    }
+
+    #[test]
+    fn vector_problem_empty_data_error() {
+        let data = vec![];
+        let objective = Box::new(|_params: &[f64]| -> Result<Vec<f64>, String> { Ok(vec![]) });
+
+        let result = Problem::new_vector(
+            objective,
+            data,
+            vec![],
+            HashMap::new(),
+            ParameterSet::new(),
+            vec![Arc::new(SumSquaredError::default())],
+            None,
+        );
+
+        assert!(result.is_err(), "expected error for empty data");
+        let err_msg = result.err().unwrap();
+        assert!(err_msg.contains("at least one element"));
     }
 }

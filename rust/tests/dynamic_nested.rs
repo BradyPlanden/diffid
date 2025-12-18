@@ -1,5 +1,5 @@
 use chronopt::prelude::*;
-use chronopt::problem::builders::BuilderParameterExt;
+use chronopt::problem::builders_old::BuilderParameterExt;
 use chronopt::problem::DiffsolBackend;
 use nalgebra::DMatrix;
 

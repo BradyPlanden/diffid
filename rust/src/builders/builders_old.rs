@@ -6,13 +6,13 @@ use crate::optimisers::Optimiser;
 use nalgebra::DMatrix;
 
 use super::{
-    CallableObjective, GradientFn, ObjectiveFn, Problem, ProblemKind, SharedOptimiser,
-    VectorObjectiveFn,
+    GradientFn, ObjectiveFn, ParameterSet, ParameterSpec, Problem, ProblemKind, ScalarObjective,
+    SharedOptimiser, VectorObjectiveFn,
 };
 
-type SharedObjectiveFn = Arc<dyn Fn(&[f64]) -> f64 + Send + Sync>;
-type SharedGradientFn = Arc<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync>;
-type SharedVectorObjectiveFn = Arc<dyn Fn(&[f64]) -> Result<Vec<f64>, String> + Send + Sync>;
+type ScalarObjectiveFn = Arc<dyn Fn(&[f64]) -> f64 + Send + Sync>;
+type GradientFn = Arc<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync>;
+type VectorObjectiveFn = Arc<dyn Fn(&[f64]) -> Result<Vec<f64>, String> + Send + Sync>;
 
 const DEFAULT_RTOL: f64 = 1e-6;
 const DEFAULT_ATOL: f64 = 1e-8;
@@ -81,63 +81,6 @@ impl DiffsolConfig {
                 if self.parallel { 1.0 } else { 0.0 },
             ),
         ])
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ParameterSpec {
-    pub name: String,
-    pub initial_value: f64,
-    pub bounds: Option<(f64, f64)>,
-}
-
-impl ParameterSpec {
-    pub fn new<N>(name: N, initial_value: f64, bounds: Option<(f64, f64)>) -> Self
-    where
-        N: Into<String>,
-    {
-        Self {
-            name: name.into(),
-            initial_value,
-            bounds,
-        }
-    }
-}
-
-#[derive(Clone, Default)]
-pub struct ParameterSet(Vec<ParameterSpec>);
-
-impl ParameterSet {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    pub fn specs(&self) -> &[ParameterSpec] {
-        &self.0
-    }
-
-    pub fn push(&mut self, spec: ParameterSpec) {
-        self.0.push(spec)
-    }
-
-    pub fn clear(&mut self) {
-        self.0.clear()
-    }
-
-    pub fn take(&mut self) -> Vec<ParameterSpec> {
-        std::mem::take(&mut self.0)
-    }
-
-    pub fn iter(&self) -> std::slice::Iter<'_, ParameterSpec> {
-        self.0.iter()
     }
 }
 
@@ -243,7 +186,7 @@ impl<T: BuilderWithOptimiser> BuilderOptimiserExt for T {}
 
 /// Builder pattern for scalar optimisation problems.
 pub struct ScalarProblemBuilder {
-    objective: Option<SharedObjectiveFn>,
+    objective: Option<SharedScalarObjectiveFn>,
     gradient: Option<SharedGradientFn>,
     config: HashMap<String, f64>,
     parameters: ParameterSet,

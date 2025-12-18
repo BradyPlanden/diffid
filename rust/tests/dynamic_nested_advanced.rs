@@ -1,5 +1,5 @@
 use chronopt::prelude::*;
-use chronopt::problem::builders::BuilderParameterExt;
+use chronopt::problem::builders_old::BuilderParameterExt;
 
 /// Test evidence calculation against known analytical result.
 /// For a Gaussian N(x | 0, σ²) with uniform prior U(a, b),

@@ -1,12 +1,10 @@
 use diffsol::error::DiffsolError;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 mod diffsol_problem;
 
 pub use crate::cost::CostMetric;
-use crate::cost::SumSquaredError;
-use crate::optimisers::{NelderMead, OptimisationResults, Optimiser};
+use crate::optimisers::{OptimisationResults, Optimiser};
 pub use diffsol_problem::DiffsolObjective;
 
 pub struct NoGradient;
@@ -108,6 +106,10 @@ impl ParameterSet {
     pub fn iter(&self) -> std::slice::Iter<'_, ParameterSpec> {
         self.0.iter()
     }
+
+    // pub fn bounds(&self) -> Option<(f64, f64)> {
+    //
+    // }
 }
 
 /// An Objective trait, used to define the core
@@ -210,22 +212,14 @@ impl Objective for VectorObjective {
     }
 }
 
-pub struct Problem<O, Opt>
-where
-    O: Objective,
-    Opt: Optimiser + Send + Sync,
-{
+pub struct Problem<O: Objective> {
     objective: O,
     parameters: ParameterSet,
-    optimiser: Opt,
+    optimiser: Optimiser,
 }
 
-impl<O, Opt> Problem<O, Opt>
-where
-    O: Objective,
-    Opt: Optimiser + Send + Sync,
-{
-    pub fn new(objective: O, parameters: ParameterSet, optimiser: Opt) -> Self {
+impl<O: Objective> Problem<O> {
+    pub fn new(objective: O, parameters: ParameterSet, optimiser: Optimiser) -> Self {
         Self {
             objective,
             parameters,
@@ -259,24 +253,17 @@ where
     pub fn optimize(
         &self,
         initial: Option<Vec<f64>>,
-        optimiser: Option<&dyn Optimiser>,
+        optimiser: Option<&Optimiser>,
     ) -> OptimisationResults {
-        let x0 = match initial {
-            Some(v) => v,
-            None => self.default_parameters(),
-        };
+        let x0 = initial.unwrap_or_else(|| self.default_parameters());
 
-        if let Some(opt) = optimiser {
-            return opt.run(self, x0);
-        }
+        // Use provided optimiser, fall back to self.optimiser, then default
+        let opt = optimiser
+            .or(Some(&self.optimiser))
+            .cloned()
+            .unwrap_or_default();
 
-        if let default = self.optimiser {
-            return default.run(self, x0);
-        }
-
-        // Default to NelderMead when nothing provided
-        let nm = NelderMead::new();
-        nm.run(self, x0)
+        opt.run(|x| self.evaluate(x), x0, self.bounds.clone())
     }
 }
 

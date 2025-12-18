@@ -1,10 +1,10 @@
 use crate::optimisers::{
-    build_results, ApplyBounds, Bounds, EvaluatedPoint, OptimisationResults, TerminationReason,
+    build_results, ApplyBounds, AskResult, Bounds, EvaluatedPoint, OptimisationResults, Optimiser,
+    Point, TellError, TerminationReason,
 };
 use std::cmp::Ordering;
+use std::error::Error as StdError;
 use std::time::{Duration, Instant};
-
-type Point = Vec<f64>;
 
 /// Configuration for the Nelder-Mead optimizer
 #[derive(Clone, Debug)]
@@ -78,7 +78,7 @@ impl NelderMead {
     /// Initialize the optimization state
     ///
     /// Returns the state and the first point to evaluate
-    pub fn init(&self, initial: Point, bounds: Option<Bounds>) -> (NelderMeadState, Point) {
+    pub fn init(&self, initial: Point, bounds: Option<Bounds>) -> (NelderMeadState, Vec<Point>) {
         let dim = initial.len();
         let mut initial_point = initial;
 
@@ -96,7 +96,45 @@ impl NelderMead {
             start_time: Instant::now(),
         };
 
-        (state, initial_point)
+        (state, vec![initial_point])
+    }
+
+    /// Run optimization using a closure for evaluation
+    ///
+    /// This is a convenience wrapper around the ask/tell interface
+    pub fn run<F, E>(
+        &self,
+        mut objective: F,
+        initial: Point,
+        bounds: Option<Bounds>,
+    ) -> OptimisationResults
+    where
+        F: FnMut(&[f64]) -> Result<f64, E>,
+        E: StdError + 'static,
+    {
+        let (mut state, first_point) = self.init(initial, bounds);
+        let mut result = objective(&first_point[0]);
+
+        loop {
+            if state.tell(result).is_err() {
+                break;
+            }
+
+            match state.ask() {
+                AskResult::Evaluate(point) => {
+                    result = objective(&point[0]);
+                }
+                AskResult::Done(results) => {
+                    return results;
+                }
+            }
+        }
+
+        // Should not reach here normally
+        match state.ask() {
+            AskResult::Done(results) => results,
+            _ => panic!("Unexpected state after tell error"),
+        }
     }
 }
 
@@ -150,22 +188,6 @@ pub enum NelderMeadPhase {
     Terminated(TerminationReason),
 }
 
-/// Result of calling `ask()`
-#[derive(Clone, Debug)]
-pub enum AskResult {
-    /// Evaluate this point and call `tell()` with the result
-    Evaluate(Point),
-    /// Optimization has finished
-    Done(OptimisationResults),
-}
-
-/// Errors that can occur when calling `tell()`
-#[derive(Clone, Debug, PartialEq)]
-pub enum TellError {
-    /// Called `tell()` when the algorithm has already terminated
-    AlreadyTerminated,
-}
-
 /// Runtime state of the Nelder-Mead optimizer
 pub struct NelderMeadState {
     config: NelderMead,
@@ -186,21 +208,23 @@ impl NelderMeadState {
             NelderMeadPhase::Terminated(reason) => {
                 AskResult::Done(self.build_results(reason.clone()))
             }
-            NelderMeadPhase::EvaluatingInitial => AskResult::Evaluate(self.initial_point.clone()),
+            NelderMeadPhase::EvaluatingInitial => {
+                AskResult::Evaluate(vec![self.initial_point.clone()])
+            }
             NelderMeadPhase::BuildingSimplex { pending_point, .. } => {
-                AskResult::Evaluate(pending_point.clone())
+                AskResult::Evaluate(vec![pending_point.clone()])
             }
             NelderMeadPhase::AwaitingReflection {
                 reflected_point, ..
-            } => AskResult::Evaluate(reflected_point.clone()),
+            } => AskResult::Evaluate(vec![reflected_point.clone()]),
             NelderMeadPhase::AwaitingExpansion { expanded_point, .. } => {
-                AskResult::Evaluate(expanded_point.clone())
+                AskResult::Evaluate(vec![expanded_point.clone()])
             }
             NelderMeadPhase::AwaitingContraction { contract_point, .. } => {
-                AskResult::Evaluate(contract_point.clone())
+                AskResult::Evaluate(vec![contract_point.clone()])
             }
             NelderMeadPhase::Shrinking { pending_point, .. } => {
-                AskResult::Evaluate(pending_point.clone())
+                AskResult::Evaluate(vec![pending_point.clone()])
             }
         }
     }
@@ -208,16 +232,20 @@ impl NelderMeadState {
     /// Report the evaluation result for the last point from `ask()`
     ///
     /// Pass `Err` if the objective function failed to evaluate
-    pub fn tell(&mut self, result: Result<f64, String>) -> Result<(), TellError> {
+    pub fn tell<E>(&mut self, result: Result<f64, E>) -> Result<(), TellError>
+    where
+        E: StdError + 'static,
+    {
         if matches!(self.phase, NelderMeadPhase::Terminated(_)) {
             return Err(TellError::AlreadyTerminated);
         }
 
         let value = match result {
             Ok(v) => v,
-            Err(msg) => {
-                self.phase =
-                    NelderMeadPhase::Terminated(TerminationReason::FunctionEvaluationFailed(msg));
+            Err(e) => {
+                self.phase = NelderMeadPhase::Terminated(
+                    TerminationReason::FunctionEvaluationFailed(format!("{}", e)),
+                );
                 return Ok(());
             }
         };
@@ -659,56 +687,17 @@ impl NelderMeadState {
     }
 }
 
-impl NelderMead {
-    /// Run optimization using a closure for evaluation
-    ///
-    /// This is a convenience wrapper around the ask/tell interface
-    pub fn run<F>(
-        &self,
-        mut objective: F,
-        initial: Point,
-        bounds: Option<Bounds>,
-    ) -> OptimisationResults
-    where
-        F: FnMut(&[f64]) -> Result<f64, String>,
-    {
-        let (mut state, first_point) = self.init(initial, bounds);
-
-        let mut result = objective(&first_point);
-
-        loop {
-            if state.tell(result).is_err() {
-                break;
-            }
-
-            match state.ask() {
-                AskResult::Evaluate(point) => {
-                    result = objective(&point);
-                }
-                AskResult::Done(results) => {
-                    return results;
-                }
-            }
-        }
-
-        // Should not reach here normally
-        match state.ask() {
-            AskResult::Done(results) => results,
-            _ => panic!("Unexpected state after tell error"),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::Infallible;
 
-    fn rosenbrock(x: &[f64]) -> f64 {
+    fn rosenbrock(x: &[f64]) -> Result<f64, Infallible> {
         let a = 1.0;
         let b = 100.0;
         let x0 = x[0];
         let x1 = x[1];
-        (a - x0).powi(2) + b * (x1 - x0.powi(2)).powi(2)
+        Ok((a - x0).powi(2) + b * (x1 - x0.powi(2)).powi(2))
     }
 
     #[test]
@@ -719,17 +708,18 @@ mod tests {
         let (mut state, first_point) = nm.init(initial, None);
 
         // Evaluate first point
-        let mut current_value = rosenbrock(&first_point);
+        let mut current_value = rosenbrock(&first_point[0]);
 
         loop {
-            match state.tell(Ok(current_value)) {
+            match state.tell(current_value) {
                 Ok(()) => {}
                 Err(TellError::AlreadyTerminated) => break,
+                _ => break,
             }
 
             match state.ask() {
                 AskResult::Evaluate(point) => {
-                    current_value = rosenbrock(&point);
+                    current_value = rosenbrock(&point[0]);
                 }
                 AskResult::Done(results) => {
                     println!("Optimization complete!");
@@ -746,7 +736,7 @@ mod tests {
     fn test_run_convenience_wrapper() {
         let nm = NelderMead::new().with_max_iter(500);
 
-        let results = nm.run(|x| Ok(rosenbrock(x)), vec![0.0, 0.0], None);
+        let results = nm.run(|x| rosenbrock(x), vec![0.0, 0.0], None);
 
         assert!(results.value < 1e-6);
     }

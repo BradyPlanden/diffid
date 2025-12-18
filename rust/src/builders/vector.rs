@@ -6,39 +6,27 @@ use crate::problem::{VectorFn, VectorObjective};
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct VectorProblemBuilder<Opt = NelderMead> {
+pub struct VectorProblemBuilder {
     function: Option<VectorFn>,
     data: Option<Vec<f64>>,
     costs: Vec<Arc<dyn CostMetric>>,
     parameters: ParameterSet,
-    optimiser: Opt,
+    optimiser: Optimiser,
 }
 
-impl VectorProblemBuilder<NelderMead> {
+impl VectorProblemBuilder {
     pub fn new() -> Self {
         Self {
             function: None,
             data: None,
             costs: Vec::new(),
             parameters: ParameterSet::default(),
-            optimiser: NelderMead::new(),
+            optimiser: Optimiser::default(),
         }
     }
 }
 
-impl<Opt: Optimiser> VectorProblemBuilder<Opt> {
-    pub fn with_optimiser<NewOpt: Optimiser>(self, opt: NewOpt) -> VectorProblemBuilder<NewOpt> {
-        VectorProblemBuilder {
-            function: self.function,
-            data: self.data,
-            costs: self.costs,
-            parameters: self.parameters,
-            optimiser: opt,
-        }
-    }
-}
-
-impl<Opt: Optimiser> VectorProblemBuilder<Opt> {
+impl VectorProblemBuilder {
     /// Stores the callable objective function
     pub fn with_function<F>(mut self, f: F) -> Self
     where
@@ -48,6 +36,11 @@ impl<Opt: Optimiser> VectorProblemBuilder<Opt> {
             + 'static,
     {
         self.function = Some(Arc::new(f));
+        self
+    }
+
+    pub fn with_optimiser(mut self, opt: impl Into<Optimiser>) -> Self {
+        self.optimiser = opt.into();
         self
     }
 
@@ -97,7 +90,7 @@ impl<Opt: Optimiser> VectorProblemBuilder<Opt> {
     }
 
     /// Build the problem
-    pub fn build(self) -> Result<Problem<VectorObjective, Opt>, ProblemBuilderError> {
+    pub fn build(self) -> Result<Problem<VectorObjective>, ProblemBuilderError> {
         // Default costs
         let mut costs = self.costs;
         if costs.is_empty() {

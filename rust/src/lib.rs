@@ -6,14 +6,10 @@ pub mod sampler;
 
 // Convenience re-exports so users can `use chronopt::prelude::*;`
 pub mod prelude {
-    pub use crate::optimisers::{
-        Adam, NelderMead, OptimisationResults, Optimiser, WithMaxIter, WithPatience, WithSigma0,
-        WithThreshold, CMAES,
-    };
-    // pub use crate::builders::{BuilderOptimiserExt, BuilderParameterExt};
     pub use crate::builders::{
         DiffsolConfig, DiffsolProblemBuilder, ScalarProblemBuilder, VectorProblemBuilder,
     };
+    pub use crate::optimisers::{Adam, NelderMead, OptimisationResults, Optimiser, CMAES};
     pub use crate::problem::{Objective, ParameterSet, ParameterSpec, Problem};
     pub use crate::sampler::{
         DynamicNestedSampler, MetropolisHastings, NestedSample, NestedSamples, Sampler, Samples,
@@ -32,13 +28,13 @@ mod tests {
             .unwrap();
 
         let optimiser = NelderMead::new().with_max_iter(500).with_sigma0(0.4);
-        let result = optimiser.run(&problem, vec![1.0, 1.0]);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![1.0, 1.0], None);
 
         assert!(result.success);
         assert!(
-            result.fun < 0.01,
+            result.value < 0.01,
             "Expected fun < 0.01, but got: {}",
-            result.fun
+            result.value
         );
     }
 }

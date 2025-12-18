@@ -280,7 +280,7 @@ pub(super) fn logspace_sub(a: f64, b: f64) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::problem::builders::BuilderParameterExt;
+    use crate::problem::builders_old::BuilderParameterExt;
     use crate::problem::{ParameterSpec, ScalarProblemBuilder};
     fn gaussian_problem(mean: f64, sigma: f64) -> crate::problem::Problem {
         let log_norm = sigma.ln() + 0.5 * (2.0 * std::f64::consts::PI).ln();

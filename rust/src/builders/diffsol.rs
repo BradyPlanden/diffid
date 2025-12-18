@@ -78,16 +78,16 @@ impl DiffsolConfig {
 }
 
 #[derive(Clone)]
-pub struct DiffsolProblemBuilder<Opt = NelderMead> {
+pub struct DiffsolProblemBuilder {
     equations: Option<String>,
     data: Option<DMatrix<f64>>,
     costs: Vec<Arc<dyn CostMetric>>,
     config: DiffsolConfig,
     parameters: ParameterSet,
-    optimiser: Opt,
+    optimiser: Optimiser,
 }
 
-impl DiffsolProblemBuilder<NelderMead> {
+impl DiffsolProblemBuilder {
     pub fn new() -> Self {
         Self {
             equations: None,
@@ -95,25 +95,15 @@ impl DiffsolProblemBuilder<NelderMead> {
             costs: Vec::new(),
             config: DiffsolConfig::default(),
             parameters: ParameterSet::default(),
-            optimiser: NelderMead::new(),
+            optimiser: Optimiser::default(),
         }
     }
-}
 
-impl<Opt: Optimiser> DiffsolProblemBuilder<Opt> {
-    pub fn with_optimiser<NewOpt: Optimiser>(self, opt: NewOpt) -> DiffsolProblemBuilder<NewOpt> {
-        DiffsolProblemBuilder {
-            equations: self.equations,
-            data: self.data,
-            costs: self.costs,
-            config: self.config,
-            parameters: self.parameters,
-            optimiser: opt,
-        }
+    pub fn with_optimiser(mut self, opt: impl Into<Optimiser>) -> Self {
+        self.optimiser = opt.into();
+        self
     }
-}
 
-impl<Opt: Optimiser> DiffsolProblemBuilder<Opt> {
     /// Registers the DiffSL differential equation system.
     pub fn with_diffsl(mut self, equations: String) -> Self {
         self.equations = Some(equations);
@@ -198,7 +188,7 @@ impl<Opt: Optimiser> DiffsolProblemBuilder<Opt> {
     }
 
     /// Build the problem
-    pub fn build(self) -> Result<Problem<DiffsolObjective, Opt>, ProblemBuilderError> {
+    pub fn build(self) -> Result<Problem<DiffsolObjective>, ProblemBuilderError> {
         // Unpack data and verify
         let data_with_t = self.data.as_ref().ok_or(ProblemBuilderError::MissingData)?;
         if data_with_t.ncols() < 2 {

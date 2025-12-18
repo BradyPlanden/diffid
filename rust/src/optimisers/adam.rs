@@ -1,14 +1,9 @@
 use crate::optimisers::{
-    build_results, ApplyBounds, Bounds, EvaluatedPoint, OptimisationResults, TerminationReason,
+    build_results, ApplyBounds, AskResult, Bounds, EvaluatedPoint, Gradient, OptimisationResults,
+    Point, TellError, TerminationReason,
 };
+use std::error::Error as StdError;
 use std::time::{Duration, Instant};
-
-type Point = Vec<f64>;
-type Gradient = Vec<f64>;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Configuration
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// Configuration for the Adam optimizer
 #[derive(Clone, Debug)]
@@ -118,19 +113,6 @@ pub enum AdamPhase {
     Terminated(TerminationReason),
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Ask/Tell Types
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Result of calling `ask()`
-#[derive(Clone, Debug)]
-pub enum AskResult {
-    /// Evaluate this point (with gradient) and call `tell()` with the result
-    Evaluate(Point),
-    /// Optimization has finished
-    Done(OptimisationResults),
-}
-
 /// Evaluation result containing both value and gradient
 #[derive(Clone, Debug)]
 pub struct GradientEvaluation {
@@ -148,15 +130,6 @@ impl From<(f64, Vec<f64>)> for GradientEvaluation {
     fn from((value, gradient): (f64, Vec<f64>)) -> Self {
         Self { value, gradient }
     }
-}
-
-/// Errors that can occur when calling `tell()`
-#[derive(Clone, Debug, PartialEq)]
-pub enum TellError {
-    /// Called `tell()` when the algorithm has already terminated
-    AlreadyTerminated,
-    /// Gradient dimension doesn't match point dimension
-    GradientDimensionMismatch { expected: usize, got: usize },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -274,7 +247,7 @@ impl AdamState {
         match &self.phase {
             AdamPhase::Terminated(reason) => AskResult::Done(self.build_results(reason.clone())),
             AdamPhase::AwaitingEvaluation { pending_point } => {
-                AskResult::Evaluate(pending_point.clone())
+                AskResult::Evaluate(vec![pending_point.clone()])
             }
         }
     }
@@ -282,7 +255,10 @@ impl AdamState {
     /// Report the evaluation result (value and gradient) for the last point from `ask()`
     ///
     /// Pass `Err` if the objective function failed to evaluate
-    pub fn tell(&mut self, result: Result<GradientEvaluation, String>) -> Result<(), TellError> {
+    pub fn tell<E>(&mut self, result: Result<GradientEvaluation, E>) -> Result<(), TellError>
+    where
+        E: StdError + 'static,
+    {
         if matches!(self.phase, AdamPhase::Terminated(_)) {
             return Err(TellError::AlreadyTerminated);
         }
@@ -290,11 +266,12 @@ impl AdamState {
         // Validate and extract result
         let eval = match result {
             Ok(e) => e,
-            Err(msg) => {
+            Err(e) => {
                 self.history
                     .push(EvaluatedPoint::new(self.x.clone(), f64::NAN));
-                self.phase =
-                    AdamPhase::Terminated(TerminationReason::FunctionEvaluationFailed(msg));
+                self.phase = AdamPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
+                    format!("{}", e),
+                ));
                 return Ok(());
             }
         };
@@ -326,7 +303,10 @@ impl AdamState {
     }
 
     /// Convenience method to tell with a tuple (value, gradient)
-    pub fn tell_tuple(&mut self, result: Result<(f64, Gradient), String>) -> Result<(), TellError> {
+    pub fn tell_tuple<E>(&mut self, result: Result<(f64, Gradient), E>) -> Result<(), TellError>
+    where
+        E: StdError + 'static,
+    {
         self.tell(result.map(GradientEvaluation::from))
     }
 
@@ -472,14 +452,15 @@ impl Adam {
     /// Run optimization using a closure for evaluation
     ///
     /// The closure should return `(value, gradient)` for a given point
-    pub fn run<F>(
+    pub fn run<F, E>(
         &self,
+        mut objective: F,
         initial: Point,
         bounds: Option<Bounds>,
-        mut objective: F,
     ) -> OptimisationResults
     where
-        F: FnMut(&[f64]) -> Result<(f64, Gradient), String>,
+        F: FnMut(&[f64]) -> Result<(f64, Gradient), E>,
+        E: StdError + 'static,
     {
         let (mut state, first_point) = self.init(initial, bounds);
 
@@ -494,7 +475,7 @@ impl Adam {
 
             match state.ask() {
                 AskResult::Evaluate(point) => {
-                    result = objective(&point);
+                    result = objective(&point[0]);
                 }
                 AskResult::Done(results) => {
                     return results;
@@ -511,38 +492,43 @@ impl Adam {
     /// Run optimization with numerical gradient approximation
     ///
     /// Uses central differences to approximate the gradient
-    pub fn run_with_numerical_gradient<F>(
+    pub fn run_with_numerical_gradient<F, E>(
         &self,
+        mut objective: F,
         initial: Point,
         bounds: Option<Bounds>,
-        mut objective: F,
         epsilon: f64,
     ) -> OptimisationResults
     where
-        F: FnMut(&[f64]) -> Result<f64, String>,
+        F: FnMut(&[f64]) -> Result<f64, E>,
+        E: StdError + 'static,
     {
-        self.run(initial, bounds, |x| {
-            let value = objective(x)?;
+        self.run(
+            |x| -> Result<(f64, Vec<f64>), E> {
+                let value = objective(x)?;
 
-            let mut gradient = vec![0.0; x.len()];
-            let mut x_plus = x.to_vec();
-            let mut x_minus = x.to_vec();
+                let mut gradient = vec![0.0; x.len()];
+                let mut x_plus = x.to_vec();
+                let mut x_minus = x.to_vec();
 
-            for i in 0..x.len() {
-                x_plus[i] = x[i] + epsilon;
-                x_minus[i] = x[i] - epsilon;
+                for i in 0..x.len() {
+                    x_plus[i] = x[i] + epsilon;
+                    x_minus[i] = x[i] - epsilon;
 
-                let f_plus = objective(&x_plus)?;
-                let f_minus = objective(&x_minus)?;
+                    let f_plus = objective(&x_plus)?;
+                    let f_minus = objective(&x_minus)?;
 
-                gradient[i] = (f_plus - f_minus) / (2.0 * epsilon);
+                    gradient[i] = (f_plus - f_minus) / (2.0 * epsilon);
 
-                x_plus[i] = x[i];
-                x_minus[i] = x[i];
-            }
+                    x_plus[i] = x[i];
+                    x_minus[i] = x[i];
+                }
 
-            Ok((value, gradient))
-        })
+                Ok((value, gradient))
+            },
+            initial,
+            bounds,
+        )
     }
 }
 
@@ -589,10 +575,11 @@ mod tests {
         let (mut state, first_point) = adam.init(initial, None);
 
         let (value, gradient) = sphere_with_grad(&first_point);
-        let mut current_eval = GradientEvaluation::new(value, gradient);
+        let mut current_eval =
+            Ok::<_, Box<dyn std::error::Error>>(GradientEvaluation::new(value, gradient));
 
         loop {
-            match state.tell(Ok(current_eval.clone())) {
+            match state.tell(current_eval.clone()) {
                 Ok(()) => {}
                 Err(TellError::AlreadyTerminated) => break,
                 Err(e) => panic!("Unexpected error: {:?}", e),
@@ -600,7 +587,7 @@ mod tests {
 
             match state.ask() {
                 AskResult::Evaluate(point) => {
-                    let (value, gradient) = sphere_with_grad(&point);
+                    let (value, gradient) = sphere_with_grad(&point[0]);
                     current_eval = GradientEvaluation::new(value, gradient);
                 }
                 AskResult::Done(results) => {
@@ -628,7 +615,11 @@ mod tests {
 
         match state.ask() {
             AskResult::Evaluate(point) => {
-                assert!(point != vec![1.0, 1.0], "Point should have been updated");
+                assert_ne!(
+                    point,
+                    vec![vec![1.0, 1.0]],
+                    "Point should have been updated"
+                );
             }
             AskResult::Done(_) => {}
         }
@@ -638,7 +629,7 @@ mod tests {
     fn test_run_convenience_wrapper() {
         let adam = Adam::new().with_max_iter(1000).with_step_size(0.1);
 
-        let results = adam.run(vec![5.0, 5.0], None, |x| Ok(sphere_with_grad(x)));
+        let results = adam.run(|x| Ok(sphere_with_grad(x)), vec![5.0, 5.0], None);
 
         println!("Final value: {}", results.value);
         println!("Iterations: {}", results.iterations);
@@ -650,9 +641,9 @@ mod tests {
         let adam = Adam::new().with_max_iter(500).with_step_size(0.1);
 
         let results = adam.run_with_numerical_gradient(
+            |x| Ok(x.iter().map(|xi| xi * xi).sum()),
             vec![2.0, 2.0],
             None,
-            |x| Ok(x.iter().map(|xi| xi * xi).sum()),
             1e-5,
         );
 
@@ -664,7 +655,7 @@ mod tests {
         let adam = Adam::new().with_max_iter(500).with_step_size(0.1);
 
         let bounds = Bounds::new(vec![(-10.0, 10.0), (-10.0, 10.0)]);
-        let results = adam.run(vec![5.0, 5.0], Some(bounds), |x| Ok(sphere_with_grad(x)));
+        let results = adam.run(|x| Ok(sphere_with_grad(x)), vec![5.0, 5.0], Some(bounds));
 
         assert!(results.value < 1e-3);
     }
@@ -676,7 +667,7 @@ mod tests {
             .with_step_size(0.001)
             .with_threshold(1e-8);
 
-        let results = adam.run(vec![0.0, 0.0], None, |x| Ok(rosenbrock_with_grad(x)));
+        let results = adam.run(|x| Ok(rosenbrock_with_grad(x)), vec![0.0, 0.0], None);
 
         println!("Rosenbrock result: {}", results.value);
         println!("Iterations: {}", results.iterations);

@@ -2,7 +2,7 @@ mod diffsol;
 mod scalar;
 mod vector;
 
-mod builders_old; // ToDo: remove
+// mod builders_old; // ToDo: remove
 
 use crate::problem::{ParameterSet, ParameterSpec};
 pub use diffsol::{DiffsolBackend, DiffsolConfig, DiffsolProblemBuilder};

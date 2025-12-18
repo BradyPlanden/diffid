@@ -4,38 +4,31 @@ use crate::prelude::{ParameterSpec, Problem};
 use crate::problem::{NoFunction, NoGradient, ScalarObjective};
 
 #[derive(Clone)]
-pub struct ScalarProblemBuilder<F = NoFunction, G = NoGradient, Opt = NelderMead> {
+pub struct ScalarProblemBuilder<F = NoFunction, G = NoGradient> {
     f: F,
     gradient: G,
     parameters: ParameterSet,
-    optimiser: Opt,
+    optimiser: Optimiser,
 }
 
 /// Initialises with empty function and gradient
-impl ScalarProblemBuilder<NoFunction, NoGradient, NelderMead> {
+impl ScalarProblemBuilder<NoFunction, NoGradient> {
     pub fn new() -> Self {
         Self {
             f: NoFunction,
             gradient: NoGradient,
             parameters: ParameterSet::default(),
-            optimiser: NelderMead::new(),
+            optimiser: Optimiser::default(),
         }
     }
 }
 
 /// Methods which are not state dependent
-impl<F, G, Opt: Optimiser> ScalarProblemBuilder<F, G, Opt> {
+impl<F, G> ScalarProblemBuilder<F, G> {
     /// Update the optimiser from the default
-    pub fn with_optimiser<NewOpt: Optimiser>(
-        self,
-        opt: NewOpt,
-    ) -> ScalarProblemBuilder<F, G, NewOpt> {
-        ScalarProblemBuilder {
-            f: self.f,
-            gradient: self.gradient,
-            parameters: self.parameters,
-            optimiser: opt,
-        }
+    pub fn with_optimiser(mut self, opt: impl Into<Optimiser>) -> Self {
+        self.optimiser = opt.into();
+        self
     }
 
     /// Add a parameter to the problem
@@ -51,16 +44,16 @@ impl<F, G, Opt: Optimiser> ScalarProblemBuilder<F, G, Opt> {
     }
 }
 
-impl Default for ScalarProblemBuilder<NoFunction, NoGradient, NelderMead> {
+impl Default for ScalarProblemBuilder<NoFunction, NoGradient> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 /// Add a function to a builder state with `NoFunction`
-impl<G, Opt: Optimiser> ScalarProblemBuilder<NoFunction, G, Opt> {
+impl<G> ScalarProblemBuilder<NoFunction, G> {
     /// Stores the callable objective function
-    pub fn with_function<F>(self, f: F) -> ScalarProblemBuilder<F, G, Opt>
+    pub fn with_function<F>(self, f: F) -> ScalarProblemBuilder<F, G>
     where
         F: Fn(&[f64]) -> f64 + Send + Sync + 'static,
     {
@@ -73,9 +66,9 @@ impl<G, Opt: Optimiser> ScalarProblemBuilder<NoFunction, G, Opt> {
     }
 }
 
-impl<F, Opt: Optimiser> ScalarProblemBuilder<F, NoGradient, Opt> {
+impl<F> ScalarProblemBuilder<F, NoGradient> {
     /// Store the gradient objective function
-    pub fn with_gradient<G>(self, gradient: G) -> ScalarProblemBuilder<F, G, Opt>
+    pub fn with_gradient<G>(self, gradient: G) -> ScalarProblemBuilder<F, G>
     where
         G: Fn(&[f64]) -> Vec<f64> + Send + Sync + 'static,
     {
@@ -89,13 +82,12 @@ impl<F, Opt: Optimiser> ScalarProblemBuilder<F, NoGradient, Opt> {
 }
 
 /// Build without gradient
-impl<F, Opt: Optimiser> ScalarProblemBuilder<F, NoGradient, Opt>
+impl<F> ScalarProblemBuilder<F, NoGradient>
 where
     F: Fn(&[f64]) -> f64 + Send + Sync + 'static,
-    Opt: Optimiser,
 {
     /// Build the problem
-    pub fn build(self) -> Result<Problem<ScalarObjective<F>, Opt>, ProblemBuilderError> {
+    pub fn build(self) -> Result<Problem<ScalarObjective<F>>, ProblemBuilderError> {
         // Build objective
         let objective = ScalarObjective::new(self.f);
 
@@ -105,13 +97,12 @@ where
 }
 
 /// Build with gradient
-impl<F, G, Opt: Optimiser> ScalarProblemBuilder<F, G, Opt>
+impl<F, G> ScalarProblemBuilder<F, G>
 where
     F: Fn(&[f64]) -> f64 + Send + Sync + 'static,
     G: Fn(&[f64]) -> Vec<f64> + Send + Sync + 'static,
-    Opt: Optimiser,
 {
-    pub fn build(self) -> Result<Problem<ScalarObjective<F, G>, Opt>, ProblemBuilderError> {
+    pub fn build(self) -> Result<Problem<ScalarObjective<F, G>>, ProblemBuilderError> {
         // Build objective
         let objective = ScalarObjective::with_gradient(self.f, self.gradient);
         Ok(Problem::new(objective, self.parameters, self.optimiser))

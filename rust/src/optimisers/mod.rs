@@ -2,37 +2,92 @@ mod adam;
 mod cmaes;
 mod nelder_mead;
 
-use crate::problem::{Objective, Problem};
 use nalgebra::{DMatrix, DVector};
 use rand::prelude::*;
 use rand::SeedableRng;
 use std::cmp::Ordering;
+use std::error::Error as StdError;
 use std::fmt;
 use std::time::{Duration, Instant};
 
 use crate::builders::{DiffsolProblemBuilder, ScalarProblemBuilder, VectorProblemBuilder};
+use crate::problem::{Objective, ProblemError};
 
+pub use adam::Adam;
+pub use cmaes::CMAES;
 pub use nelder_mead::NelderMead;
 
-// Core behaviour shared by all optimisers
-pub trait Optimiser: Send + Sync + Clone {
-    fn run(&self, initial: Vec<f64>) -> OptimisationResults;
+type Point = Vec<f64>;
+type Gradient = Vec<f64>;
 
-    /// Ask the optimiser for a new set of candidate points to evaluate
-    fn ask(self) -> Vec<f64>;
-
-    /// Inform the optimiser of the respective values of the 'ask'
-    /// candidate points.
-    fn tell(self) -> Vec<f64>;
+/// Result of calling `ask()`
+#[derive(Clone, Debug)]
+pub enum AskResult {
+    /// Evaluate these points and call `tell()` with the results
+    Evaluate(Vec<Point>),
+    /// Optimization has finished
+    Done(OptimisationResults),
 }
 
-enum InitialState {
-    Ready {
-        start: Vec<f64>,
-        start_value: f64,
-        nfev: usize,
-    },
-    Finished(OptimisationResults),
+/// Errors that can occur when calling `tell()`
+#[derive(Clone, Debug, PartialEq)]
+pub enum TellError {
+    /// Called `tell()` when the algorithm has already terminated
+    AlreadyTerminated,
+    /// Number of results doesn't match number of requested points
+    ResultCountMismatch { expected: usize, got: usize },
+    /// Gradient dimension doesn't match point dimension
+    GradientDimensionMismatch { expected: usize, got: usize },
+}
+
+#[derive(Clone)]
+pub enum Optimiser {
+    NelderMead(NelderMead),
+    CMAES(CMAES),
+    Adam(Adam),
+}
+
+impl Optimiser {
+    pub fn run<F, E>(
+        &self,
+        objective: F,
+        initial: Point,
+        bounds: Option<Bounds>,
+    ) -> OptimisationResults
+    where
+        F: FnMut(&[f64]) -> Result<f64, E>,
+        E: StdError + 'static,
+    {
+        match self {
+            Optimiser::NelderMead(nm) => nm.run(objective, initial, bounds),
+            Optimiser::CMAES(cm) => cm.run(objective, initial, bounds),
+            Optimiser::Adam(ad) => ad.run(objective, initial, bounds),
+        }
+    }
+}
+
+impl From<NelderMead> for Optimiser {
+    fn from(nm: NelderMead) -> Self {
+        Optimiser::NelderMead(nm)
+    }
+}
+
+impl From<CMAES> for Optimiser {
+    fn from(cmaes: CMAES) -> Self {
+        Optimiser::CMAES(cmaes)
+    }
+}
+
+impl From<Adam> for Optimiser {
+    fn from(adam: Adam) -> Self {
+        Optimiser::Adam(adam)
+    }
+}
+
+impl Default for Optimiser {
+    fn default() -> Self {
+        Optimiser::NelderMead(NelderMead::default())
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -217,8 +272,7 @@ mod tests {
                 let x1 = x[1] + 0.5;
                 x0 * x0 + x1 * x1
             })
-            .build()
-            .unwrap();
+            .build();
 
         let optimiser = NelderMead::new()
             .with_max_iter(400)
@@ -226,7 +280,11 @@ mod tests {
             .with_sigma0(0.6)
             .with_position_tolerance(1e-8);
 
-        let result = optimiser.run(|x| problem.evaluate(x), [1.0], vec![5.0, -4.0]);
+        let result = optimiser.run(
+            |x| problem.evaluate(x),
+            vec![1.0],
+            Some(Bounds::new(vec![(-5.0, 4.0)])),
+        );
 
         assert!(result.success, "Expected success: {}", result.message);
         assert!((result.x[0] - 1.5).abs() < 1e-5);
@@ -244,8 +302,7 @@ mod tests {
     fn nelder_mead_respects_max_iterations() {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| x.iter().map(|xi| xi * xi).sum())
-            .build()
-            .unwrap();
+            .build();
 
         let optimiser = NelderMead::new().with_max_iter(1).with_sigma0(1.0);
         let result = optimiser.run(|x| problem.evaluate(x), vec![10.0, -10.0], None);
@@ -259,8 +316,7 @@ mod tests {
     fn nelder_mead_respects_max_function_evaluations() {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| x.iter().map(|xi| xi * xi).sum())
-            .build()
-            .unwrap();
+            .build();
 
         let optimiser = NelderMead::new()
             .with_max_evaluations(2)
@@ -284,8 +340,7 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(5));
                 x.iter().map(|xi| xi * xi).sum()
             })
-            .build()
-            .unwrap();
+            .build();
 
         let optimiser = NelderMead::new().with_sigma0(0.5).with_patience(0.01);
 
@@ -303,8 +358,7 @@ mod tests {
                 let x1 = x[1] + 0.5;
                 x0 * x0 + x1 * x1
             })
-            .build()
-            .unwrap();
+            .build();
 
         let optimiser = CMAES::new()
             .with_max_iter(400)
@@ -313,29 +367,32 @@ mod tests {
             .with_patience(5.0)
             .with_seed(42);
 
-        let result = optimiser.run(&problem, vec![5.0, -4.0]);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![5.0, -4.0], None);
 
         assert!(result.success, "Expected success: {}", result.message);
         assert!((result.x[0] - 1.5).abs() < 1e-4);
         assert!((result.x[1] + 0.5).abs() < 1e-4);
-        assert!(result.fun < 1e-8, "Final value too large: {}", result.fun);
-        assert!(result.nit > 0);
-        assert!(result.nfev > result.nit);
+        assert!(
+            result.value < 1e-8,
+            "Final value too large: {}",
+            result.value
+        );
+        assert!(result.iterations > 0);
+        assert!(result.evaluations > result.iterations);
     }
 
     #[test]
     fn cmaes_respects_max_iterations() {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| x.iter().map(|xi| xi * xi).sum())
-            .build()
-            .unwrap();
+            .build();
 
         let optimiser = CMAES::new().with_max_iter(1).with_sigma0(0.5).with_seed(7);
-        let result = optimiser.run(&problem, vec![10.0, -10.0]);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![10.0, -10.0], None);
 
         assert_eq!(result.termination, TerminationReason::MaxIterationsReached);
         assert!(!result.success);
-        assert!(result.nit <= 1);
+        assert!(result.iterations <= 1);
     }
 
     #[test]
@@ -345,15 +402,14 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(5));
                 x.iter().map(|xi| xi * xi).sum()
             })
-            .build()
-            .unwrap();
+            .build();
 
         let optimiser = CMAES::new()
             .with_sigma0(0.5)
             .with_patience(0.01)
             .with_seed(5);
 
-        let result = optimiser.run(&problem, vec![5.0, -5.0]);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![5.0, -5.0], None);
 
         assert_eq!(result.termination, TerminationReason::PatienceElapsed);
         assert!(!result.success);
@@ -368,20 +424,23 @@ mod tests {
                 x0 * x0 + x1 * x1
             })
             .with_gradient(|x: &[f64]| vec![2.0 * (x[0] - 1.5), 2.0 * (x[1] + 0.5)])
-            .build()
-            .unwrap();
+            .build();
 
         let optimiser = Adam::new()
             .with_step_size(0.1)
             .with_max_iter(500)
             .with_threshold(1e-8);
 
-        let result = optimiser.run(&problem, vec![5.0, -4.0]);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![5.0, -4.0], None);
 
         assert!(result.success, "Expected success: {}", result.message);
         assert!((result.x[0] - 1.5).abs() < 1e-3);
         assert!((result.x[1] + 0.5).abs() < 1e-3);
-        assert!(result.fun < 1e-6, "Final value too large: {}", result.fun);
+        assert!(
+            result.value < 1e-6,
+            "Final value too large: {}",
+            result.value
+        );
     }
 
     #[test]
@@ -389,19 +448,18 @@ mod tests {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| x.iter().map(|xi| xi * xi).sum())
             .with_gradient(|x: &[f64]| x.iter().map(|xi| 2.0 * xi).collect())
-            .build()
-            .unwrap();
+            .build();
 
         let optimiser = Adam::new()
             .with_step_size(0.1)
             .with_max_iter(1)
             .with_threshold(1e-12);
 
-        let result = optimiser.run(&problem, vec![10.0, -10.0]);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![10.0, -10.0], None);
 
         assert_eq!(result.termination, TerminationReason::MaxIterationsReached);
         assert!(!result.success);
-        assert!(result.nit <= 1);
+        assert!(result.iterations <= 1);
     }
 
     #[test]
@@ -415,15 +473,14 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(5));
                 x.iter().map(|xi| 2.0 * xi).collect()
             })
-            .build()
-            .unwrap();
+            .build();
 
         let optimiser = Adam::new()
             .with_step_size(0.1)
             .with_max_iter(100)
             .with_patience(0.01);
 
-        let result = optimiser.run(&problem, vec![5.0, -5.0]);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![5.0, -5.0], None);
 
         assert_eq!(result.termination, TerminationReason::PatienceElapsed);
         assert!(!result.success);
@@ -455,14 +512,13 @@ mod tests {
 
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| (x[0] - 2.0).powi(2) + (x[1] - 3.0).powi(2))
-            .with_parameter(ParameterSpec::new("x", 0.0, Some((-1.0, 1.0))))
-            .with_parameter(ParameterSpec::new("y", 0.0, Some((0.0, 2.0))))
-            .build()
-            .unwrap();
+            .with_parameter("x", 0.0, Some((-1.0, 1.0)))
+            .with_parameter("y", 0.0, Some((0.0, 2.0)))
+            .build();
 
         let optimiser = NelderMead::new().with_max_iter(200).with_threshold(1e-8);
 
-        let result = optimiser.run(&problem, vec![0.5, 1.0]);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![0.5, 1.0], None);
 
         // Should converge to bounds: x=1.0 (clamped from 2.0), y=2.0 (clamped from 3.0)
         assert!(
@@ -491,17 +547,16 @@ mod tests {
 
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| (x[0] - 5.0).powi(2) + (x[1] + 5.0).powi(2))
-            .with_parameter(ParameterSpec::new("x", 0.0, Some((0.0, 3.0))))
-            .with_parameter(ParameterSpec::new("y", 0.0, Some((-3.0, 0.0))))
-            .build()
-            .unwrap();
+            .with_parameter("x", 0.0, Some((0.0, 3.0)))
+            .with_parameter("y", 0.0, Some((-3.0, 0.0)))
+            .build();
 
         let optimiser = CMAES::new()
             .with_max_iter(100)
             .with_threshold(1e-6)
             .with_seed(123);
 
-        let result = optimiser.run(&problem, vec![1.5, -1.5]);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![1.5, -1.5], None);
 
         // Should converge to bounds: x=3.0 (clamped from 5.0), y=-3.0 (clamped from -5.0)
         assert!(

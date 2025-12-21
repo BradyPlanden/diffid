@@ -942,7 +942,7 @@ mod tests {
         let clamped = (sqrt_inner - 1.0).max(0.0); // max(0, -0.436) = 0.0
         let expected = 1.0 + c_sigma + 2.0 * clamped; // 1.0 + 0.3 + 0 = 1.3
 
-        let computed = compute_d_sigma(mu_eff, dim_f, c_sigma);
+        let computed = StrategyParameters::compute_d_sigma(mu_eff, dim_f, c_sigma);
 
         assert!(
             (computed - expected).abs() < 1e-12,
@@ -965,7 +965,7 @@ mod tests {
         let c_sigma = 0.2_f64;
 
         let expected = 1.0 + c_sigma;
-        let computed = compute_d_sigma(mu_eff, dim_f, c_sigma);
+        let computed = StrategyParameters::compute_d_sigma(mu_eff, dim_f, c_sigma);
 
         assert!((computed - expected).abs() < 1e-12);
     }
@@ -985,7 +985,7 @@ mod tests {
             + (p_c.clone() * p_c.transpose() + cov.clone() * correction_factor) * c1
             + rank_mu.clone() * c_mu;
 
-        let updated = update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
+        let updated = CMAESState::update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
 
         for (exp, got) in expected.iter().zip(updated.iter()) {
             assert!((exp - got).abs() < 1e-12, "expected {} got {}", exp, got);
@@ -1007,7 +1007,7 @@ mod tests {
             + (p_c.clone() * p_c.transpose() + cov.clone() * correction_factor) * c1
             + rank_mu.clone() * c_mu;
 
-        let updated = update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
+        let updated = CMAESState::update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
 
         for (exp, got) in expected.iter().zip(updated.iter()) {
             assert!((exp - got).abs() < 1e-12, "expected {} got {}", exp, got);

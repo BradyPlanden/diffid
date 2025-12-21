@@ -1,6 +1,8 @@
 mod adam;
 mod cmaes;
+mod errors;
 mod nelder_mead;
+mod types;
 
 use nalgebra::{DMatrix, DVector};
 use rand::prelude::*;
@@ -16,9 +18,7 @@ use crate::problem::{Objective, ProblemError};
 pub use adam::Adam;
 pub use cmaes::CMAES;
 pub use nelder_mead::NelderMead;
-
-type Point = Vec<f64>;
-type Gradient = Vec<f64>;
+pub use types::*;
 
 /// Result of calling `ask()`
 #[derive(Clone, Debug)]

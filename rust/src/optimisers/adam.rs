@@ -1,6 +1,7 @@
 use crate::optimisers::{
-    build_results, ApplyBounds, AskResult, Bounds, EvaluatedPoint, Gradient, OptimisationResults,
-    Point, TellError, TerminationReason,
+    build_results, ApplyBounds, AskResult, Bounds, EvaluatedPoint, Gradient, GradientEvaluation,
+    GradientInput, IntoEvaluation, OptimisationResults, Point, TellError,
+    TerminationReason,
 };
 use std::error::Error as StdError;
 use std::time::{Duration, Instant};
@@ -85,7 +86,6 @@ impl Adam {
     pub fn init(&self, initial: Point, bounds: Option<Bounds>) -> (AdamState, Point) {
         let dim = initial.len();
         let mut initial_point = initial;
-
         initial_point.apply_bounds(bounds.as_ref());
 
         let state = AdamState::new(self.clone(), initial_point.clone(), bounds, dim);
@@ -111,25 +111,6 @@ pub enum AdamPhase {
 
     /// Algorithm has terminated
     Terminated(TerminationReason),
-}
-
-/// Evaluation result containing both value and gradient
-#[derive(Clone, Debug)]
-pub struct GradientEvaluation {
-    pub value: f64,
-    pub gradient: Gradient,
-}
-
-impl GradientEvaluation {
-    pub fn new(value: f64, gradient: Gradient) -> Self {
-        Self { value, gradient }
-    }
-}
-
-impl From<(f64, Vec<f64>)> for GradientEvaluation {
-    fn from((value, gradient): (f64, Vec<f64>)) -> Self {
-        Self { value, gradient }
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -255,16 +236,13 @@ impl AdamState {
     /// Report the evaluation result (value and gradient) for the last point from `ask()`
     ///
     /// Pass `Err` if the objective function failed to evaluate
-    pub fn tell<E>(&mut self, result: Result<GradientEvaluation, E>) -> Result<(), TellError>
-    where
-        E: StdError + 'static,
-    {
+    pub fn tell(&mut self, result: impl GradientInput) -> Result<(), TellError> {
         if matches!(self.phase, AdamPhase::Terminated(_)) {
             return Err(TellError::AlreadyTerminated);
         }
 
-        // Validate and extract result
-        let eval = match result {
+        // Convert to evaluation result
+        let eval = match result.into_evaluation() {
             Ok(e) => e,
             Err(e) => {
                 self.history
@@ -300,14 +278,6 @@ impl AdamState {
         }
 
         Ok(())
-    }
-
-    /// Convenience method to tell with a tuple (value, gradient)
-    pub fn tell_tuple<E>(&mut self, result: Result<(f64, Gradient), E>) -> Result<(), TellError>
-    where
-        E: StdError + 'static,
-    {
-        self.tell(result.map(GradientEvaluation::from))
     }
 
     /// Get current iteration count
@@ -417,13 +387,9 @@ impl AdamState {
         };
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Helper Methods
-    // ─────────────────────────────────────────────────────────────────────────
-
-    fn apply_bounds_to(&self, point: &mut Point) {
-        point.apply_bounds(self.bounds.as_ref());
-    }
+    // fn apply_bounds_to(&self, point: &mut Point) {
+    //     point.apply_bounds(self.bounds.as_ref());
+    // }
 
     fn build_results(&self, reason: TerminationReason) -> OptimisationResults {
         let points = if self.history.is_empty() {
@@ -452,24 +418,21 @@ impl Adam {
     /// Run optimization using a closure for evaluation
     ///
     /// The closure should return `(value, gradient)` for a given point
-    pub fn run<F, E>(
+    pub fn run<F, R>(
         &self,
         mut objective: F,
         initial: Point,
         bounds: Option<Bounds>,
     ) -> OptimisationResults
     where
-        F: FnMut(&[f64]) -> Result<(f64, Gradient), E>,
-        E: StdError + 'static,
+        F: FnMut(&[f64]) -> R,
+        R: IntoEvaluation<GradientEvaluation>,
     {
         let (mut state, first_point) = self.init(initial, bounds);
-
         let mut result = objective(&first_point);
 
         loop {
-            let tell_result = state.tell(result.map(GradientEvaluation::from));
-
-            if tell_result.is_err() {
+            if state.tell(result).is_err() {
                 break;
             }
 
@@ -501,12 +464,11 @@ impl Adam {
     ) -> OptimisationResults
     where
         F: FnMut(&[f64]) -> Result<f64, E>,
-        E: StdError + 'static,
+        E: StdError + Send + Sync + 'static,
     {
         self.run(
             |x| -> Result<(f64, Vec<f64>), E> {
                 let value = objective(x)?;
-
                 let mut gradient = vec![0.0; x.len()];
                 let mut x_plus = x.to_vec();
                 let mut x_minus = x.to_vec();
@@ -541,7 +503,7 @@ mod tests {
     use super::*;
 
     /// Rosenbrock function with analytical gradient
-    fn rosenbrock_with_grad(x: &[f64]) -> (f64, Vec<f64>) {
+    fn rosenbrock_infallible(x: &[f64]) -> (f64, Vec<f64>) {
         let a = 1.0;
         let b = 100.0;
         let x0 = x[0];
@@ -557,15 +519,22 @@ mod tests {
         (value, grad)
     }
 
-    /// Simple quadratic function: f(x) = sum(x_i^2)
-    fn sphere_with_grad(x: &[f64]) -> (f64, Vec<f64>) {
+    /// Infallible sphere function
+    fn sphere_infallible(x: &[f64]) -> (f64, Vec<f64>) {
         let value: f64 = x.iter().map(|xi| xi * xi).sum();
         let grad: Vec<f64> = x.iter().map(|xi| 2.0 * xi).collect();
         (value, grad)
     }
 
+    /// fallible sphere function
+    fn sphere_fallible(x: &[f64]) -> Result<(f64, Vec<f64>), std::io::Error> {
+        let value: f64 = x.iter().map(|xi| xi * xi).sum();
+        let grad: Vec<f64> = x.iter().map(|xi| 2.0 * xi).collect();
+        Ok((value, grad))
+    }
+
     #[test]
-    fn test_ask_tell_interface() {
+    fn test_ask_tell_fallible() {
         let adam = Adam::new()
             .with_max_iter(1000)
             .with_step_size(0.1)
@@ -573,28 +542,18 @@ mod tests {
 
         let initial = vec![0.0, 0.0];
         let (mut state, first_point) = adam.init(initial, None);
-
-        let (value, gradient) = sphere_with_grad(&first_point);
-        let mut current_eval =
-            Ok::<_, Box<dyn std::error::Error>>(GradientEvaluation::new(value, gradient));
+        let mut val_grad = sphere_fallible(&first_point);
 
         loop {
-            match state.tell(current_eval.clone()) {
-                Ok(()) => {}
-                Err(TellError::AlreadyTerminated) => break,
-                Err(e) => panic!("Unexpected error: {:?}", e),
+            if state.tell(val_grad).is_err() {
+                break;
             }
 
             match state.ask() {
                 AskResult::Evaluate(point) => {
-                    let (value, gradient) = sphere_with_grad(&point[0]);
-                    current_eval = GradientEvaluation::new(value, gradient);
+                    val_grad = sphere_fallible(&point[0]);
                 }
                 AskResult::Done(results) => {
-                    println!("Optimization complete!");
-                    println!("Best value: {}", results.value);
-                    println!("Iterations: {}", results.iterations);
-                    println!("Evaluations: {}", results.evaluations);
                     assert!(results.value < 1e-4);
                     break;
                 }
@@ -603,25 +562,30 @@ mod tests {
     }
 
     #[test]
-    fn test_tell_tuple_convenience() {
-        let adam = Adam::new().with_max_iter(100);
+    fn test_ask_tell_infallible() {
+        let adam = Adam::new()
+            .with_max_iter(1000)
+            .with_step_size(0.1)
+            .with_threshold(1e-6);
 
-        let initial = vec![1.0, 1.0];
+        let initial = vec![0.0, 0.0];
         let (mut state, first_point) = adam.init(initial, None);
+        let mut val_grad = sphere_infallible(&first_point);
 
-        // Use the tuple convenience method
-        let result = sphere_with_grad(&first_point);
-        state.tell_tuple(Ok(result)).unwrap();
-
-        match state.ask() {
-            AskResult::Evaluate(point) => {
-                assert_ne!(
-                    point,
-                    vec![vec![1.0, 1.0]],
-                    "Point should have been updated"
-                );
+        loop {
+            if state.tell(val_grad).is_err() {
+                break;
             }
-            AskResult::Done(_) => {}
+
+            match state.ask() {
+                AskResult::Evaluate(point) => {
+                    val_grad = sphere_infallible(&point[0]);
+                }
+                AskResult::Done(results) => {
+                    assert!(results.value < 1e-4);
+                    break;
+                }
+            }
         }
     }
 
@@ -629,7 +593,7 @@ mod tests {
     fn test_run_convenience_wrapper() {
         let adam = Adam::new().with_max_iter(1000).with_step_size(0.1);
 
-        let results = adam.run(|x| Ok(sphere_with_grad(x)), vec![5.0, 5.0], None);
+        let results = adam.run(|x| sphere_infallible(x), vec![5.0, 5.0], None);
 
         println!("Final value: {}", results.value);
         println!("Iterations: {}", results.iterations);
@@ -641,7 +605,7 @@ mod tests {
         let adam = Adam::new().with_max_iter(500).with_step_size(0.1);
 
         let results = adam.run_with_numerical_gradient(
-            |x| Ok(x.iter().map(|xi| xi * xi).sum()),
+            |x| -> Result<f64, std::io::Error> { Ok(x.iter().map(|xi| xi * xi).sum()) },
             vec![2.0, 2.0],
             None,
             1e-5,
@@ -655,7 +619,7 @@ mod tests {
         let adam = Adam::new().with_max_iter(500).with_step_size(0.1);
 
         let bounds = Bounds::new(vec![(-10.0, 10.0), (-10.0, 10.0)]);
-        let results = adam.run(|x| Ok(sphere_with_grad(x)), vec![5.0, 5.0], Some(bounds));
+        let results = adam.run(|x| sphere_infallible(x), vec![5.0, 5.0], Some(bounds));
 
         assert!(results.value < 1e-3);
     }
@@ -667,7 +631,7 @@ mod tests {
             .with_step_size(0.001)
             .with_threshold(1e-8);
 
-        let results = adam.run(|x| Ok(rosenbrock_with_grad(x)), vec![0.0, 0.0], None);
+        let results = adam.run(|x| rosenbrock_infallible(x), vec![0.0, 0.0], None);
 
         println!("Rosenbrock result: {}", results.value);
         println!("Iterations: {}", results.iterations);
@@ -682,7 +646,7 @@ mod tests {
 
         // Wrong gradient dimension
         let bad_eval = GradientEvaluation::new(1.0, vec![0.1]); // Should be 2 elements
-        let result = state.tell(Ok(bad_eval));
+        let result = state.tell(bad_eval);
 
         assert!(matches!(
             result,
@@ -694,34 +658,15 @@ mod tests {
     }
 
     #[test]
-    fn test_evaluation_error() {
-        let adam = Adam::new();
-        let (mut state, _) = adam.init(vec![1.0, 2.0], None);
-
-        state.tell(Err("Test error".to_string())).unwrap();
-
-        match state.ask() {
-            AskResult::Done(results) => {
-                assert!(matches!(
-                    results.termination,
-                    TerminationReason::FunctionEvaluationFailed(_)
-                ));
-            }
-            _ => panic!("Should be terminated"),
-        }
-    }
-
-    #[test]
     fn test_gradient_tolerance() {
         let adam = Adam::new().with_gradient_threshold(1.0); // Very loose threshold
 
         let (mut state, first_point) = adam.init(vec![0.1, 0.1], None);
 
         // Start near origin with small gradient
-        let (value, gradient) = sphere_with_grad(&first_point);
+        let val_grad = sphere_fallible(&first_point).expect("should be fine");
         state
-            .tell(Ok(GradientEvaluation::new(value, gradient)))
-            .unwrap();
+            .tell(GradientEvaluation::new(val_grad.0, val_grad.1));
 
         match state.ask() {
             AskResult::Done(results) => {

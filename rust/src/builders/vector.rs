@@ -1,6 +1,6 @@
 use super::{ParameterSet, ProblemBuilderError};
 use crate::cost::{CostMetric, SumSquaredError};
-use crate::optimisers::{NelderMead, Optimiser};
+use crate::optimisers::Optimiser;
 use crate::prelude::{ParameterSpec, Problem};
 use crate::problem::{VectorFn, VectorObjective};
 use std::sync::Arc;
@@ -102,7 +102,7 @@ impl VectorProblemBuilder {
         let data = self.data.ok_or(ProblemBuilderError::MissingData)?;
 
         // Build objective
-        let objective = VectorObjective::new(function, data, costs);
+        let objective = VectorObjective::new(function, data, costs)?;
 
         // Build problem
         Ok(Problem::new(objective, self.parameters, self.optimiser))

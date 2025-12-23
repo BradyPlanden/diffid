@@ -1,7 +1,7 @@
 use super::{ParameterSet, ProblemBuilderError};
 use crate::cost::{CostMetric, SumSquaredError};
-use crate::prelude::{NelderMead, Optimiser, ParameterSpec};
-use crate::problem::{DiffsolObjective, Problem, ProblemError};
+use crate::prelude::{Optimiser, ParameterSpec};
+use crate::problem::{DiffsolObjective, Problem};
 use diffsol::OdeSolverMethod;
 use nalgebra::DMatrix;
 use std::collections::HashMap;

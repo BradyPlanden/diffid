@@ -1,10 +1,10 @@
-mod diffsol;
 mod scalar;
 mod vector;
+mod diffsol;
 
 // mod builders_old; // ToDo: remove
 
-use crate::problem::{ParameterSet, ParameterSpec};
+use crate::problem::{ParameterSet, ProblemError};
 pub use diffsol::{DiffsolBackend, DiffsolConfig, DiffsolProblemBuilder};
 pub use scalar::ScalarProblemBuilder;
 pub use vector::VectorProblemBuilder;
@@ -28,6 +28,21 @@ impl std::fmt::Display for ProblemBuilderError {
             Self::DimensionMismatch { expected, got } => {
                 write!(f, "expected {} elements, got {}", expected, got)
             }
+        }
+    }
+}
+
+impl From<ProblemError> for ProblemBuilderError {
+    fn from(err: ProblemError) -> Self {
+        match err {
+            ProblemError::DimensionMismatch { expected, got } => {
+                ProblemBuilderError::DimensionMismatch { expected, got }
+            }
+            ProblemError::BuildFailed(msg) => ProblemBuilderError::BuildFailed(msg),
+            // For other variants, wrap them in BuildFailed
+            ProblemError::External(e) => ProblemBuilderError::BuildFailed(e.to_string()),
+            ProblemError::EvaluationFailed(msg) => ProblemBuilderError::BuildFailed(msg),
+            ProblemError::SolverError(msg) => ProblemBuilderError::BuildFailed(msg),
         }
     }
 }

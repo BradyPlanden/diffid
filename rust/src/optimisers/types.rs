@@ -61,16 +61,16 @@ impl IntoEvaluation<GradientEvaluation> for GradientEvaluation {
 }
 
 /// Result<f64, E>
-impl<E: StdError + Send + Sync + 'static> IntoEvaluation<ScalarEvaluation>
-    for Result<f64, E>
-{
+impl<E: StdError + Send + Sync + 'static> IntoEvaluation<ScalarEvaluation> for Result<f64, E> {
     fn into_evaluation(self) -> Result<ScalarEvaluation, EvaluationError> {
         self.map(ScalarEvaluation).map_err(EvaluationError::user)
     }
 }
 
 /// Result<ScalarEvaluation, E>
-impl<E: StdError + Send + Sync + 'static > IntoEvaluation<ScalarEvaluation> for Result<ScalarEvaluation, E> {
+impl<E: StdError + Send + Sync + 'static> IntoEvaluation<ScalarEvaluation>
+    for Result<ScalarEvaluation, E>
+{
     fn into_evaluation(self) -> Result<ScalarEvaluation, EvaluationError> {
         self.map_err(EvaluationError::user)
     }
@@ -87,7 +87,9 @@ impl<E: StdError + Send + Sync + 'static> IntoEvaluation<GradientEvaluation>
 }
 
 /// Result<GradientEvaluation, E>
-impl<E: StdError + Send + Sync + 'static > IntoEvaluation<GradientEvaluation> for Result<GradientEvaluation, E> {
+impl<E: StdError + Send + Sync + 'static> IntoEvaluation<GradientEvaluation>
+    for Result<GradientEvaluation, E>
+{
     fn into_evaluation(self) -> Result<GradientEvaluation, EvaluationError> {
         self.map_err(EvaluationError::user)
     }

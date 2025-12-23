@@ -1,5 +1,5 @@
 use super::{ParameterSet, ProblemBuilderError};
-use crate::optimisers::{NelderMead, Optimiser};
+use crate::optimisers::Optimiser;
 use crate::prelude::{ParameterSpec, Problem};
 use crate::problem::{NoFunction, NoGradient, ScalarObjective};
 

@@ -4,7 +4,7 @@ use std::sync::Arc;
 mod diffsol_problem;
 
 pub use crate::cost::CostMetric;
-use crate::optimisers::{OptimisationResults, Optimiser};
+use crate::optimisers::{Bounds, OptimisationResults, Optimiser};
 pub use diffsol_problem::DiffsolObjective;
 
 pub struct NoGradient;
@@ -107,9 +107,25 @@ impl ParameterSet {
         self.0.iter()
     }
 
-    // pub fn bounds(&self) -> Option<(f64, f64)> {
-    //
-    // }
+    pub fn bounds(&self) -> Option<Bounds> {
+        if self.0.is_empty() {
+            return None;
+        }
+
+        let all_bounds: Vec<(f64, f64)> = self
+            .0
+            .iter()
+            .map(|spec| spec.bounds.unwrap_or((f64::NEG_INFINITY, f64::INFINITY)))
+            .collect();
+
+        // Only return Some if at least one parameter has actual bounds
+        let has_bounds = self.0.iter().any(|spec| spec.bounds.is_some());
+        if has_bounds {
+            Some(Bounds::new(all_bounds))
+        } else {
+            None
+        }
+    }
 }
 
 /// An Objective trait, used to define the core
@@ -186,8 +202,17 @@ pub struct VectorObjective {
 }
 
 impl VectorObjective {
-    pub fn new(f: VectorFn, data: Vec<f64>, costs: Vec<Arc<dyn CostMetric>>) -> Self {
-        Self { f, data, costs }
+    pub fn new(
+        f: VectorFn,
+        data: Vec<f64>,
+        costs: Vec<Arc<dyn CostMetric>>,
+    ) -> Result<Self, ProblemError> {
+        if data.is_empty() {
+            return Err(ProblemError::BuildFailed(
+                "Data must contain at least one element".to_string(),
+            ));
+        }
+        Ok(Self { f, data, costs })
     }
 }
 
@@ -263,15 +288,15 @@ impl<O: Objective> Problem<O> {
             .cloned()
             .unwrap_or_default();
 
-        opt.run(|x| self.evaluate(x), x0, self.bounds.clone())
+        opt.run(|x| self.evaluate(x), x0, self.parameters.bounds())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::cost::SumSquaredError;
-    use crate::prelude::*;
-    use std::collections::HashMap;
+    use super::*;
+    use crate::cost::{RootMeanSquaredError, SumSquaredError};
+
     #[test]
     fn vector_problem_exponential_model() {
         // Exponential growth: y = y0 * exp(r * t)
@@ -283,27 +308,27 @@ mod tests {
             .map(|&t| true_y0 * (true_r * t).exp())
             .collect();
 
-        // let t_span_clone = t_span.clone();
-        let objective = Box::new(move |params: &[f64]| -> Result<Vec<f64>, String> {
-            let r = params[0];
-            let y0 = params[1];
-            Ok(t_span.iter().map(|&t| y0 * (r * t).exp()).collect())
-        });
+        let t_span_clone = t_span.clone();
+        let objective_fn: VectorFn = Arc::new(
+            move |params: &[f64]| -> Result<Vec<f64>, Box<dyn std::error::Error + Send + Sync>> {
+                let r = params[0];
+                let y0 = params[1];
+                Ok(t_span_clone.iter().map(|&t| y0 * (r * t).exp()).collect())
+            },
+        );
+
+        let objective = VectorObjective::new(
+            objective_fn,
+            data,
+            vec![Arc::new(SumSquaredError::default())],
+        )
+        .expect("failed to create vector objective");
 
         let mut params = ParameterSet::new();
         params.push(ParameterSpec::new("r", 1.0, Some((0.0, 3.0))));
         params.push(ParameterSpec::new("y0", 1.0, Some((0.0, 5.0))));
 
-        let problem = Problem::new_vector(
-            objective,
-            data,
-            vec![10],
-            HashMap::new(),
-            params,
-            vec![Arc::new(SumSquaredError::default())],
-            None,
-        )
-        .expect("failed to create vector problem");
+        let problem = Problem::new(objective, params, Optimiser::default());
 
         // Test with true parameters
         let cost = problem
@@ -323,44 +348,50 @@ mod tests {
     #[test]
     fn vector_problem_dimension_mismatch() {
         let data = vec![1.0, 2.0, 3.0];
-        let objective = Box::new(|_params: &[f64]| -> Result<Vec<f64>, String> {
-            Ok(vec![1.0, 2.0, 3.0, 4.0, 5.0]) // Wrong size!
-        });
+        let objective_fn: VectorFn = Arc::new(
+            |_params: &[f64]| -> Result<Vec<f64>, Box<dyn std::error::Error + Send + Sync>> {
+                Ok(vec![1.0, 2.0, 3.0, 4.0, 5.0]) // Wrong size!
+            },
+        );
 
-        let problem = Problem::new_vector(
-            objective,
+        let objective = VectorObjective::new(
+            objective_fn,
             data,
-            vec![3],
-            HashMap::new(),
-            ParameterSet::new(),
             vec![Arc::new(SumSquaredError::default())],
-            None,
         )
-        .expect("failed to create vector problem");
+        .expect("failed to create vector objective");
+
+        let problem = Problem::new(objective, ParameterSet::new(), Optimiser::default());
 
         let result = problem.evaluate(&[1.0]);
         assert!(result.is_err(), "expected error for dimension mismatch");
-        assert!(result.unwrap_err().contains("produced 5 elements but data"));
+        match result {
+            Err(ProblemError::DimensionMismatch { expected, got }) => {
+                assert_eq!(expected, 3);
+                assert_eq!(got, 5);
+            }
+            _ => panic!("expected DimensionMismatch error"),
+        }
     }
 
     #[test]
     fn vector_problem_population_evaluation() {
         let data = vec![1.0, 2.0, 3.0];
-        let objective = Box::new(|params: &[f64]| -> Result<Vec<f64>, String> {
-            let scale = params[0];
-            Ok(vec![scale, 2.0 * scale, 3.0 * scale])
-        });
+        let objective_fn: VectorFn = Arc::new(
+            |params: &[f64]| -> Result<Vec<f64>, Box<dyn std::error::Error + Send + Sync>> {
+                let scale = params[0];
+                Ok(vec![scale, 2.0 * scale, 3.0 * scale])
+            },
+        );
 
-        let problem = Problem::new_vector(
-            objective,
+        let objective = VectorObjective::new(
+            objective_fn,
             data,
-            vec![3],
-            HashMap::new(),
-            ParameterSet::new(),
             vec![Arc::new(SumSquaredError::default())],
-            None,
         )
-        .expect("failed to create vector problem");
+        .expect("failed to create vector objective");
+
+        let problem = Problem::new(objective, ParameterSet::new(), Optimiser::default());
 
         let population = vec![vec![1.0], vec![0.5], vec![1.5], vec![2.0]];
 
@@ -369,8 +400,8 @@ mod tests {
             .map(|x| problem.evaluate(x).expect("sequential evaluation failed"))
             .collect();
 
-        let batched: Vec<f64> = problem
-            .evaluate_population(&population)
+        let batched: Vec<Result<f64, ProblemError>> = problem.evaluate_population(&population);
+        let batched: Vec<f64> = batched
             .into_iter()
             .map(|res| res.expect("batched evaluation failed"))
             .collect();
@@ -384,21 +415,21 @@ mod tests {
     #[test]
     fn vector_problem_with_rmse_cost() {
         let data = vec![1.0, 2.0, 3.0, 4.0];
-        let objective = Box::new(|params: &[f64]| -> Result<Vec<f64>, String> {
-            let offset = params[0];
-            Ok(vec![1.0 + offset, 2.0 + offset, 3.0 + offset, 4.0 + offset])
-        });
+        let objective_fn: VectorFn = Arc::new(
+            |params: &[f64]| -> Result<Vec<f64>, Box<dyn std::error::Error + Send + Sync>> {
+                let offset = params[0];
+                Ok(vec![1.0 + offset, 2.0 + offset, 3.0 + offset, 4.0 + offset])
+            },
+        );
 
-        let problem = Problem::new_vector(
-            objective,
+        let objective = VectorObjective::new(
+            objective_fn,
             data,
-            vec![4],
-            HashMap::new(),
-            ParameterSet::new(),
             vec![Arc::new(RootMeanSquaredError::default())],
-            None,
         )
-        .expect("failed to create vector problem");
+        .expect("failed to create vector objective");
+
+        let problem = Problem::new(objective, ParameterSet::new(), Optimiser::default());
 
         // Perfect fit
         let cost = problem.evaluate(&[0.0]).expect("evaluation failed");
@@ -416,20 +447,24 @@ mod tests {
     #[test]
     fn vector_problem_empty_data_error() {
         let data = vec![];
-        let objective = Box::new(|_params: &[f64]| -> Result<Vec<f64>, String> { Ok(vec![]) });
+        let objective_fn: VectorFn = Arc::new(
+            |_params: &[f64]| -> Result<Vec<f64>, Box<dyn std::error::Error + Send + Sync>> {
+                Ok(vec![])
+            },
+        );
 
-        let result = Problem::new_vector(
-            objective,
+        let result = VectorObjective::new(
+            objective_fn,
             data,
-            vec![],
-            HashMap::new(),
-            ParameterSet::new(),
             vec![Arc::new(SumSquaredError::default())],
-            None,
         );
 
         assert!(result.is_err(), "expected error for empty data");
-        let err_msg = result.err().unwrap();
-        assert!(err_msg.contains("at least one element"));
+        match result {
+            Err(ProblemError::BuildFailed(msg)) => {
+                assert!(msg.contains("at least one element"));
+            }
+            _ => panic!("expected BuildFailed error for empty data"),
+        }
     }
 }

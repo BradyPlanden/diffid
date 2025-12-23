@@ -70,8 +70,8 @@ impl NelderMead {
         self
     }
 
-    pub fn with_patience(mut self, patience: Duration) -> Self {
-        self.patience = Some(patience);
+    pub fn with_patience(mut self, patience: f64) -> Self {
+        self.patience = Some(Duration::from_secs_f64(patience));
         self
     }
 

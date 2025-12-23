@@ -1,7 +1,6 @@
 use crate::optimisers::{
     build_results, ApplyBounds, AskResult, Bounds, EvaluatedPoint, Gradient, GradientEvaluation,
-    GradientInput, IntoEvaluation, OptimisationResults, Point, TellError,
-    TerminationReason,
+    GradientInput, IntoEvaluation, OptimisationResults, Point, TellError, TerminationReason,
 };
 use std::error::Error as StdError;
 use std::time::{Duration, Instant};
@@ -70,8 +69,8 @@ impl Adam {
         self
     }
 
-    pub fn with_patience(mut self, patience: Duration) -> Self {
-        self.patience = Some(patience);
+    pub fn with_patience(mut self, patience: f64) -> Self {
+        self.patience = Some(Duration::from_secs_f64(patience));
         self
     }
 
@@ -665,8 +664,7 @@ mod tests {
 
         // Start near origin with small gradient
         let val_grad = sphere_fallible(&first_point).expect("should be fine");
-        state
-            .tell(GradientEvaluation::new(val_grad.0, val_grad.1));
+        state.tell(GradientEvaluation::new(val_grad.0, val_grad.1));
 
         match state.ask() {
             AskResult::Done(results) => {

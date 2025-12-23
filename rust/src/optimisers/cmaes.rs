@@ -51,8 +51,8 @@ impl CMAES {
         self
     }
 
-    pub fn with_patience(mut self, patience: Duration) -> Self {
-        self.patience = Some(patience);
+    pub fn with_patience(mut self, patience: f64) -> Self {
+        self.patience = Some(Duration::from_secs_f64(patience));
         self
     }
 
@@ -126,7 +126,7 @@ pub enum CMAESPhase {
 
 /// Pre-computed CMA-ES strategy parameters
 #[derive(Clone, Debug)]
-struct StrategyParameters {
+pub struct StrategyParameters {
     lambda: usize,
     mu: usize,
     weights: Vec<f64>,
@@ -177,7 +177,7 @@ impl StrategyParameters {
         }
     }
 
-    fn compute_d_sigma(mu_eff: f64, dim_f: f64, c_sigma: f64) -> f64 {
+    pub fn compute_d_sigma(mu_eff: f64, dim_f: f64, c_sigma: f64) -> f64 {
         let sqrt_term = ((mu_eff - 1.0) / (dim_f + 1.0)).max(0.0).sqrt();
         1.0 + c_sigma + 2.0 * (sqrt_term - 1.0).max(0.0)
     }
@@ -623,7 +623,7 @@ impl CMAESState {
         self.check_convergence(population, &mean_shift)
     }
 
-    fn update_covariance(
+    pub fn update_covariance(
         cov: &DMatrix<f64>,
         c1: f64,
         c_mu: f64,

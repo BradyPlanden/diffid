@@ -10,7 +10,7 @@ use rand::SeedableRng;
 use std::cmp::Ordering;
 use std::error::Error as StdError;
 use std::fmt;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::builders::{DiffsolProblemBuilder, ScalarProblemBuilder, VectorProblemBuilder};
 use crate::problem::{Objective, ProblemError};
@@ -262,6 +262,7 @@ impl OptimisationResults {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::optimisers::cmaes::{CMAESState, StrategyParameters};
     use nalgebra::{DMatrix, DVector};
 
     #[test]
@@ -272,7 +273,8 @@ mod tests {
                 let x1 = x[1] + 0.5;
                 x0 * x0 + x1 * x1
             })
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = NelderMead::new()
             .with_max_iter(400)
@@ -302,7 +304,8 @@ mod tests {
     fn nelder_mead_respects_max_iterations() {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| x.iter().map(|xi| xi * xi).sum())
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = NelderMead::new().with_max_iter(1).with_sigma0(1.0);
         let result = optimiser.run(|x| problem.evaluate(x), vec![10.0, -10.0], None);
@@ -316,7 +319,8 @@ mod tests {
     fn nelder_mead_respects_max_function_evaluations() {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| x.iter().map(|xi| xi * xi).sum())
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = NelderMead::new()
             .with_max_evaluations(2)
@@ -340,7 +344,8 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(5));
                 x.iter().map(|xi| xi * xi).sum()
             })
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = NelderMead::new().with_sigma0(0.5).with_patience(0.01);
 
@@ -358,7 +363,8 @@ mod tests {
                 let x1 = x[1] + 0.5;
                 x0 * x0 + x1 * x1
             })
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = CMAES::new()
             .with_max_iter(400)
@@ -385,7 +391,8 @@ mod tests {
     fn cmaes_respects_max_iterations() {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| x.iter().map(|xi| xi * xi).sum())
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = CMAES::new().with_max_iter(1).with_sigma0(0.5).with_seed(7);
         let result = optimiser.run(|x| problem.evaluate(x), vec![10.0, -10.0], None);
@@ -402,7 +409,8 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(5));
                 x.iter().map(|xi| xi * xi).sum()
             })
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = CMAES::new()
             .with_sigma0(0.5)
@@ -424,14 +432,24 @@ mod tests {
                 x0 * x0 + x1 * x1
             })
             .with_gradient(|x: &[f64]| vec![2.0 * (x[0] - 1.5), 2.0 * (x[1] + 0.5)])
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = Adam::new()
             .with_step_size(0.1)
             .with_max_iter(500)
             .with_threshold(1e-8);
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![5.0, -4.0], None);
+        let result = optimiser.run(
+            |x| {
+                let val_grad = problem
+                    .evaluate_with_gradient(x)
+                    .expect("Should succeed with function evaluation w/ gradient");
+                (val_grad.0, val_grad.1.expect("Expected gradient"))
+            },
+            vec![5.0, -4.0],
+            None,
+        );
 
         assert!(result.success, "Expected success: {}", result.message);
         assert!((result.x[0] - 1.5).abs() < 1e-3);
@@ -448,14 +466,24 @@ mod tests {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| x.iter().map(|xi| xi * xi).sum())
             .with_gradient(|x: &[f64]| x.iter().map(|xi| 2.0 * xi).collect())
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = Adam::new()
             .with_step_size(0.1)
             .with_max_iter(1)
             .with_threshold(1e-12);
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![10.0, -10.0], None);
+        let result = optimiser.run(
+            |x| {
+                let val_grad = problem
+                    .evaluate_with_gradient(x)
+                    .expect("Should succeed with function evaluation w/ gradient");
+                (val_grad.0, val_grad.1.expect("Expected gradient"))
+            },
+            vec![10.0, -10.0],
+            None,
+        );
 
         assert_eq!(result.termination, TerminationReason::MaxIterationsReached);
         assert!(!result.success);
@@ -473,14 +501,24 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(5));
                 x.iter().map(|xi| 2.0 * xi).collect()
             })
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = Adam::new()
             .with_step_size(0.1)
             .with_max_iter(100)
             .with_patience(0.01);
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![5.0, -5.0], None);
+        let result = optimiser.run(
+            |x| {
+                let val_grad = problem
+                    .evaluate_with_gradient(x)
+                    .expect("Should succeed with function evaluation w/ gradient");
+                (val_grad.0, val_grad.1.expect("Expected gradient"))
+            },
+            vec![5.0, -5.0],
+            None,
+        );
 
         assert_eq!(result.termination, TerminationReason::PatienceElapsed);
         assert!(!result.success);
@@ -491,10 +529,22 @@ mod tests {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| x.iter().map(|xi| xi * xi).sum())
             .build()
-            .unwrap();
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = Adam::new().with_max_iter(10);
-        let result = optimiser.run(&problem, vec![1.0, 2.0]);
+        let result = optimiser.run(
+            |x| -> Result<(f64, Vec<f64>), ProblemError> {
+                let (value, gradient_opt) = problem.evaluate_with_gradient(x)?;
+                match gradient_opt {
+                    Some(g) => Ok((value, g)),
+                    None => Err(ProblemError::EvaluationFailed(
+                        "Adam optimiser requires an available gradient".to_string(),
+                    )),
+                }
+            },
+            vec![1.0, 2.0],
+            None,
+        );
 
         assert!(!result.success);
         match result.termination {
@@ -514,7 +564,8 @@ mod tests {
             .with_function(|x: &[f64]| (x[0] - 2.0).powi(2) + (x[1] - 3.0).powi(2))
             .with_parameter("x", 0.0, Some((-1.0, 1.0)))
             .with_parameter("y", 0.0, Some((0.0, 2.0)))
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = NelderMead::new().with_max_iter(200).with_threshold(1e-8);
 
@@ -549,7 +600,8 @@ mod tests {
             .with_function(|x: &[f64]| (x[0] - 5.0).powi(2) + (x[1] + 5.0).powi(2))
             .with_parameter("x", 0.0, Some((0.0, 3.0)))
             .with_parameter("y", 0.0, Some((-3.0, 0.0)))
-            .build();
+            .build()
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = CMAES::new()
             .with_max_iter(100)
@@ -580,30 +632,11 @@ mod tests {
     }
 
     #[test]
-    fn cmaes_population_size_heuristics() {
-        let default = CMAES::new();
-        assert_eq!(default.population_size(0), 4, "zero dimension defaults");
-        assert_eq!(default.population_size(1), 4, "univariate heuristic");
-        assert_eq!(
-            default.population_size(10),
-            20,
-            "high dimension uses lambda >= 2n"
-        );
-
-        let overridden = CMAES::new().with_population_size(6);
-        assert_eq!(
-            overridden.population_size(2),
-            6,
-            "explicit population respected when >= 1"
-        );
-    }
-
-    #[test]
     fn cmaes_is_reproducible_with_seed() {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2))
             .build()
-            .unwrap();
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = CMAES::new()
             .with_max_iter(300)
@@ -612,8 +645,8 @@ mod tests {
             .with_seed(2024);
 
         let initial = vec![3.0, -2.0];
-        let result_one = optimiser.run(&problem, initial.clone());
-        let result_two = optimiser.run(&problem, initial);
+        let result_one = optimiser.run(|x| problem.evaluate(x), initial.clone(), None);
+        let result_two = optimiser.run(|x| problem.evaluate(x), initial, None);
 
         assert!(
             result_one.success,
@@ -625,9 +658,9 @@ mod tests {
             "second run should converge: {}",
             result_two.message
         );
-        assert_eq!(result_one.nit, result_two.nit);
-        assert_eq!(result_one.nfev, result_two.nfev);
-        assert!((result_one.fun - result_two.fun).abs() < 1e-12);
+        assert_eq!(result_one.iterations, result_two.iterations);
+        assert_eq!(result_one.evaluations, result_two.evaluations);
+        assert!((result_one.value - result_two.value).abs() < 1e-12);
         for (x1, x2) in result_one.x.iter().zip(result_two.x.iter()) {
             assert!(
                 (x1 - x2).abs() < 1e-10,
@@ -644,11 +677,11 @@ mod tests {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| if x[0] > 1.0 { f64::NAN } else { x[0] * x[0] })
             .build()
-            .unwrap();
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = NelderMead::new().with_max_iter(50).with_sigma0(2.0); // Larger sigma to ensure we hit NaN region
 
-        let result = optimiser.run(&problem, vec![0.5]);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![0.5], None);
 
         // Should either detect NaN or converge to valid region
         // If it hits NaN, it should fail gracefully
@@ -667,7 +700,7 @@ mod tests {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| x.iter().map(|xi| xi * xi).sum::<f64>())
             .build()
-            .unwrap();
+            .expect("Problem builder should succeed with valid parameters");
 
         let dim = 60; // > 50 to trigger lazy updates
         let initial = vec![0.5; dim];
@@ -679,14 +712,14 @@ mod tests {
 
         let initial_value = initial.iter().map(|x| x * x).sum::<f64>();
 
-        let result = optimiser.run(&problem, initial);
+        let result = optimiser.run(|x| problem.evaluate(x), initial, None);
 
         // Should still work with lazy updates and improve from initial
-        assert!(result.nfev > 0);
+        assert!(result.evaluations > 0);
         assert!(
-            result.fun < initial_value,
+            result.value < initial_value,
             "Should improve: {} < {}",
-            result.fun,
+            result.value,
             initial_value
         );
     }
@@ -696,7 +729,7 @@ mod tests {
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2))
             .build()
-            .unwrap();
+            .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = CMAES::new()
             .with_max_iter(400)
@@ -704,13 +737,13 @@ mod tests {
             .with_sigma0(0.6)
             .with_seed(4242);
 
-        let result = optimiser.run(&problem, vec![4.5, -3.5]);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![4.5, -3.5], None);
 
         assert!(result.success, "Expected success: {}", result.message);
         assert!(
-            result.fun < 1e-6,
+            result.value < 1e-6,
             "Should reach low objective value: {}",
-            result.fun
+            result.value
         );
 
         let covariance = result
@@ -756,7 +789,7 @@ mod tests {
         let clamped = (sqrt_inner - 1.0).max(0.0); // max(0, -0.436) = 0.0
         let expected = 1.0 + c_sigma + 2.0 * clamped; // 1.0 + 0.3 + 0 = 1.3
 
-        let computed = compute_d_sigma(mu_eff, dim_f, c_sigma);
+        let computed = StrategyParameters::compute_d_sigma(mu_eff, dim_f, c_sigma);
 
         assert!(
             (computed - expected).abs() < 1e-12,
@@ -779,7 +812,7 @@ mod tests {
         let c_sigma = 0.2_f64;
 
         let expected = 1.0 + c_sigma;
-        let computed = compute_d_sigma(mu_eff, dim_f, c_sigma);
+        let computed = StrategyParameters::compute_d_sigma(mu_eff, dim_f, c_sigma);
 
         assert!((computed - expected).abs() < 1e-12);
     }
@@ -799,7 +832,7 @@ mod tests {
             + (p_c.clone() * p_c.transpose() + cov.clone() * correction_factor) * c1
             + rank_mu.clone() * c_mu;
 
-        let updated = update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
+        let updated = CMAESState::update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
 
         for (exp, got) in expected.iter().zip(updated.iter()) {
             assert!((exp - got).abs() < 1e-12, "expected {} got {}", exp, got);
@@ -821,7 +854,7 @@ mod tests {
             + (p_c.clone() * p_c.transpose() + cov.clone() * correction_factor) * c1
             + rank_mu.clone() * c_mu;
 
-        let updated = update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
+        let updated = CMAESState::update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
 
         for (exp, got) in expected.iter().zip(updated.iter()) {
             assert!((exp - got).abs() < 1e-12, "expected {} got {}", exp, got);

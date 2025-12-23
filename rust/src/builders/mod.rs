@@ -1,6 +1,6 @@
+mod diffsol;
 mod scalar;
 mod vector;
-mod diffsol;
 
 // mod builders_old; // ToDo: remove
 

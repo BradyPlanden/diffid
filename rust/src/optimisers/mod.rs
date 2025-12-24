@@ -40,14 +40,48 @@ pub enum TellError {
     GradientDimensionMismatch { expected: usize, got: usize },
 }
 
-#[derive(Clone)]
-pub enum Optimiser {
+/// Gradient-free optimisers
+#[derive(Clone, Debug)]
+pub enum ScalarOptimiser {
     NelderMead(NelderMead),
     CMAES(CMAES),
+}
+
+/// Derivate based optimisers
+#[derive(Clone, Debug)]
+pub enum GradientOptimiser {
     Adam(Adam),
 }
 
-impl Optimiser {
+/// Optimiser based type for supporting both scalar-based and gradient-based optimisers
+#[derive(Clone, Debug)]
+pub enum Optimiser {
+    Scalar(ScalarOptimiser),
+    Gradient(GradientOptimiser),
+}
+
+impl ScalarOptimiser {
+    /// Run the optimizer with a scalar objective function
+    ///
+    /// # Arguments
+    /// * `objective` - Function that evaluates the objective at a point
+    /// * `initial` - Initial point (will be auto-expanded if needed)
+    /// * `bounds` - Optional parameter bounds
+    ///
+    /// # Returns
+    /// Optimization results including best point, value, and diagnostics
+    ///
+    /// # Example
+    /// ```
+    /// use chronopt::optimisers::{ScalarOptimiser, NelderMead};
+    ///
+    /// let optimizer = ScalarOptimiser::from(NelderMead::new());
+    /// let result = optimizer.run(
+    ///     |x| Ok(x[0].powi(2) + x[1].powi(2)),
+    ///     vec![1.0, 2.0],
+    ///     None
+    /// );
+    /// ```
     pub fn run<F, E>(
         &self,
         objective: F,
@@ -59,34 +93,238 @@ impl Optimiser {
         E: StdError + 'static,
     {
         match self {
-            Optimiser::NelderMead(nm) => nm.run(objective, initial, bounds),
-            Optimiser::CMAES(cm) => cm.run(objective, initial, bounds),
-            Optimiser::Adam(ad) => ad.run(objective, initial, bounds),
+            ScalarOptimiser::NelderMead(nm) => nm.run(objective, initial, bounds),
+            ScalarOptimiser::CMAES(cm) => cm.run(objective, initial, bounds),
         }
     }
 }
 
+impl GradientOptimiser {
+    /// Run the optimizer with a gradient-based objective function
+    ///
+    /// The objective function must return both the value and gradient.
+    /// Use `run_with_numerical_gradient()` if analytical gradients are unavailable.
+    ///
+    /// # Arguments
+    /// * `objective` - Function that evaluates value and gradient at a point
+    /// * `initial` - Initial point
+    /// * `bounds` - Optional parameter bounds
+    ///
+    /// # Returns
+    /// Optimization results including best point, value, and diagnostics
+    ///
+    /// # Example
+    /// ```
+    /// use chronopt::optimisers::{GradientOptimiser, Adam};
+    ///
+    /// let optimizer = GradientOptimiser::from(Adam::new());
+    /// let result = optimizer.run(
+    ///     |x| {
+    ///         let val = x[0].powi(2) + x[1].powi(2);
+    ///         let grad = vec![2.0 * x[0], 2.0 * x[1]];
+    ///         Ok((val, grad))
+    ///     },
+    ///     vec![1.0, 2.0],
+    ///     None
+    /// );
+    /// ```
+    pub fn run<F, R>(
+        &self,
+        objective: F,
+        initial: Point,
+        bounds: Option<Bounds>,
+    ) -> OptimisationResults
+    where
+        F: FnMut(&[f64]) -> R,
+        R: IntoEvaluation<GradientEvaluation>,
+    {
+        match self {
+            GradientOptimiser::Adam(ad) => ad.run(objective, initial, bounds),
+        }
+    }
+
+    pub fn run_with_numerical_gradient<F, E>(
+        &self,
+        objective: F,
+        initial: Point,
+        bounds: Option<Bounds>,
+        epsilon: f64,
+    ) -> OptimisationResults
+    where
+        F: FnMut(&[f64]) -> Result<f64, E>,
+        E: StdError + Send + Sync + 'static,
+    {
+        match self {
+            GradientOptimiser::Adam(ad) => {
+                ad.run_with_numerical_gradient(objective, initial, bounds, epsilon)
+            }
+        }
+    }
+}
+
+impl Optimiser {
+    /// Create a Nelder-Mead optimizer with default settings
+    pub fn nelder_mead() -> Self {
+        Optimiser::Scalar(ScalarOptimiser::NelderMead(NelderMead::default()))
+    }
+
+    /// Create a CMAES optimizer with default settings
+    pub fn cmaes() -> Self {
+        Optimiser::Scalar(ScalarOptimiser::CMAES(CMAES::default()))
+    }
+
+    /// Create an Adam optimizer with default settings
+    pub fn adam() -> Self {
+        Optimiser::Gradient(GradientOptimiser::Adam(Adam::default()))
+    }
+
+    /// Try to get reference to inner scalar optimiser
+    ///
+    /// Returns `Some(&ScalarOptimiser)` if this is a scalar optimiser, `None` otherwise.
+    pub fn as_scalar(&self) -> Option<&ScalarOptimiser> {
+        match self {
+            Optimiser::Scalar(opt) => Some(opt),
+            _ => None,
+        }
+    }
+
+    /// Try to get a mutable reference to the inner scalar optimiser
+    pub fn as_scalar_mut(&mut self) -> Option<&mut ScalarOptimiser> {
+        match self {
+            Optimiser::Scalar(opt) => Some(opt),
+            _ => None,
+        }
+    }
+
+    /// Try to get reference to the inner gradient optimiser
+    ///
+    /// Returns `Some(&GradientOptimiser)` if this is a gradient optimiser, `None` otherwise.
+    pub fn as_gradient(&self) -> Option<&GradientOptimiser> {
+        match self {
+            Optimiser::Gradient(opt) => Some(opt),
+            _ => None,
+        }
+    }
+
+    /// Try to get a mutable reference to the inner gradient optimiser
+    pub fn as_gradient_mut(&mut self) -> Option<&mut GradientOptimiser> {
+        match self {
+            Optimiser::Gradient(opt) => Some(opt),
+            _ => None,
+        }
+    }
+
+    /// Try to convert into a scalar optimizer
+    ///
+    /// Returns `Ok(ScalarOptimiser)` on success, or `Err(self)` if this is not
+    /// a scalar optimizer.
+    pub fn into_scalar(self) -> Result<ScalarOptimiser, Self> {
+        match self {
+            Optimiser::Scalar(opt) => Ok(opt),
+            other => Err(other),
+        }
+    }
+
+    /// Try to convert into a gradient optimizer
+    ///
+    /// Returns `Ok(GradientOptimiser)` on success, or `Err(self)` if this is not
+    /// a gradient optimizer.
+    pub fn into_gradient(self) -> Result<GradientOptimiser, Self> {
+        match self {
+            Optimiser::Gradient(opt) => Ok(opt),
+            other => Err(other),
+        }
+    }
+
+    /// Check if this is a scalar optimiser
+    pub fn is_scalar(&self) -> bool {
+        matches!(self, Optimiser::Scalar(_))
+    }
+
+    /// Check if this is a gradient optimiser
+    pub fn is_gradient(&self) -> bool {
+        matches!(self, Optimiser::Gradient(_))
+    }
+
+    /// Get a readable name for the optimiser
+    pub fn name(&self) -> &'static str {
+        match self {
+            Optimiser::Scalar(ScalarOptimiser::NelderMead(_)) => "Nelder-Mead",
+            Optimiser::Scalar(ScalarOptimiser::CMAES(_)) => "CMA-ES",
+            Optimiser::Gradient(GradientOptimiser::Adam(_)) => "Adam",
+        }
+    }
+}
+
+// Conversions: Individual Optimizers -> ScalarOptimiser
+impl From<NelderMead> for ScalarOptimiser {
+    fn from(nm: NelderMead) -> Self {
+        ScalarOptimiser::NelderMead(nm)
+    }
+}
+
+impl From<CMAES> for ScalarOptimiser {
+    fn from(cmaes: CMAES) -> Self {
+        ScalarOptimiser::CMAES(cmaes)
+    }
+}
+
+// Conversions: Individual Optimizers -> GradientOptimiser
+
+impl From<Adam> for GradientOptimiser {
+    fn from(adam: Adam) -> Self {
+        GradientOptimiser::Adam(adam)
+    }
+}
+
+// Conversions: Sub-Enums -> Optimiser
+
+impl From<ScalarOptimiser> for Optimiser {
+    fn from(opt: ScalarOptimiser) -> Self {
+        Optimiser::Scalar(opt)
+    }
+}
+
+impl From<GradientOptimiser> for Optimiser {
+    fn from(opt: GradientOptimiser) -> Self {
+        Optimiser::Gradient(opt)
+    }
+}
+
+// Conversion: Individual Optimiser -> Optimiser
 impl From<NelderMead> for Optimiser {
     fn from(nm: NelderMead) -> Self {
-        Optimiser::NelderMead(nm)
+        Optimiser::Scalar(ScalarOptimiser::NelderMead(nm))
     }
 }
 
 impl From<CMAES> for Optimiser {
-    fn from(cmaes: CMAES) -> Self {
-        Optimiser::CMAES(cmaes)
+    fn from(cm: CMAES) -> Self {
+        Optimiser::Scalar(ScalarOptimiser::CMAES(cm))
     }
 }
 
 impl From<Adam> for Optimiser {
     fn from(adam: Adam) -> Self {
-        Optimiser::Adam(adam)
+        Optimiser::Gradient(GradientOptimiser::Adam(adam))
+    }
+}
+
+impl Default for ScalarOptimiser {
+    fn default() -> Self {
+        ScalarOptimiser::NelderMead(NelderMead::default())
+    }
+}
+
+impl Default for GradientOptimiser {
+    fn default() -> Self {
+        GradientOptimiser::Adam(Adam::default())
     }
 }
 
 impl Default for Optimiser {
     fn default() -> Self {
-        Optimiser::NelderMead(NelderMead::default())
+        Optimiser::Scalar(ScalarOptimiser::default())
     }
 }
 
@@ -264,6 +502,107 @@ mod tests {
     use super::*;
     use crate::optimisers::cmaes::{CMAESState, StrategyParameters};
     use nalgebra::{DMatrix, DVector};
+
+    #[test]
+    fn optimiser_enum_scalar_works() {
+        let problem = ScalarProblemBuilder::new()
+            .with_function(|x: &[f64]| x[0].powi(2) + x[1].powi(2))
+            .build()
+            .expect("Problem builder should succeed");
+
+        let optimizer = Optimiser::nelder_mead();
+
+        // Extract and use the scalar optimizer
+        let scalar_opt = optimizer.as_scalar().expect("Should be scalar optimizer");
+        let result = scalar_opt.run(|x| problem.evaluate(x), vec![5.0, -5.0], None);
+
+        assert!(result.value < 1e-6);
+    }
+
+    #[test]
+    fn optimiser_enum_gradient_works() {
+        let problem = ScalarProblemBuilder::new()
+            .with_function(|x: &[f64]| x[0].powi(2) + x[1].powi(2))
+            .with_gradient(|x: &[f64]| vec![2.0 * x[0], 2.0 * x[1]])
+            .build()
+            .expect("Problem builder should succeed");
+
+        let optimizer = Optimiser::adam();
+
+        // Extract and use the gradient optimizer
+        let grad_opt = optimizer
+            .as_gradient()
+            .expect("Should be gradient optimizer");
+        let result = grad_opt.run(
+            |x| {
+                let (val, grad) = problem.evaluate_with_gradient(x).expect("Should succeed");
+                (val, grad.expect("Should have gradient"))
+            },
+            vec![5.0, -5.0],
+            None,
+        );
+
+        assert!(result.value < 1e-4);
+    }
+
+    #[test]
+    fn optimiser_type_queries_work() {
+        let nm = Optimiser::nelder_mead();
+        assert!(nm.is_scalar());
+        assert!(!nm.is_gradient());
+        assert_eq!(nm.name(), "Nelder-Mead");
+
+        let adam = Optimiser::adam();
+        assert!(!adam.is_scalar());
+        assert!(adam.is_gradient());
+        assert_eq!(adam.name(), "Adam");
+    }
+
+    #[test]
+    fn optimiser_conversions_work() {
+        let nm = NelderMead::new();
+        let _: ScalarOptimiser = nm.clone().into();
+        let _: Optimiser = nm.into();
+
+        let adam = Adam::new();
+        let _: GradientOptimiser = adam.clone().into();
+        let _: Optimiser = adam.into();
+    }
+
+    #[test]
+    fn scalar_optimiser_from_variants() {
+        let nm = ScalarOptimiser::from(NelderMead::new());
+        let cm = ScalarOptimiser::from(CMAES::new());
+
+        match nm {
+            ScalarOptimiser::NelderMead(_) => (),
+            _ => panic!("Expected NelderMead variant"),
+        }
+
+        match cm {
+            ScalarOptimiser::CMAES(_) => (),
+            _ => panic!("Expected CMAES variant"),
+        }
+    }
+
+    #[test]
+    fn gradient_optimiser_numerical_gradient_fallback() {
+        let problem = ScalarProblemBuilder::new()
+            .with_function(|x: &[f64]| x[0].powi(2) + x[1].powi(2))
+            .build()
+            .expect("Problem builder should succeed");
+
+        let optimizer = GradientOptimiser::from(Adam::new().with_step_size(0.1));
+
+        let result = optimizer.run_with_numerical_gradient(
+            |x| problem.evaluate(x),
+            vec![5.0, -5.0],
+            None,
+            1e-8,
+        );
+
+        assert!(result.value < 1e-4);
+    }
 
     #[test]
     fn nelder_mead_minimises_quadratic() {

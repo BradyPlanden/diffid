@@ -136,6 +136,12 @@ pub trait Objective: Send + Sync {
     fn gradient(&self, _x: &[f64]) -> Option<Vec<f64>> {
         None
     }
+
+    /// Returns true is the objective provides gradients
+    fn has_gradient(&self) -> bool {
+        false
+    }
+
     fn evaluate_with_gradient(&self, x: &[f64]) -> Result<(f64, Option<Vec<f64>>), ProblemError> {
         Ok((self.evaluate(x)?, self.gradient(x)))
     }
@@ -179,6 +185,10 @@ where
     fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
         Ok((self.f)(x))
     }
+
+    fn has_gradient(&self) -> bool {
+        false
+    }
 }
 
 /// Implement Objective for gradient state
@@ -190,8 +200,13 @@ where
     fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
         Ok((self.f)(x))
     }
+
     fn gradient(&self, x: &[f64]) -> Option<Vec<f64>> {
         Some((self.grad)(x))
+    }
+
+    fn has_gradient(&self) -> bool {
+        true
     }
 }
 
@@ -252,6 +267,10 @@ impl<O: Objective> Problem<O> {
         }
     }
 
+    pub fn has_gradient(&self) -> bool {
+        self.objective.has_gradient()
+    }
+
     pub fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
         self.objective.evaluate(x)
     }
@@ -282,13 +301,47 @@ impl<O: Objective> Problem<O> {
     ) -> OptimisationResults {
         let x0 = initial.unwrap_or_else(|| self.default_parameters());
 
-        // Use provided optimiser, fall back to self.optimiser, then default
+        // Use provided optimiser or,
+        // fall back to self.optimiser or,
+        // the default
         let opt = optimiser
             .or(Some(&self.optimiser))
             .cloned()
             .unwrap_or_default();
 
-        opt.run(|x| self.evaluate(x), x0, self.parameters.bounds())
+        match opt {
+            Optimiser::Scalar(scalar_opt) => {
+                // Only need objective values
+                scalar_opt.run(|x| self.evaluate(x), x0, self.parameters.bounds())
+            }
+            Optimiser::Gradient(grad_opt) => {
+                // Needs objective + gradient values
+                // First, check if we have gradients
+                if self.has_gradient() {
+                    grad_opt.run(
+                        |x| {
+                            let (value, grad) = self.evaluate_with_gradient(x)?;
+                            match grad {
+                                Some(grad) => Ok((value, grad)),
+                                None => Err(ProblemError::EvaluationFailed(
+                                    "Gradient optimiser requires gradient".to_string(),
+                                )),
+                            }
+                        },
+                        x0,
+                        self.parameters.bounds(),
+                    )
+                } else {
+                    // Fall back to numerical gradients
+                    grad_opt.run_with_numerical_gradient(
+                        |x| self.evaluate(x),
+                        x0,
+                        self.parameters.bounds(),
+                        1e-8,
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -235,6 +235,11 @@ impl Objective for DiffsolObjective {
             params.iter().map(|x| self.evaluate(x)).collect()
         }
     }
+
+    fn has_gradient(&self) -> bool {
+        // Check the backend config
+        matches!(self.config.backend, DiffsolBackend::Dense)
+    }
 }
 
 #[cfg(test)]

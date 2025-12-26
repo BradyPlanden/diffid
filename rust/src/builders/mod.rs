@@ -2,8 +2,6 @@ mod diffsol;
 mod scalar;
 mod vector;
 
-// mod builders_old; // ToDo: remove
-
 use crate::problem::{ParameterSet, ProblemError};
 pub use diffsol::{DiffsolBackend, DiffsolConfig, DiffsolProblemBuilder};
 pub use scalar::ScalarProblemBuilder;
@@ -55,6 +53,7 @@ mod tests {
     use crate::prelude::*;
     use nalgebra::DMatrix;
     use std::collections::HashMap;
+
     #[test]
     fn test_diffsol_builder() {
         let dsl = r#"
@@ -78,8 +77,8 @@ F_i { (r * y) * (1 - (y / k)) }
             .with_diffsl(dsl.to_string())
             .with_data(data)
             .with_config(config)
-            .with_parameter("r", 1.0, None)
-            .with_parameter("k", 1.0, None);
+            .with_parameter("r", 1.0, Unbounded)
+            .with_parameter("k", 1.0, Unbounded);
 
         let problem = builder.clone().build().unwrap();
         let problem2 = builder.build().unwrap();
@@ -124,8 +123,8 @@ F_i { (r * y) * (1 - (y / k)) }
                 Ok((0..5).map(|i| a * (i as f64) + b).collect())
             })
             .with_data(data)
-            .with_parameter("a", 1.0, None)
-            .with_parameter("b", 1.0, None)
+            .with_parameter("a", 1.0, Unbounded)
+            .with_parameter("b", 1.0, Unbounded)
             .with_cost(SumSquaredError::default())
             .build()
             .expect("failed to create vector problem");

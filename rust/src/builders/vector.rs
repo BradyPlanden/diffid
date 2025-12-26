@@ -2,7 +2,7 @@ use super::{ParameterSet, ProblemBuilderError};
 use crate::cost::{CostMetric, SumSquaredError};
 use crate::optimisers::Optimiser;
 use crate::prelude::{ParameterSpec, Problem};
-use crate::problem::{VectorFn, VectorObjective};
+use crate::problem::{ParameterRange, VectorFn, VectorObjective};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -49,10 +49,10 @@ impl VectorProblemBuilder {
         mut self,
         name: impl Into<String>,
         initial: f64,
-        bounds: Option<(f64, f64)>,
+        range: impl Into<ParameterRange>,
     ) -> Self {
         self.parameters
-            .push(ParameterSpec::new(name, initial, bounds));
+            .push(ParameterSpec::new(name, initial, range));
         self
     }
 

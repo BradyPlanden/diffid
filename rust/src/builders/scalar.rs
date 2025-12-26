@@ -1,7 +1,7 @@
 use super::{ParameterSet, ProblemBuilderError};
 use crate::optimisers::Optimiser;
 use crate::prelude::{ParameterSpec, Problem};
-use crate::problem::{NoFunction, NoGradient, ScalarObjective};
+use crate::problem::{NoFunction, NoGradient, ParameterRange, ScalarObjective};
 
 #[derive(Clone)]
 pub struct ScalarProblemBuilder<F = NoFunction, G = NoGradient> {
@@ -36,10 +36,10 @@ impl<F, G> ScalarProblemBuilder<F, G> {
         mut self,
         name: impl Into<String>,
         initial: f64,
-        bounds: Option<(f64, f64)>,
+        range: impl Into<ParameterRange>,
     ) -> Self {
         self.parameters
-            .push(ParameterSpec::new(name, initial, bounds));
+            .push(ParameterSpec::new(name, initial, range));
         self
     }
 }

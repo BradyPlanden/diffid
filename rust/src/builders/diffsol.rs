@@ -1,7 +1,7 @@
 use super::{ParameterSet, ProblemBuilderError};
 use crate::cost::{CostMetric, SumSquaredError};
 use crate::prelude::{Optimiser, ParameterSpec};
-use crate::problem::{DiffsolObjective, Problem};
+use crate::problem::{DiffsolObjective, ParameterRange, Problem};
 use diffsol::OdeSolverMethod;
 use nalgebra::DMatrix;
 use std::collections::HashMap;
@@ -115,10 +115,10 @@ impl DiffsolProblemBuilder {
         mut self,
         name: impl Into<String>,
         initial: f64,
-        bounds: Option<(f64, f64)>,
+        range: impl Into<ParameterRange>,
     ) -> Self {
         self.parameters
-            .push(ParameterSpec::new(name, initial, bounds));
+            .push(ParameterSpec::new(name, initial, range));
         self
     }
 

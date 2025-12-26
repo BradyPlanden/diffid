@@ -1,10 +1,12 @@
 use diffsol::error::DiffsolError;
+use std::ops::RangeInclusive;
 use std::sync::Arc;
 
 mod diffsol_problem;
 
-pub use crate::cost::CostMetric;
-use crate::optimisers::{Bounds, OptimisationResults, Optimiser};
+use crate::common::{Bounds, Unbounded};
+use crate::cost::CostMetric;
+use crate::optimisers::{OptimisationResults, Optimiser};
 pub use diffsol_problem::DiffsolObjective;
 
 pub struct NoGradient;
@@ -55,18 +57,35 @@ impl std::error::Error for ProblemError {}
 pub struct ParameterSpec {
     pub name: String,
     pub initial_value: f64,
-    pub bounds: Option<(f64, f64)>,
+    pub range: ParameterRange,
 }
 
 impl ParameterSpec {
-    pub fn new<N>(name: N, initial_value: f64, bounds: Option<(f64, f64)>) -> Self
-    where
-        N: Into<String>,
-    {
+    pub fn new<N: Into<String>, P: Into<ParameterRange>>(
+        name: N,
+        initial_value: f64,
+        range: P,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            initial_value: initial_value,
+            range: range.into(),
+        }
+    }
+
+    pub fn bounded<N: Into<String>>(name: N, initial_value: f64, bounds: (f64, f64)) -> Self {
         Self {
             name: name.into(),
             initial_value,
-            bounds,
+            range: (bounds.0..=bounds.1).into(),
+        }
+    }
+
+    pub fn unbounded<N: Into<String>>(name: N, initial_value: f64) -> Self {
+        Self {
+            name: name.into(),
+            initial_value,
+            range: (f64::NEG_INFINITY..=f64::INFINITY).into(),
         }
     }
 }
@@ -107,24 +126,68 @@ impl ParameterSet {
         self.0.iter()
     }
 
-    pub fn bounds(&self) -> Option<Bounds> {
+    pub fn bounds(&self) -> Bounds {
         if self.0.is_empty() {
-            return None;
+            return Bounds::unbounded(0);
         }
 
-        let all_bounds: Vec<(f64, f64)> = self
-            .0
-            .iter()
-            .map(|spec| spec.bounds.unwrap_or((f64::NEG_INFINITY, f64::INFINITY)))
-            .collect();
-
-        // Only return Some if at least one parameter has actual bounds
-        let has_bounds = self.0.iter().any(|spec| spec.bounds.is_some());
-        if has_bounds {
-            Some(Bounds::new(all_bounds))
-        } else {
-            None
+        Bounds {
+            limits: self
+                .0
+                .iter()
+                .map(|spec| spec.range.as_inner().clone())
+                .collect(),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParameterRange(RangeInclusive<f64>);
+
+impl ParameterRange {
+    /// Get a reference to the inner range
+    pub fn as_inner(&self) -> &RangeInclusive<f64> {
+        &self.0
+    }
+
+    /// Convert into the inner range
+    pub fn into_inner(self) -> RangeInclusive<f64> {
+        self.0
+    }
+}
+
+impl AsRef<RangeInclusive<f64>> for ParameterRange {
+    fn as_ref(&self) -> &RangeInclusive<f64> {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for ParameterRange {
+    type Target = RangeInclusive<f64>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// Implement for tuple
+impl From<(f64, f64)> for ParameterRange {
+    fn from(bounds: (f64, f64)) -> Self {
+        Self(bounds.0..=bounds.1)
+    }
+}
+
+/// Implement for Unbounded
+impl From<Unbounded> for ParameterRange {
+    fn from(_: Unbounded) -> Self {
+        Self(f64::NEG_INFINITY..=f64::INFINITY)
+    }
+}
+
+/// Implement for RangeInclusive
+impl From<RangeInclusive<f64>> for ParameterRange {
+    fn from(range: RangeInclusive<f64>) -> Self {
+        Self(range)
     }
 }
 
@@ -378,8 +441,8 @@ mod tests {
         .expect("failed to create vector objective");
 
         let mut params = ParameterSet::new();
-        params.push(ParameterSpec::new("r", 1.0, Some((0.0, 3.0))));
-        params.push(ParameterSpec::new("y0", 1.0, Some((0.0, 5.0))));
+        params.push(ParameterSpec::new("r", 1.0, 0.0..=3.0));
+        params.push(ParameterSpec::new("y0", 1.0, 0.0..=5.0));
 
         let problem = Problem::new(objective, params, Optimiser::default());
 

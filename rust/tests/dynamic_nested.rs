@@ -23,7 +23,7 @@ fn dynamic_nested_sampler_integration() {
         .with_termination_tolerance(1e-4)
         .with_seed(37);
 
-    let result = sampler.run_nested(&problem, vec![0.5]);
+    let result = sampler.run(&problem, vec![0.5]);
 
     assert!(result.draws() > 0);
     assert!(result.log_evidence().is_finite());
@@ -84,7 +84,7 @@ fn dynamic_nested_sampler_parallel_vs_sequential_consistency() {
             .with_termination_tolerance(1e-3)
             .with_seed(42);
 
-        let parallel_result = { sampler.run_nested(&parallel_problem, initial.clone()) };
+        let parallel_result = { sampler.run(&parallel_problem, initial.clone()) };
 
         let seq_sampler = DynamicNestedSampler::new()
             .with_live_points(32)
@@ -92,7 +92,7 @@ fn dynamic_nested_sampler_parallel_vs_sequential_consistency() {
             .with_termination_tolerance(1e-3)
             .with_seed(42);
 
-        let sequential_result = { seq_sampler.run_nested(&sequential_problem, initial.clone()) };
+        let sequential_result = { seq_sampler.run(&sequential_problem, initial.clone()) };
 
         // Both should produce valid results
         assert!(
@@ -155,7 +155,7 @@ fn dynamic_nested_sampler_parallel_basic_functionality() {
         .with_termination_tolerance(1e-3)
         .with_seed(123);
 
-    let parallel_result = sampler.run_nested(&problem, initial.clone());
+    let parallel_result = sampler.run(&problem, initial.clone());
 
     assert!(parallel_result.draws() > 0);
     assert!(parallel_result.log_evidence().is_finite());

@@ -33,7 +33,7 @@ fn gaussian_evidence_accuracy() {
         .with_termination_tolerance(1e-4)
         .with_seed(42);
 
-    let nested = sampler.run_nested(&problem, vec![0.0]);
+    let nested = sampler.run(&problem, vec![0.0]);
 
     assert!(nested.draws() > 0, "should produce samples");
     assert!(
@@ -79,7 +79,7 @@ fn bimodal_distribution_samples_both_modes() {
         .with_termination_tolerance(1e-3)
         .with_seed(999);
 
-    let nested = sampler.run_nested(&problem, vec![0.0]);
+    let nested = sampler.run(&problem, vec![0.0]);
 
     assert!(nested.draws() > 10, "should produce multiple samples");
 
@@ -125,7 +125,7 @@ fn handles_infinite_likelihood() {
         .with_expansion_factor(0.2)
         .with_seed(456);
 
-    let nested = sampler.run_nested(&problem, vec![0.0]);
+    let nested = sampler.run(&problem, vec![0.0]);
 
     assert!(
         nested.draws() > 0,
@@ -170,7 +170,7 @@ fn high_dimensional_problem() {
         .with_termination_tolerance(1e-2)
         .with_seed(789);
 
-    let nested = sampler.run_nested(&problem, vec![0.0; DIM]);
+    let nested = sampler.run(&problem, vec![0.0; DIM]);
 
     assert!(nested.draws() > 0, "should produce samples");
     assert_eq!(
@@ -202,7 +202,7 @@ fn sharp_peaked_posterior() {
         .with_termination_tolerance(1e-3)
         .with_seed(321);
 
-    let nested = sampler.run_nested(&problem, vec![0.0]);
+    let nested = sampler.run(&problem, vec![0.0]);
 
     assert!(nested.draws() > 0, "should produce samples");
     assert!(
@@ -232,7 +232,7 @@ fn very_small_evidence() {
         .with_expansion_factor(0.2)
         .with_seed(111);
 
-    let nested = sampler.run_nested(&problem, vec![0.0]);
+    let nested = sampler.run(&problem, vec![0.0]);
 
     assert!(
         nested.log_evidence() < -50.0,
@@ -259,7 +259,7 @@ fn posterior_weights_normalize() {
         .with_expansion_factor(0.2)
         .with_seed(555);
 
-    let nested = sampler.run_nested(&problem, vec![0.0]);
+    let nested = sampler.run(&problem, vec![0.0]);
 
     let log_z = nested.log_evidence();
     let mut weight_sum = 0.0;
@@ -290,7 +290,7 @@ fn mean_matches_weighted_average() {
         .with_expansion_factor(0.2)
         .with_seed(777);
 
-    let nested = sampler.run_nested(&problem, vec![1.0]);
+    let nested = sampler.run(&problem, vec![1.0]);
 
     let log_z = nested.log_evidence();
     let mut weighted_sum = 0.0;
@@ -337,8 +337,8 @@ fn reproducibility_with_seed() {
     let sampler1 = make_sampler();
     let sampler2 = make_sampler();
 
-    let nested1 = sampler1.run_nested(&problem1, vec![0.0]);
-    let nested2 = sampler2.run_nested(&problem2, vec![0.0]);
+    let nested1 = sampler1.run(&problem1, vec![0.0]);
+    let nested2 = sampler2.run(&problem2, vec![0.0]);
 
     assert_eq!(nested1.draws(), nested2.draws(), "draws should match");
     assert_eq!(
@@ -366,7 +366,7 @@ fn respects_parameter_bounds() {
         .with_expansion_factor(0.2)
         .with_seed(444);
 
-    let nested = sampler.run_nested(&problem, vec![0.0]);
+    let nested = sampler.run(&problem, vec![0.0]);
 
     for sample in nested.posterior() {
         let x = sample.position[0];
@@ -394,7 +394,7 @@ fn information_is_non_negative() {
         .with_expansion_factor(0.2)
         .with_seed(666);
 
-    let nested = sampler.run_nested(&problem, vec![0.0]);
+    let nested = sampler.run(&problem, vec![0.0]);
 
     assert!(
         nested.information() >= 0.0,
@@ -431,8 +431,8 @@ fn information_increases_with_constraint() {
     let wide_problem = make_problem(2.0);
     let narrow_problem = make_problem(0.5);
 
-    let wide_nested = make_sampler(100).run_nested(&wide_problem, vec![0.0]);
-    let narrow_nested = make_sampler(101).run_nested(&narrow_problem, vec![0.0]);
+    let wide_nested = make_sampler(100).run(&wide_problem, vec![0.0]);
+    let narrow_nested = make_sampler(101).run(&narrow_problem, vec![0.0]);
 
     assert!(
         narrow_nested.information() > wide_nested.information(),
@@ -462,7 +462,7 @@ fn terminates_with_high_information() {
         .with_termination_tolerance(1e-3)
         .with_seed(888);
 
-    let nested = sampler.run_nested(&problem, vec![0.0]);
+    let nested = sampler.run(&problem, vec![0.0]);
 
     assert!(nested.draws() > 0, "should produce samples");
     assert!(

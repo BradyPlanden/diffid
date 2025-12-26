@@ -4,7 +4,7 @@ mod errors;
 mod nelder_mead;
 mod types;
 
-use nalgebra::{DMatrix, DVector};
+use nalgebra::DMatrix;
 use rand::prelude::*;
 use rand::SeedableRng;
 use std::cmp::Ordering;
@@ -13,32 +13,17 @@ use std::fmt;
 use std::time::Duration;
 
 use crate::builders::{DiffsolProblemBuilder, ScalarProblemBuilder, VectorProblemBuilder};
-use crate::problem::{Objective, ProblemError};
+use crate::common::{Bounds, Point, Unbounded};
+use crate::problem::ProblemError;
 
 pub use adam::Adam;
 pub use cmaes::CMAES;
 pub use nelder_mead::NelderMead;
 pub use types::*;
 
-/// Result of calling `ask()`
-#[derive(Clone, Debug)]
-pub enum AskResult {
-    /// Evaluate these points and call `tell()` with the results
-    Evaluate(Vec<Point>),
-    /// Optimization has finished
-    Done(OptimisationResults),
-}
-
-/// Errors that can occur when calling `tell()`
-#[derive(Clone, Debug, PartialEq)]
-pub enum TellError {
-    /// Called `tell()` when the algorithm has already terminated
-    AlreadyTerminated,
-    /// Number of results doesn't match number of requested points
-    ResultCountMismatch { expected: usize, got: usize },
-    /// Gradient dimension doesn't match point dimension
-    GradientDimensionMismatch { expected: usize, got: usize },
-}
+// Re-export common types for convenience
+pub use crate::common::AskResult as OptimiserAskResult;
+use crate::optimisers::errors::EvaluationError;
 
 /// Gradient-free optimisers
 #[derive(Clone, Debug)]
@@ -82,12 +67,7 @@ impl ScalarOptimiser {
     ///     None
     /// );
     /// ```
-    pub fn run<F, E>(
-        &self,
-        objective: F,
-        initial: Point,
-        bounds: Option<Bounds>,
-    ) -> OptimisationResults
+    pub fn run<F, E>(&self, objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
     where
         F: FnMut(&[f64]) -> Result<f64, E>,
         E: StdError + 'static,
@@ -128,15 +108,10 @@ impl GradientOptimiser {
     ///     None
     /// );
     /// ```
-    pub fn run<F, R>(
-        &self,
-        objective: F,
-        initial: Point,
-        bounds: Option<Bounds>,
-    ) -> OptimisationResults
+    pub fn run<F, R>(&self, objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
     where
         F: FnMut(&[f64]) -> R,
-        R: IntoEvaluation<GradientEvaluation>,
+        R: TryInto<GradientEvaluation, Error = EvaluationError>,
     {
         match self {
             GradientOptimiser::Adam(ad) => ad.run(objective, initial, bounds),
@@ -147,7 +122,7 @@ impl GradientOptimiser {
         &self,
         objective: F,
         initial: Point,
-        bounds: Option<Bounds>,
+        bounds: Bounds,
         epsilon: f64,
     ) -> OptimisationResults
     where
@@ -328,41 +303,6 @@ impl Default for Optimiser {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct Bounds {
-    limits: Vec<(f64, f64)>,
-}
-
-impl Bounds {
-    pub fn new(limits: Vec<(f64, f64)>) -> Self {
-        Self { limits }
-    }
-
-    pub fn apply(&self, point: &mut [f64]) {
-        debug_assert_eq!(point.len(), self.limits.len(), "Dimension mismatch");
-        point
-            .iter_mut()
-            .zip(&self.limits)
-            .for_each(|(val, &(lo, hi))| *val = val.clamp(lo, hi));
-    }
-
-    pub fn dimension(&self) -> usize {
-        self.limits.len()
-    }
-}
-
-pub trait ApplyBounds {
-    fn apply_bounds(&mut self, bounds: Option<&Bounds>);
-}
-
-impl ApplyBounds for [f64] {
-    fn apply_bounds(&mut self, bounds: Option<&Bounds>) {
-        if let Some(b) = bounds {
-            b.apply(self);
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 struct EvaluatedPoint {
     point: Vec<f64>,
@@ -511,10 +451,11 @@ mod tests {
             .expect("Problem builder should succeed");
 
         let optimizer = Optimiser::nelder_mead();
+        let bounds = Bounds::unbounded(2);
 
         // Extract and use the scalar optimizer
         let scalar_opt = optimizer.as_scalar().expect("Should be scalar optimizer");
-        let result = scalar_opt.run(|x| problem.evaluate(x), vec![5.0, -5.0], None);
+        let result = scalar_opt.run(|x| problem.evaluate(x), vec![5.0, -5.0], bounds);
 
         assert!(result.value < 1e-6);
     }
@@ -539,7 +480,7 @@ mod tests {
                 (val, grad.expect("Should have gradient"))
             },
             vec![5.0, -5.0],
-            None,
+            Bounds::unbounded(2),
         );
 
         assert!(result.value < 1e-4);
@@ -597,7 +538,7 @@ mod tests {
         let result = optimizer.run_with_numerical_gradient(
             |x| problem.evaluate(x),
             vec![5.0, -5.0],
-            None,
+            Bounds::unbounded(2),
             1e-8,
         );
 
@@ -624,7 +565,7 @@ mod tests {
         let result = optimiser.run(
             |x| problem.evaluate(x),
             vec![1.0],
-            Some(Bounds::new(vec![(-5.0, 4.0)])),
+            Bounds::new(vec![(-5.0, 4.0)]),
         );
 
         assert!(result.success, "Expected success: {}", result.message);
@@ -647,7 +588,11 @@ mod tests {
             .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = NelderMead::new().with_max_iter(1).with_sigma0(1.0);
-        let result = optimiser.run(|x| problem.evaluate(x), vec![10.0, -10.0], None);
+        let result = optimiser.run(
+            |x| problem.evaluate(x),
+            vec![10.0, -10.0],
+            Bounds::unbounded(2),
+        );
 
         assert_eq!(result.termination, TerminationReason::MaxIterationsReached);
         assert!(!result.success);
@@ -666,7 +611,11 @@ mod tests {
             .with_sigma0(0.5)
             .with_max_iter(500);
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![2.0, 2.0], None);
+        let result = optimiser.run(
+            |x| problem.evaluate(x),
+            vec![2.0, 2.0],
+            Bounds::unbounded(2),
+        );
 
         assert_eq!(
             result.termination,
@@ -688,7 +637,11 @@ mod tests {
 
         let optimiser = NelderMead::new().with_sigma0(0.5).with_patience(0.01);
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![5.0, -5.0], None);
+        let result = optimiser.run(
+            |x| problem.evaluate(x),
+            vec![5.0, -5.0],
+            Bounds::unbounded(2),
+        );
 
         assert_eq!(result.termination, TerminationReason::PatienceElapsed);
         assert!(!result.success);
@@ -712,7 +665,11 @@ mod tests {
             .with_patience(5.0)
             .with_seed(42);
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![5.0, -4.0], None);
+        let result = optimiser.run(
+            |x| problem.evaluate(x),
+            vec![5.0, -4.0],
+            Bounds::unbounded(2),
+        );
 
         assert!(result.success, "Expected success: {}", result.message);
         assert!((result.x[0] - 1.5).abs() < 1e-4);
@@ -734,7 +691,11 @@ mod tests {
             .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = CMAES::new().with_max_iter(1).with_sigma0(0.5).with_seed(7);
-        let result = optimiser.run(|x| problem.evaluate(x), vec![10.0, -10.0], None);
+        let result = optimiser.run(
+            |x| problem.evaluate(x),
+            vec![10.0, -10.0],
+            Bounds::unbounded(2),
+        );
 
         assert_eq!(result.termination, TerminationReason::MaxIterationsReached);
         assert!(!result.success);
@@ -756,7 +717,11 @@ mod tests {
             .with_patience(0.01)
             .with_seed(5);
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![5.0, -5.0], None);
+        let result = optimiser.run(
+            |x| problem.evaluate(x),
+            vec![5.0, -5.0],
+            Bounds::unbounded(2),
+        );
 
         assert_eq!(result.termination, TerminationReason::PatienceElapsed);
         assert!(!result.success);
@@ -787,7 +752,7 @@ mod tests {
                 (val_grad.0, val_grad.1.expect("Expected gradient"))
             },
             vec![5.0, -4.0],
-            None,
+            Bounds::unbounded(2),
         );
 
         assert!(result.success, "Expected success: {}", result.message);
@@ -821,7 +786,7 @@ mod tests {
                 (val_grad.0, val_grad.1.expect("Expected gradient"))
             },
             vec![10.0, -10.0],
-            None,
+            Bounds::unbounded(2),
         );
 
         assert_eq!(result.termination, TerminationReason::MaxIterationsReached);
@@ -856,7 +821,7 @@ mod tests {
                 (val_grad.0, val_grad.1.expect("Expected gradient"))
             },
             vec![5.0, -5.0],
-            None,
+            Bounds::unbounded(2),
         );
 
         assert_eq!(result.termination, TerminationReason::PatienceElapsed);
@@ -882,7 +847,7 @@ mod tests {
                 }
             },
             vec![1.0, 2.0],
-            None,
+            Bounds::unbounded(2),
         );
 
         assert!(!result.success);
@@ -901,14 +866,18 @@ mod tests {
 
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| (x[0] - 2.0).powi(2) + (x[1] - 3.0).powi(2))
-            .with_parameter("x", 0.0, Some((-1.0, 1.0)))
-            .with_parameter("y", 0.0, Some((0.0, 2.0)))
+            .with_parameter("x", 0.0, (-1.0, 1.0))
+            .with_parameter("y", 0.0, (0.0, 2.0))
             .build()
             .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = NelderMead::new().with_max_iter(200).with_threshold(1e-8);
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![0.5, 1.0], None);
+        let result = optimiser.run(
+            |x| problem.evaluate(x),
+            vec![0.5, 1.0],
+            Bounds::unbounded(2),
+        );
 
         // Should converge to bounds: x=1.0 (clamped from 2.0), y=2.0 (clamped from 3.0)
         assert!(
@@ -937,8 +906,8 @@ mod tests {
 
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| (x[0] - 5.0).powi(2) + (x[1] + 5.0).powi(2))
-            .with_parameter("x", 0.0, Some((0.0, 3.0)))
-            .with_parameter("y", 0.0, Some((-3.0, 0.0)))
+            .with_parameter("x", 0.0, (0.0, 3.0))
+            .with_parameter("y", 0.0, (-3.0, 0.0))
             .build()
             .expect("Problem builder should succeed with valid parameters");
 
@@ -947,7 +916,11 @@ mod tests {
             .with_threshold(1e-6)
             .with_seed(123);
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![1.5, -1.5], None);
+        let result = optimiser.run(
+            |x| problem.evaluate(x),
+            vec![1.5, -1.5],
+            Bounds::unbounded(2),
+        );
 
         // Should converge to bounds: x=3.0 (clamped from 5.0), y=-3.0 (clamped from -5.0)
         assert!(
@@ -984,8 +957,12 @@ mod tests {
             .with_seed(2024);
 
         let initial = vec![3.0, -2.0];
-        let result_one = optimiser.run(|x| problem.evaluate(x), initial.clone(), None);
-        let result_two = optimiser.run(|x| problem.evaluate(x), initial, None);
+        let result_one = optimiser.run(
+            |x| problem.evaluate(x),
+            initial.clone(),
+            Bounds::unbounded(2),
+        );
+        let result_two = optimiser.run(|x| problem.evaluate(x), initial, Bounds::unbounded(2));
 
         assert!(
             result_one.success,
@@ -1020,7 +997,7 @@ mod tests {
 
         let optimiser = NelderMead::new().with_max_iter(50).with_sigma0(2.0); // Larger sigma to ensure we hit NaN region
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![0.5], None);
+        let result = optimiser.run(|x| problem.evaluate(x), vec![0.5], Bounds::unbounded(2));
 
         // Should either detect NaN or converge to valid region
         // If it hits NaN, it should fail gracefully
@@ -1051,7 +1028,7 @@ mod tests {
 
         let initial_value = initial.iter().map(|x| x * x).sum::<f64>();
 
-        let result = optimiser.run(|x| problem.evaluate(x), initial, None);
+        let result = optimiser.run(|x| problem.evaluate(x), initial, Bounds::unbounded(2));
 
         // Should still work with lazy updates and improve from initial
         assert!(result.evaluations > 0);
@@ -1076,7 +1053,11 @@ mod tests {
             .with_sigma0(0.6)
             .with_seed(4242);
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![4.5, -3.5], None);
+        let result = optimiser.run(
+            |x| problem.evaluate(x),
+            vec![4.5, -3.5],
+            Bounds::unbounded(2),
+        );
 
         assert!(result.success, "Expected success: {}", result.message);
         assert!(

@@ -7,6 +7,9 @@ pub enum EvaluationError {
 
     /// Non finite gradient
     NonFiniteGradient,
+
+    /// Non finite value
+    NonFiniteValue,
 }
 
 impl EvaluationError {
@@ -31,6 +34,7 @@ impl std::fmt::Display for EvaluationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::User(e) => write!(f, "Evaluation failed:: {}", e),
+            Self::NonFiniteValue => write!(f, "Evaluation failed::NonFiniteValue"),
             Self::NonFiniteGradient => write!(f, "Evaluation failed::NonFiniteGradient"),
         }
     }
@@ -40,6 +44,7 @@ impl std::error::Error for EvaluationError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::User(e) => Some(e.as_ref()),
+            Self::NonFiniteValue => None,
             Self::NonFiniteGradient => None,
         }
     }

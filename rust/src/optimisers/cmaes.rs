@@ -1,6 +1,7 @@
+use crate::common::{AskResult, Bounds, Point, TellError};
+use crate::optimisers::errors::EvaluationError;
 use crate::optimisers::{
-    build_results, ApplyBounds, AskResult, Bounds, EvaluatedPoint, OptimisationResults, Optimiser,
-    Point, TellError, TerminationReason,
+    build_results, EvaluatedPoint, OptimisationResults, ScalarEvaluation, TerminationReason,
 };
 use nalgebra::{DMatrix, DVector};
 use rand::prelude::*;
@@ -8,7 +9,6 @@ use rand_distr::{Distribution, StandardNormal};
 use std::cmp::Ordering;
 use std::error::Error as StdError;
 use std::time::{Duration, Instant};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────────
@@ -82,11 +82,10 @@ impl CMAES {
     /// Initialize the optimization state
     ///
     /// Returns the state and the first point to evaluate
-    pub fn init(&self, initial: Point, bounds: Option<Bounds>) -> (CMAESState, Point) {
+    pub fn init(&self, initial: Point, bounds: Bounds) -> (CMAESState, Point) {
         let dim = initial.len();
         let mut initial_point = initial;
-
-        initial_point.apply_bounds(bounds.as_ref());
+        bounds.clamp(&mut initial_point);
 
         let state = CMAESState::new(self.clone(), initial_point.clone(), bounds, dim);
         (state, initial_point)
@@ -245,7 +244,7 @@ impl DistributionState {
 /// Runtime state of the CMA-ES optimizer
 pub struct CMAESState {
     config: CMAES,
-    bounds: Option<Bounds>,
+    bounds: Bounds,
     dim: usize,
 
     // CMA-ES internal state
@@ -265,7 +264,7 @@ pub struct CMAESState {
 }
 
 impl CMAESState {
-    fn new(config: CMAES, initial_point: Point, bounds: Option<Bounds>, dim: usize) -> Self {
+    fn new(config: CMAES, initial_point: Point, bounds: Bounds, dim: usize) -> Self {
         let lambda = config.compute_population_size(dim);
         let params = StrategyParameters::new(dim, lambda);
 
@@ -294,7 +293,7 @@ impl CMAESState {
     }
 
     /// Get the next point(s) to evaluate, or the final result if optimization is complete
-    pub fn ask(&self) -> AskResult {
+    pub fn ask(&self) -> AskResult<OptimisationResults> {
         match &self.phase {
             CMAESPhase::Terminated(reason) => AskResult::Done(self.build_results(reason.clone())),
             CMAESPhase::EvaluatingInitial { initial_point } => {
@@ -307,13 +306,29 @@ impl CMAESState {
     }
 
     /// Report the evaluation results for the points from `ask()`
-    pub fn tell<E>(&mut self, results: Vec<Result<f64, E>>) -> Result<(), TellError>
+    pub fn tell<I, T>(&mut self, results: I) -> Result<(), TellError>
     where
-        E: StdError + 'static,
+        I: IntoIterator<Item = T>,
+        T: TryInto<ScalarEvaluation, Error = EvaluationError>,
     {
         if matches!(self.phase, CMAESPhase::Terminated(_)) {
             return Err(TellError::AlreadyTerminated);
         }
+
+        let values: Vec<f64> = match results
+            .into_iter()
+            .map(|r| r.try_into())
+            .map(|r| r.try_into().map(|eval| eval.value()))
+            .collect::<Result<Vec<f64>, EvaluationError>>()
+        {
+            Ok(v) => v,
+            Err(e) => {
+                self.phase = CMAESPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
+                    format!("{}", e),
+                ));
+                return Ok(());
+            }
+        };
 
         // Take ownership of current phase
         let phase = std::mem::replace(
@@ -323,14 +338,14 @@ impl CMAESState {
 
         match phase {
             CMAESPhase::EvaluatingInitial { initial_point } => {
-                self.handle_initial_evaluated(initial_point, results)?;
+                self.handle_initial_evaluated(initial_point, values)?;
             }
             CMAESPhase::AwaitingPopulation {
                 candidates,
                 z_vectors,
                 old_mean,
             } => {
-                self.handle_population_evaluated(candidates, z_vectors, old_mean, results)?;
+                self.handle_population_evaluated(candidates, z_vectors, old_mean, values)?;
             }
             CMAESPhase::Terminated(_) => unreachable!(),
         }
@@ -372,7 +387,7 @@ impl CMAESState {
     fn handle_initial_evaluated<E>(
         &mut self,
         initial_point: Point,
-        results: Vec<Result<f64, E>>,
+        results: Vec<f64>,
     ) -> Result<(), TellError>
     where
         E: StdError + 'static,
@@ -414,7 +429,7 @@ impl CMAESState {
         candidates: Vec<Point>,
         z_vectors: Vec<DVector<f64>>,
         old_mean: DVector<f64>,
-        results: Vec<Result<f64, E>>,
+        results: Vec<f64>,
     ) -> Result<(), TellError>
     where
         E: StdError + 'static,
@@ -541,7 +556,8 @@ impl CMAESState {
             let candidate_vec = &self.distribution.mean + step * self.distribution.sigma;
             let mut candidate: Point = candidate_vec.iter().cloned().collect();
 
-            self.apply_bounds_to(&mut candidate);
+            // Apply bounds
+            self.bounds.clamp(&mut candidate);
 
             candidates.push(candidate);
             z_vectors.push(z);
@@ -643,14 +659,6 @@ impl CMAESState {
         updated
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Helper Methods
-    // ─────────────────────────────────────────────────────────────────────────
-
-    fn apply_bounds_to(&self, point: &mut Point) {
-        point.apply_bounds(self.bounds.as_ref());
-    }
-
     fn check_pre_generation_termination(&self) -> Option<TerminationReason> {
         // Check patience/timeout
         if let Some(patience) = self.config.patience {
@@ -707,15 +715,10 @@ impl CMAES {
     /// Run optimization using a closure for evaluation
     ///
     /// This is a convenience wrapper around the ask/tell interface
-    pub fn run<F, E>(
-        &self,
-        mut objective: F,
-        initial: Point,
-        bounds: Option<Bounds>,
-    ) -> OptimisationResults
+    pub fn run<F, R>(&self, mut objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
     where
-        F: FnMut(&[f64]) -> Result<f64, E>,
-        E: StdError + 'static,
+        F: FnMut(&[f64]) -> R,
+        R: TryInto<ScalarEvaluation, Error = EvaluationError>
     {
         let (mut state, first_point) = self.init(initial, bounds);
 
@@ -747,7 +750,7 @@ impl CMAES {
     pub fn run_parallel<F>(
         &self,
         initial: Point,
-        bounds: Option<Bounds>,
+        bounds: Bounds,
         objective: F,
     ) -> OptimisationResults
     where
@@ -800,7 +803,7 @@ mod tests {
         let cmaes = CMAES::new().with_max_iter(100).with_seed(42);
 
         let initial = vec![5.0, 5.0];
-        let (mut state, first_point) = cmaes.init(initial, None);
+        let (mut state, first_point) = cmaes.init(initial, Bounds::unbounded(2));
 
         let mut current_results = vec![sphere(&first_point)];
 
@@ -831,7 +834,7 @@ mod tests {
     fn test_run_convenience_wrapper() {
         let cmaes = CMAES::new().with_max_iter(100).with_seed(42);
 
-        let results = cmaes.run(|x| sphere(x), vec![5.0, 5.0], None);
+        let results = cmaes.run(|x| sphere(x), vec![5.0, 5.0], Bounds::unbounded(2));
 
         assert!(results.value < 1e-3);
     }
@@ -842,7 +845,7 @@ mod tests {
 
         // Todo: convert run to accept vec!, then convert to Bounds if needed
         let bounds = Bounds::new(vec![(-10.0, 10.0), (-10.0, 10.0)]);
-        let results = cmaes.run(|x| sphere(x), vec![5.0, 5.0], Some(bounds));
+        let results = cmaes.run(|x| sphere(x), vec![5.0, 5.0], bounds);
 
         assert!(results.value < 1e-3);
     }
@@ -865,7 +868,7 @@ mod tests {
 
         let initial_value = initial.iter().map(|x| x * x).sum::<f64>();
 
-        let result = optimiser.run(|x| problem.evaluate(x), initial, None);
+        let result = optimiser.run(|x| problem.evaluate(x), initial, Bounds::unbounded(2));
 
         // Should still work with lazy updates and improve from initial
         assert!(result.evaluations > 0);
@@ -890,7 +893,11 @@ mod tests {
             .with_sigma0(0.6)
             .with_seed(4242);
 
-        let result = optimiser.run(|x| problem.evaluate(x), vec![4.5, -3.5], None);
+        let result = optimiser.run(
+            |x| problem.evaluate(x),
+            vec![4.5, -3.5],
+            Bounds::unbounded(2),
+        );
 
         assert!(result.success, "Expected success: {}", result.message);
         assert!(

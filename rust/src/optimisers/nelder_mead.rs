@@ -1,6 +1,7 @@
+use crate::common::{AskResult, Bounds, Point, TellError};
+use crate::optimisers::errors::EvaluationError;
 use crate::optimisers::{
-    build_results, ApplyBounds, AskResult, Bounds, EvaluatedPoint, OptimisationResults, Optimiser,
-    Point, TellError, TerminationReason,
+    build_results, EvaluatedPoint, OptimisationResults, ScalarEvaluation, TerminationReason,
 };
 use std::cmp::Ordering;
 use std::error::Error as StdError;
@@ -78,11 +79,10 @@ impl NelderMead {
     /// Initialize the optimization state
     ///
     /// Returns the state and the first point to evaluate
-    pub fn init(&self, initial: Point, bounds: Option<Bounds>) -> (NelderMeadState, Vec<Point>) {
+    pub fn init(&self, initial: Point, bounds: Bounds) -> (NelderMeadState, Vec<Point>) {
         let dim = initial.len();
         let mut initial_point = initial;
-
-        initial_point.apply_bounds(bounds.as_ref());
+        bounds.clamp(&mut initial_point);
 
         let state = NelderMeadState {
             config: self.clone(),
@@ -102,15 +102,10 @@ impl NelderMead {
     /// Run optimization using a closure for evaluation
     ///
     /// This is a convenience wrapper around the ask/tell interface
-    pub fn run<F, E>(
-        &self,
-        mut objective: F,
-        initial: Point,
-        bounds: Option<Bounds>,
-    ) -> OptimisationResults
+    pub fn run<F, R>(&self, mut objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
     where
-        F: FnMut(&[f64]) -> Result<f64, E>,
-        E: StdError + 'static,
+        F: FnMut(&[f64]) -> R,
+        R: TryInto<ScalarEvaluation, Error = EvaluationError>,
     {
         let (mut state, first_point) = self.init(initial, bounds);
         let mut result = objective(&first_point[0]);
@@ -193,7 +188,7 @@ pub struct NelderMeadState {
     config: NelderMead,
     simplex: Vec<EvaluatedPoint>,
     phase: NelderMeadPhase,
-    bounds: Option<Bounds>,
+    bounds: Bounds,
     dim: usize,
     initial_point: Point,
     nit: usize,
@@ -203,7 +198,7 @@ pub struct NelderMeadState {
 
 impl NelderMeadState {
     /// Get the next point to evaluate, or the final result if optimization is complete
-    pub fn ask(&self) -> AskResult {
+    pub fn ask(&self) -> AskResult<OptimisationResults> {
         match &self.phase {
             NelderMeadPhase::Terminated(reason) => {
                 AskResult::Done(self.build_results(reason.clone()))
@@ -232,16 +227,16 @@ impl NelderMeadState {
     /// Report the evaluation result for the last point from `ask()`
     ///
     /// Pass `Err` if the objective function failed to evaluate
-    pub fn tell<E>(&mut self, result: Result<f64, E>) -> Result<(), TellError>
+    pub fn tell<T>(&mut self, result: T) -> Result<(), TellError>
     where
-        E: StdError + 'static,
+        T: TryInto<ScalarEvaluation, Error = EvaluationError>,
     {
         if matches!(self.phase, NelderMeadPhase::Terminated(_)) {
             return Err(TellError::AlreadyTerminated);
         }
 
-        let value = match result {
-            Ok(v) => v,
+        let value = match result.try_into() {
+            Ok(eval) => eval.value(),
             Err(e) => {
                 self.phase = NelderMeadPhase::Terminated(
                     TerminationReason::FunctionEvaluationFailed(format!("{}", e)),
@@ -558,7 +553,8 @@ impl NelderMeadState {
             point[dim] += self.config.sigma0;
         }
 
-        self.apply_bounds_to(&mut point);
+        // Apply bounds
+        self.bounds.clamp(&mut point);
         point
     }
 
@@ -569,7 +565,8 @@ impl NelderMeadState {
             .map(|(b, x)| b + self.config.sigma * (x - b))
             .collect();
 
-        self.apply_bounds_to(&mut point);
+        // Apply bounds
+        self.bounds.clamp(&mut point);
         point
     }
 
@@ -580,12 +577,9 @@ impl NelderMeadState {
             .map(|(f, t)| f + coeff * (t - f))
             .collect();
 
-        self.apply_bounds_to(&mut point);
+        // Apply bounds
+        self.bounds.clamp(&mut point);
         point
-    }
-
-    fn apply_bounds_to(&self, point: &mut Point) {
-        point.apply_bounds(self.bounds.as_ref());
     }
 
     fn accept_point(&mut self, point: Point, value: f64) {
@@ -705,7 +699,7 @@ mod tests {
         let nm = NelderMead::new().with_max_iter(500).with_threshold(1e-8);
 
         let initial = vec![0.0, 0.0];
-        let (mut state, first_point) = nm.init(initial, None);
+        let (mut state, first_point) = nm.init(initial, Bounds::unbounded(2));
 
         // Evaluate first point
         let mut current_value = rosenbrock(&first_point[0]);
@@ -736,7 +730,7 @@ mod tests {
     fn test_run_convenience_wrapper() {
         let nm = NelderMead::new().with_max_iter(500);
 
-        let results = nm.run(|x| rosenbrock(x), vec![0.0, 0.0], None);
+        let results = nm.run(|x| rosenbrock(x), vec![0.0, 0.0], Bounds::unbounded(2));
 
         assert!(results.value < 1e-6);
     }

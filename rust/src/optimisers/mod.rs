@@ -1,6 +1,5 @@
 mod adam;
 mod cmaes;
-mod errors;
 mod nelder_mead;
 mod types;
 
@@ -14,7 +13,7 @@ use std::time::Duration;
 
 use crate::builders::{DiffsolProblemBuilder, ScalarProblemBuilder, VectorProblemBuilder};
 use crate::common::{Bounds, Point, Unbounded};
-use crate::problem::ProblemError;
+use crate::errors::EvaluationError;
 
 pub use adam::Adam;
 pub use cmaes::CMAES;
@@ -23,7 +22,6 @@ pub use types::*;
 
 // Re-export common types for convenience
 pub use crate::common::AskResult as OptimiserAskResult;
-use crate::optimisers::errors::EvaluationError;
 
 /// Gradient-free optimisers
 #[derive(Clone, Debug)]
@@ -70,7 +68,7 @@ impl ScalarOptimiser {
     pub fn run<F, E>(&self, objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
     where
         F: FnMut(&[f64]) -> Result<f64, E>,
-        E: StdError + 'static,
+        E: StdError + Send + Sync + 'static,
     {
         match self {
             ScalarOptimiser::NelderMead(nm) => nm.run(objective, initial, bounds),
@@ -441,6 +439,7 @@ impl OptimisationResults {
 mod tests {
     use super::*;
     use crate::optimisers::cmaes::{CMAESState, StrategyParameters};
+    use crate::problem::ProblemError;
     use nalgebra::{DMatrix, DVector};
 
     #[test]

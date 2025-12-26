@@ -50,6 +50,12 @@ impl std::error::Error for EvaluationError {
     }
 }
 
+impl From<std::convert::Infallible> for EvaluationError {
+    fn from(err: std::convert::Infallible) -> Self {
+        match err {}
+    }
+}
+
 /// A simple string error for the case where only a message is available
 #[derive(Debug, Clone)]
 struct StringError(String);

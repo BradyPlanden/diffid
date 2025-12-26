@@ -1,5 +1,5 @@
 use crate::common::{AskResult, Bounds, Point, TellError};
-use crate::optimisers::errors::EvaluationError;
+use crate::errors::EvaluationError;
 use crate::optimisers::{
     build_results, EvaluatedPoint, OptimisationResults, ScalarEvaluation, TerminationReason,
 };
@@ -306,25 +306,30 @@ impl CMAESState {
     }
 
     /// Report the evaluation results for the points from `ask()`
-    pub fn tell<I, T>(&mut self, results: I) -> Result<(), TellError>
+    pub fn tell<I, T, E>(&mut self, results: I) -> Result<(), TellError>
     where
         I: IntoIterator<Item = T>,
-        T: TryInto<ScalarEvaluation, Error = EvaluationError>,
+        T: TryInto<ScalarEvaluation, Error = E>,
+        E: Into<EvaluationError>,
     {
         if matches!(self.phase, CMAESPhase::Terminated(_)) {
             return Err(TellError::AlreadyTerminated);
         }
 
+        // We collect into a Result<Vec<f64>> first to handle errors early
+        // This means we stop at the first error, simpler than handling partials for now
         let values: Vec<f64> = match results
             .into_iter()
             .map(|r| r.try_into())
-            .map(|r| r.try_into().map(|eval| eval.value()))
+            .map(|res| res.map(|eval| eval.value()))
+            .map(|res| res.map_err(|e| e.into()))
             .collect::<Result<Vec<f64>, EvaluationError>>()
         {
             Ok(v) => v,
             Err(e) => {
+                let err: EvaluationError = e.into();
                 self.phase = CMAESPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
-                    format!("{}", e),
+                    format!("{}", err),
                 ));
                 return Ok(());
             }
@@ -384,14 +389,11 @@ impl CMAESState {
     // Phase Handlers
     // ─────────────────────────────────────────────────────────────────────────
 
-    fn handle_initial_evaluated<E>(
+    fn handle_initial_evaluated(
         &mut self,
         initial_point: Point,
         results: Vec<f64>,
-    ) -> Result<(), TellError>
-    where
-        E: StdError + 'static,
-    {
+    ) -> Result<(), TellError> {
         if results.len() != 1 {
             return Err(TellError::ResultCountMismatch {
                 expected: 1,
@@ -400,16 +402,7 @@ impl CMAESState {
         }
 
         self.nfev += 1;
-
-        let value = match results.into_iter().next().unwrap() {
-            Ok(v) => v,
-            Err(e) => {
-                self.phase = CMAESPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
-                    format!("{}", e),
-                ));
-                return Ok(());
-            }
-        };
+        let value = results[0];
 
         let evaluated = EvaluatedPoint::new(initial_point.clone(), value);
         self.best_point = Some(evaluated.clone());
@@ -424,16 +417,13 @@ impl CMAESState {
         Ok(())
     }
 
-    fn handle_population_evaluated<E>(
+    fn handle_population_evaluated(
         &mut self,
         candidates: Vec<Point>,
         z_vectors: Vec<DVector<f64>>,
         old_mean: DVector<f64>,
         results: Vec<f64>,
-    ) -> Result<(), TellError>
-    where
-        E: StdError + 'static,
-    {
+    ) -> Result<(), TellError> {
         let expected = candidates.len();
         if results.len() != expected {
             return Err(TellError::ResultCountMismatch {
@@ -447,27 +437,12 @@ impl CMAESState {
         // Process results into population
         let mut population: Vec<(EvaluatedPoint, DVector<f64>)> = Vec::with_capacity(expected);
 
-        for ((candidate, z), result) in candidates
+        for ((candidate, z), value) in candidates
             .into_iter()
             .zip(z_vectors.into_iter())
             .zip(results.into_iter())
         {
-            match result {
-                Ok(value) => {
-                    population.push((EvaluatedPoint::new(candidate, value), z));
-                }
-                Err(e) => {
-                    // Store partial results and terminate
-                    let mut final_points: Vec<EvaluatedPoint> =
-                        population.iter().map(|(pt, _)| pt.clone()).collect();
-                    final_points.push(EvaluatedPoint::new(candidate, f64::NAN));
-                    self.final_population = final_points;
-                    self.phase = CMAESPhase::Terminated(
-                        TerminationReason::FunctionEvaluationFailed(format!("{}", e)),
-                    );
-                    return Ok(());
-                }
-            }
+            population.push((EvaluatedPoint::new(candidate, value), z));
         }
 
         // Sort by objective value
@@ -715,10 +690,16 @@ impl CMAES {
     /// Run optimization using a closure for evaluation
     ///
     /// This is a convenience wrapper around the ask/tell interface
-    pub fn run<F, R>(&self, mut objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
+    pub fn run<F, R, E>(
+        &self,
+        mut objective: F,
+        initial: Point,
+        bounds: Bounds,
+    ) -> OptimisationResults
     where
         F: FnMut(&[f64]) -> R,
-        R: TryInto<ScalarEvaluation, Error = EvaluationError>
+        R: TryInto<ScalarEvaluation, Error = E>,
+        E: Into<EvaluationError>,
     {
         let (mut state, first_point) = self.init(initial, bounds);
 

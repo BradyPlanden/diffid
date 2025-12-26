@@ -1,4 +1,4 @@
-use crate::optimisers::errors::EvaluationError;
+use crate::errors::EvaluationError;
 use std::error::Error as StdError;
 
 pub type Gradient = Vec<f64>;

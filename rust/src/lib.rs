@@ -1,6 +1,8 @@
 pub mod builders;
 pub mod common;
+
 pub mod cost;
+pub mod errors;
 pub mod optimisers;
 pub mod problem;
 pub mod sampler;

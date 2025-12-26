@@ -1,5 +1,5 @@
 use crate::common::{AskResult, Bounds, Point, TellError};
-use crate::optimisers::errors::EvaluationError;
+use crate::errors::EvaluationError;
 use crate::optimisers::{
     build_results, EvaluatedPoint, OptimisationResults, ScalarEvaluation, TerminationReason,
 };
@@ -102,10 +102,16 @@ impl NelderMead {
     /// Run optimization using a closure for evaluation
     ///
     /// This is a convenience wrapper around the ask/tell interface
-    pub fn run<F, R>(&self, mut objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
+    pub fn run<F, R, E>(
+        &self,
+        mut objective: F,
+        initial: Point,
+        bounds: Bounds,
+    ) -> OptimisationResults
     where
         F: FnMut(&[f64]) -> R,
-        R: TryInto<ScalarEvaluation, Error = EvaluationError>,
+        R: TryInto<ScalarEvaluation, Error = E>,
+        E: Into<EvaluationError>,
     {
         let (mut state, first_point) = self.init(initial, bounds);
         let mut result = objective(&first_point[0]);
@@ -227,9 +233,10 @@ impl NelderMeadState {
     /// Report the evaluation result for the last point from `ask()`
     ///
     /// Pass `Err` if the objective function failed to evaluate
-    pub fn tell<T>(&mut self, result: T) -> Result<(), TellError>
+    pub fn tell<T, E>(&mut self, result: T) -> Result<(), TellError>
     where
-        T: TryInto<ScalarEvaluation, Error = EvaluationError>,
+        T: TryInto<ScalarEvaluation, Error = E>,
+        E: Into<EvaluationError>,
     {
         if matches!(self.phase, NelderMeadPhase::Terminated(_)) {
             return Err(TellError::AlreadyTerminated);
@@ -238,8 +245,9 @@ impl NelderMeadState {
         let value = match result.try_into() {
             Ok(eval) => eval.value(),
             Err(e) => {
+                let err: EvaluationError = e.into();
                 self.phase = NelderMeadPhase::Terminated(
-                    TerminationReason::FunctionEvaluationFailed(format!("{}", e)),
+                    TerminationReason::FunctionEvaluationFailed(format!("{}", err)),
                 );
                 return Ok(());
             }

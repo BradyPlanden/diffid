@@ -1,5 +1,5 @@
 use crate::common::{AskResult, Bounds, Point, TellError};
-use crate::optimisers::errors::EvaluationError;
+use crate::errors::EvaluationError;
 use crate::optimisers::{
     build_results, EvaluatedPoint, GradientEvaluation, OptimisationResults, TerminationReason,
 };
@@ -236,9 +236,10 @@ impl AdamState {
     /// Report the evaluation result (value and gradient) for the last point from `ask()`
     ///
     /// Pass `Err` if the objective function failed to evaluate
-    pub fn tell<T>(&mut self, result: T) -> Result<(), TellError>
+    pub fn tell<T, E>(&mut self, result: T) -> Result<(), TellError>
     where
-        T: TryInto<GradientEvaluation, Error = EvaluationError>,
+        T: TryInto<GradientEvaluation, Error = E>,
+        E: Into<EvaluationError>,
     {
         if matches!(self.phase, AdamPhase::Terminated(_)) {
             return Err(TellError::AlreadyTerminated);
@@ -248,10 +249,11 @@ impl AdamState {
         let eval = match result.try_into() {
             Ok(e) => e,
             Err(e) => {
+                let err: EvaluationError = e.into();
                 self.history
                     .push(EvaluatedPoint::new(self.x.clone(), f64::NAN));
                 self.phase = AdamPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
-                    format!("{}", e),
+                    format!("{}", err),
                 ));
                 return Ok(());
             }
@@ -419,10 +421,16 @@ impl Adam {
     /// Run optimization using a closure for evaluation
     ///
     /// The closure should return `(value, gradient)` for a given point
-    pub fn run<F, R>(&self, mut objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
+    pub fn run<F, R, E>(
+        &self,
+        mut objective: F,
+        initial: Point,
+        bounds: Bounds,
+    ) -> OptimisationResults
     where
         F: FnMut(&[f64]) -> R,
-        R: TryInto<GradientEvaluation, Error = EvaluationError>,
+        R: TryInto<GradientEvaluation, Error = E>,
+        E: Into<EvaluationError>,
     {
         let (mut state, first_point) = self.init(initial, bounds);
         let mut result = objective(&first_point);
@@ -668,8 +676,11 @@ mod tests {
         let (mut state, first_point) = adam.init(vec![0.1, 0.1], Bounds::unbounded(2));
 
         // Start near origin with small gradient
-        let val_grad = sphere_fallible(&first_point).expect("should be fine");
-        state.tell(GradientEvaluation::new(val_grad.0, val_grad.1));
+        let val_grad =
+            sphere_fallible(&first_point).expect("Initial evaluation of sphere function failed");
+        state
+            .tell(val_grad)
+            .expect("Failed to update optimizer state with initial evaluation result");
 
         match state.ask() {
             AskResult::Done(results) => {

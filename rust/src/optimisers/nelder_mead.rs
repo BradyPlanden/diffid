@@ -1,5 +1,5 @@
-use crate::common::{AskResult, Bounds, Point, TellError};
-use crate::errors::EvaluationError;
+use crate::common::{AskResult, Bounds, Point};
+use crate::errors::{EvaluationError, TellError};
 use crate::optimisers::{
     build_results, EvaluatedPoint, OptimisationResults, ScalarEvaluation, TerminationReason,
 };

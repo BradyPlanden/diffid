@@ -1,3 +1,4 @@
+use std::fmt;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -30,8 +31,8 @@ impl EvaluationError {
     }
 }
 
-impl std::fmt::Display for EvaluationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for EvaluationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::User(e) => write!(f, "Evaluation failed:: {}", e),
             Self::NonFiniteValue => write!(f, "Evaluation failed::NonFiniteValue"),
@@ -60,10 +61,40 @@ impl From<std::convert::Infallible> for EvaluationError {
 #[derive(Debug, Clone)]
 struct StringError(String);
 
-impl std::fmt::Display for StringError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for StringError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
 impl std::error::Error for StringError {}
+
+/// Errors that can occur when calling `tell()`
+#[derive(Clone, Debug)]
+pub enum TellError {
+    /// Called `tell()` when the algorithm has already terminated
+    AlreadyTerminated,
+    /// Number of results doesn't match number of requested points
+    ResultCountMismatch { expected: usize, got: usize },
+    /// Gradient dimension doesn't match point dimension
+    GradientDimensionMismatch { expected: usize, got: usize },
+    /// Wrapper for EvaluationError
+    EvaluationFailed(EvaluationError),
+}
+
+impl std::error::Error for TellError {}
+
+impl fmt::Display for TellError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TellError::AlreadyTerminated => write!(f, "Algorithm already terminated"),
+            TellError::ResultCountMismatch { expected, got } => {
+                write!(f, "Expected {} results, got {}", expected, got)
+            }
+            TellError::GradientDimensionMismatch { expected, got } => {
+                write!(f, "Expected gradient dimension {}, got {}", expected, got)
+            }
+            TellError::EvaluationFailed(e) => write!(f, "Evaluation failed {:?}", e),
+        }
+    }
+}

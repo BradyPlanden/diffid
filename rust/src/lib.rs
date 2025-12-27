@@ -6,13 +6,15 @@ pub mod errors;
 pub mod optimisers;
 pub mod problem;
 pub mod sampler;
+mod types;
 
 // Convenience re-exports so users can `use chronopt::prelude::*;`
 pub mod prelude {
     pub use crate::builders::{
         DiffsolConfig, DiffsolProblemBuilder, ScalarProblemBuilder, VectorProblemBuilder,
     };
-    pub use crate::common::{AskResult, Bounds, TellError, Unbounded};
+    pub use crate::common::{AskResult, Bounds, Unbounded};
+    pub use crate::errors::{EvaluationError, TellError};
     pub use crate::optimisers::{Adam, NelderMead, OptimisationResults, Optimiser, CMAES};
     pub use crate::problem::{Objective, ParameterSet, ParameterSpec, Problem};
     pub use crate::sampler::{

@@ -1,7 +1,6 @@
 mod adam;
 mod cmaes;
 mod nelder_mead;
-mod types;
 
 use nalgebra::DMatrix;
 use rand::prelude::*;
@@ -11,14 +10,14 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::time::Duration;
 
-use crate::builders::{DiffsolProblemBuilder, ScalarProblemBuilder, VectorProblemBuilder};
-use crate::common::{Bounds, Point, Unbounded};
+use crate::builders::ScalarProblemBuilder;
+use crate::common::{Bounds, Point};
 use crate::errors::EvaluationError;
 
+pub use crate::types::*;
 pub use adam::Adam;
 pub use cmaes::CMAES;
 pub use nelder_mead::NelderMead;
-pub use types::*;
 
 // Re-export common types for convenience
 pub use crate::common::AskResult as OptimiserAskResult;

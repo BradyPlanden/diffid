@@ -1,5 +1,5 @@
-use crate::common::{AskResult, Bounds, Point, TellError};
-use crate::errors::EvaluationError;
+use crate::common::{AskResult, Bounds, Point};
+use crate::errors::{EvaluationError, TellError};
 use crate::optimisers::{
     build_results, EvaluatedPoint, OptimisationResults, ScalarEvaluation, TerminationReason,
 };
@@ -317,23 +317,16 @@ impl CMAESState {
         }
 
         // We collect into a Result<Vec<f64>> first to handle errors early
-        // This means we stop at the first error, simpler than handling partials for now
-        let values: Vec<f64> = match results
+        let values: Vec<f64> = results
             .into_iter()
             .map(|r| r.try_into())
-            .map(|res| res.map(|eval| eval.value()))
-            .map(|res| res.map_err(|e| e.into()))
-            .collect::<Result<Vec<f64>, EvaluationError>>()
-        {
-            Ok(v) => v,
-            Err(e) => {
-                let err: EvaluationError = e.into();
-                self.phase = CMAESPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
-                    format!("{}", err),
-                ));
-                return Ok(());
-            }
-        };
+            .map(|res| {
+                match res {
+                    Ok(eval) => eval.value(),
+                    Err(_) => f64::INFINITY, // Error as infinite cost
+                }
+            })
+            .collect();
 
         // Take ownership of current phase
         let phase = std::mem::replace(

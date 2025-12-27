@@ -1,7 +1,6 @@
 use rand::prelude::StdRng;
 use rand::Rng;
 use rand_distr::StandardNormal;
-use std::fmt;
 use std::ops::RangeInclusive;
 
 /// Type alias for a point in parameter space
@@ -20,33 +19,6 @@ pub enum AskResult<R> {
     Evaluate(Vec<Point>),
     /// Algorithm has finished - contains final results
     Done(R),
-}
-
-/// Errors that can occur when calling `tell()`
-#[derive(Clone, Debug, PartialEq)]
-pub enum TellError {
-    /// Called `tell()` when the algorithm has already terminated
-    AlreadyTerminated,
-    /// Number of results doesn't match number of requested points
-    ResultCountMismatch { expected: usize, got: usize },
-    /// Gradient dimension doesn't match point dimension
-    GradientDimensionMismatch { expected: usize, got: usize },
-}
-
-impl std::error::Error for TellError {}
-
-impl fmt::Display for TellError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TellError::AlreadyTerminated => write!(f, "Algorithm already terminated"),
-            TellError::ResultCountMismatch { expected, got } => {
-                write!(f, "Expected {} results, got {}", expected, got)
-            }
-            TellError::GradientDimensionMismatch { expected, got } => {
-                write!(f, "Expected gradient dimension {}, got {}", expected, got)
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

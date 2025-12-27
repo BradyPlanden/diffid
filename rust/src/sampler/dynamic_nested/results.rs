@@ -109,13 +109,6 @@ impl NestedSamples {
         }
     }
 
-    /// Capture samples from a partially completed state, overriding the mean.
-    pub(super) fn degenerate_with_state(mean: Vec<f64>, state: super::state::SamplerState) -> Self {
-        let mut result = Self::build(state.posterior(), state.dimension());
-        result.mean = mean;
-        result
-    }
-
     /// Record the elapsed execution time for the run.
     pub fn set_time(&mut self, time: Duration) {
         self.time = time;
@@ -298,7 +291,6 @@ fn logsumexp(a: f64, b: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sampler::dynamic_nested::state::PosteriorSample;
     use proptest::prelude::*;
 
     fn posterior_samples() -> Vec<PosteriorSample> {

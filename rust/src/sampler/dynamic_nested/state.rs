@@ -1,147 +1,10 @@
-use super::super::evaluate;
-use super::logspace_sub;
-use super::MIN_LIVE_POINTS;
-use crate::problem::Problem;
 use rand::rngs::StdRng;
 use rand::Rng;
-use rand_distr::StandardNormal;
 use std::cmp::Ordering;
 
-/// Axis-aligned box defining sampling limits and proposal scales.
-#[derive(Clone, Debug)]
-pub(super) struct Bounds {
-    lower: Vec<f64>,
-    upper: Vec<f64>,
-}
-
-const INITIAL_EVAL_BATCH_SIZE: usize = 16;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::problem::ScalarProblemBuilder;
-    use rand::SeedableRng;
-
-    fn scalar_problem() -> Problem {
-        ScalarProblemBuilder::new()
-            .with_objective(|x: &[f64]| (x[0] - 1.0).powi(2))
-            .build()
-            .expect("failed to build test problem")
-    }
-
-    #[test]
-    fn bounds_clamp_respects_limits() {
-        let problem = scalar_problem();
-        let bounds = Bounds::from_problem(&problem, &[0.0], 1);
-        let mut position = vec![10.0];
-        bounds.clamp(&mut position);
-        assert!(position[0].is_finite());
-    }
-
-    #[test]
-    fn sampler_state_removal_and_restoration() {
-        let problem = scalar_problem();
-        let mut rng = StdRng::seed_from_u64(123);
-        let bounds = Bounds::from_problem(&problem, &[0.0], 1);
-        let live_points = initial_live_points(&problem, &bounds, &mut rng, 16, 0.1, false);
-        let mut state = SamplerState::new(live_points);
-
-        let original_count = state.live_point_count();
-        let removal = state.remove_worst().expect("expected removal");
-        assert_eq!(state.live_point_count(), original_count - 1);
-
-        state.restore_removed(removal);
-        assert_eq!(state.live_point_count(), original_count);
-    }
-
-    #[test]
-    fn initial_live_points_use_requested_count() {
-        let problem = scalar_problem();
-        let mut rng = StdRng::seed_from_u64(42);
-        let bounds = Bounds::from_problem(&problem, &[0.0], 1);
-        let live_points = initial_live_points(&problem, &bounds, &mut rng, 12, 0.1, false);
-        assert_eq!(live_points.len(), 12);
-    }
-}
-
-impl Bounds {
-    /// Derive bounds from problem definitions or heuristics around the initial point.
-    pub fn from_problem(problem: &Problem, initial: &[f64], dimension: usize) -> Self {
-        let mut lower = vec![0.0; dimension];
-        let mut upper = vec![0.0; dimension];
-
-        for i in 0..dimension {
-            if let Some(spec) = problem.parameter_specs().specs().get(i) {
-                if let Some((lo, hi)) = spec.bounds {
-                    let (lo, hi) = if lo <= hi { (lo, hi) } else { (hi, lo) };
-                    lower[i] = lo;
-                    upper[i] = hi;
-                    continue;
-                }
-            }
-
-            let centre = initial.get(i).copied().unwrap_or(0.0);
-            let scale = (centre.abs().max(1.0)) * 5.0;
-            lower[i] = centre - scale;
-            upper[i] = centre + scale;
-        }
-
-        Self { lower, upper }
-    }
-
-    /// Clamp a position in-place to remain inside the bounding box.
-    pub fn clamp(&self, position: &mut [f64]) {
-        for (value, (&lo, &hi)) in position
-            .iter_mut()
-            .zip(self.lower.iter().zip(self.upper.iter()))
-        {
-            if lo.is_finite() && *value < lo {
-                *value = lo;
-            }
-            if hi.is_finite() && *value > hi {
-                *value = hi;
-            }
-        }
-    }
-
-    /// Draw a random position inside the bounds with optional Gaussian expansion.
-    pub fn sample(&self, rng: &mut StdRng, expansion_factor: f64) -> Vec<f64> {
-        let mut position = Vec::with_capacity(self.lower.len());
-        let scale = expansion_factor.abs().max(0.05);
-        for (&lo, &hi) in self.lower.iter().zip(self.upper.iter()) {
-            if lo.is_finite() && hi.is_finite() && lo < hi {
-                let base = rng.random_range(lo..=hi);
-                let width = hi - lo;
-                let sigma = (width * scale).max(1e-6);
-                let draw = rng.sample::<f64, _>(StandardNormal);
-                let mut value = base + draw * sigma;
-                if value < lo {
-                    value = lo;
-                } else if value > hi {
-                    value = hi;
-                }
-                position.push(value);
-            } else {
-                let base = if lo.is_finite() {
-                    lo
-                } else if hi.is_finite() {
-                    hi
-                } else {
-                    0.0
-                };
-                let sigma = scale.max(0.1);
-                let offset = rng.sample::<f64, _>(StandardNormal);
-                position.push(base + offset * sigma);
-            }
-        }
-        position
-    }
-
-    /// Return the dimensionality implied by the bounds.
-    pub fn dimension(&self) -> usize {
-        self.lower.len()
-    }
-}
+use super::{logspace_sub, MIN_LIVE_POINTS};
+use crate::common::Bounds;
+use crate::errors::EvaluationError;
 
 /// Represents a candidate location that currently resides in the live set.
 #[derive(Clone, Debug)]
@@ -349,72 +212,6 @@ impl SamplerState {
     }
 }
 
-/// Generate an initial set of live points by sampling within bounds.
-pub(super) fn initial_live_points(
-    problem: &Problem,
-    bounds: &Bounds,
-    rng: &mut StdRng,
-    live_points: usize,
-    expansion_factor: f64,
-    parallel: bool,
-) -> Vec<LivePoint> {
-    let mut samples = Vec::with_capacity(live_points);
-    let mut attempts = 0usize;
-    let max_attempts = live_points.saturating_mul(200).max(1000);
-
-    if parallel {
-        while samples.len() < live_points && attempts < max_attempts {
-            let mut batch = Vec::with_capacity(INITIAL_EVAL_BATCH_SIZE);
-            while samples.len().saturating_add(batch.len()) < live_points
-                && attempts < max_attempts
-                && batch.len() < INITIAL_EVAL_BATCH_SIZE
-            {
-                attempts = attempts.saturating_add(1);
-                let mut position = bounds.sample(rng, expansion_factor);
-                bounds.clamp(&mut position);
-                batch.push(position);
-            }
-
-            if batch.is_empty() {
-                continue;
-            }
-
-            let results = problem.evaluate_population(&batch);
-            for (position, result) in batch.into_iter().zip(results.into_iter()) {
-                let log_likelihood = match result {
-                    Ok(value) => {
-                        let ll = -value;
-                        if ll.is_finite() {
-                            ll
-                        } else {
-                            continue;
-                        }
-                    }
-                    Err(_) => continue,
-                };
-
-                samples.push(LivePoint::new(position, log_likelihood));
-                if samples.len() >= live_points {
-                    break;
-                }
-            }
-        }
-    } else {
-        while samples.len() < live_points && attempts < max_attempts {
-            attempts += 1;
-            let mut position = bounds.sample(rng, expansion_factor);
-            bounds.clamp(&mut position);
-            let log_likelihood = -evaluate(problem, &position);
-            if !log_likelihood.is_finite() {
-                continue;
-            }
-            samples.push(LivePoint::new(position, log_likelihood));
-        }
-    }
-
-    samples
-}
-
 fn live_ordering(a: f64, b: f64) -> Ordering {
     if !a.is_finite() && !b.is_finite() {
         Ordering::Equal
@@ -424,5 +221,53 @@ fn live_ordering(a: f64, b: f64) -> Ordering {
         Ordering::Less
     } else {
         a.partial_cmp(&b).unwrap_or(Ordering::Equal)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::builders::ScalarProblemBuilder;
+    use rand::SeedableRng;
+
+    fn scalar_problem() -> crate::problem::Problem<impl crate::problem::Objective> {
+        ScalarProblemBuilder::new()
+            .with_function(|x: &[f64]| (x[0] - 1.0).powi(2))
+            .build()
+            .expect("failed to build test problem")
+    }
+
+    #[test]
+    fn bounds_clamp_respects_limits() {
+        let problem = scalar_problem();
+        let bounds = Bounds::new(vec![(0.0, 1.0)]);
+        let mut position = vec![10.0];
+        bounds.clamp(&mut position);
+        assert!(position[0].is_finite());
+    }
+
+    #[test]
+    fn sampler_state_removal_and_restoration() {
+        let problem = scalar_problem();
+        let mut rng = StdRng::seed_from_u64(123);
+        let bounds = Bounds::new(vec![(0.0, 1.0)]);
+        let live_points = initial_live_points(&problem, &bounds, &mut rng, 16, 0.1, false);
+        let mut state = SamplerState::new(live_points);
+
+        let original_count = state.live_point_count();
+        let removal = state.remove_worst().expect("expected removal");
+        assert_eq!(state.live_point_count(), original_count - 1);
+
+        state.restore_removed(removal);
+        assert_eq!(state.live_point_count(), original_count);
+    }
+
+    #[test]
+    fn initial_live_points_use_requested_count() {
+        let problem = scalar_problem();
+        let mut rng = StdRng::seed_from_u64(42);
+        let bounds = Bounds::new(vec![(0.0, 1.0)]);
+        let live_points = initial_live_points(&problem, &bounds, &mut rng, 12, 0.1, false);
+        assert_eq!(live_points.len(), 12);
     }
 }

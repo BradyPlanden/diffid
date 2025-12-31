@@ -1,7 +1,18 @@
+//! Dynamic Nested Sampler for Bayesian evidence estimation.
+//!
+//! # Objective Function Convention
+//!
+//! **IMPORTANT**: The objective function must return **negative log-likelihood** (-log L).
+//! Internally, values are negated to obtain log-likelihood for nested sampling calculations.
+//!
+//! This convention aligns with optimization where lower values are better, while nested
+//! sampling requires higher log-likelihood values.
+
 use rand::prelude::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::SeedableRng;
 use std::time::{Duration, Instant};
 
+mod mcmc_proposal;
 mod results;
 mod scheduler;
 mod state;
@@ -24,11 +35,12 @@ const INITIAL_EVAL_BATCH_SIZE: usize = 16;
 pub enum DNSPhase {
     InitialisingLivePoints {
         collected: Vec<LivePoint>,
+        pending_positions: Vec<Vec<f64>>,
         target: usize,
         attempts: usize,
     },
-    AwaitingSingleReplacement {
-        pending_position: Vec<f64>,
+    AwaitingReplacementBatch {
+        pending_positions: Vec<Vec<f64>>,
         removed: state::RemovedPoint,
         threshold: f64,
     },
@@ -49,6 +61,7 @@ pub struct DynamicNestedSamplerState {
     rng: StdRng,
     phase: DNSPhase,
     start_time: Instant,
+    mcmc_generator: mcmc_proposal::MCMCProposalGenerator,
 }
 
 /// Configurable Dynamic Nested Sampling engine
@@ -58,6 +71,8 @@ pub struct DynamicNestedSampler {
     expansion_factor: f64,
     termination_tol: f64,
     seed: Option<u64>,
+    mcmc_batch_size: usize,
+    mcmc_step_size: f64,
 }
 
 /// Builder-style configuration and execution entry points
@@ -69,6 +84,8 @@ impl DynamicNestedSampler {
             expansion_factor: 0.5,
             termination_tol: 1e-3,
             seed: None,
+            mcmc_batch_size: 8,
+            mcmc_step_size: 0.1,
         }
     }
 
@@ -93,6 +110,34 @@ impl DynamicNestedSampler {
     /// Fix the seed for reproducible sampling runs.
     pub fn with_seed(mut self, seed: u64) -> Self {
         self.seed = Some(seed);
+        self
+    }
+
+    /// Set the MCMC batch size for proposal generation.
+    ///
+    /// When replacing live points, this many proposals are generated via MCMC
+    /// and evaluated in parallel. The best valid proposal (likelihood > threshold)
+    /// is selected. Larger batches increase the chance of finding valid proposals
+    /// but require more evaluations per iteration.
+    ///
+    /// Default: 8
+    pub fn with_mcmc_batch_size(mut self, size: usize) -> Self {
+        self.mcmc_batch_size = size.max(1);
+        self
+    }
+
+    /// Set the MCMC step size factor for proposal generation.
+    ///
+    /// Controls the size of Gaussian perturbations relative to bounds width.
+    /// Step size in dimension i is: `mcmc_step_size × (upper[i] - lower[i])`
+    ///
+    /// Smaller values (0.01-0.05): Conservative, local exploration
+    /// Medium values (0.1-0.2): Balanced (default: 0.1)
+    /// Larger values (0.3-0.5): Aggressive, global exploration
+    ///
+    /// Default: 0.1
+    pub fn with_mcmc_step_size(mut self, step_size: f64) -> Self {
+        self.mcmc_step_size = step_size.max(1e-6);
         self
     }
 
@@ -144,10 +189,12 @@ impl DynamicNestedSampler {
             rng,
             phase: DNSPhase::InitialisingLivePoints {
                 collected: Vec::new(),
+                pending_positions: candidates.clone(),
                 target,
                 attempts: 0,
             },
             start_time: Instant::now(),
+            mcmc_generator: mcmc_proposal::MCMCProposalGenerator::new(self.mcmc_step_size),
         };
 
         (state, candidates)
@@ -162,11 +209,12 @@ impl DynamicNestedSamplerState {
     /// - `Done(results)`: Sampling complete, contains final `NestedSamples`
     pub fn ask(&self) -> AskResult<SamplingResults> {
         match &self.phase {
-            DNSPhase::Terminated(reason) => {
+            DNSPhase::Terminated(_reason) => {
                 AskResult::Done(SamplingResults::Nested(self.build_results()))
             }
             DNSPhase::InitialisingLivePoints {
                 collected,
+                pending_positions,
                 target,
                 attempts,
             } => {
@@ -177,25 +225,12 @@ impl DynamicNestedSamplerState {
                     return AskResult::Done(SamplingResults::Nested(self.build_results()));
                 }
 
-                // Request next batch
-                let remaining = target.saturating_sub(collected.len());
-                let batch_size = INITIAL_EVAL_BATCH_SIZE.min(remaining);
-
-                let mut candidates = Vec::with_capacity(batch_size);
-                let mut temp_rng = self.rng.clone();
-                for _ in 0..batch_size {
-                    let mut position = self
-                        .bounds
-                        .sample(&mut temp_rng, self.config.expansion_factor);
-                    self.bounds.clamp(&mut position);
-                    candidates.push(position);
-                }
-
-                AskResult::Evaluate(candidates)
+                // Return stored pending positions (like other phases)
+                AskResult::Evaluate(pending_positions.clone())
             }
-            DNSPhase::AwaitingSingleReplacement {
-                pending_position, ..
-            } => AskResult::Evaluate(vec![pending_position.clone()]),
+            DNSPhase::AwaitingReplacementBatch {
+                pending_positions, ..
+            } => AskResult::Evaluate(pending_positions.clone()),
             DNSPhase::AwaitingExpansion {
                 pending_positions, ..
             } => AskResult::Evaluate(pending_positions.clone()),
@@ -241,7 +276,7 @@ impl DynamicNestedSamplerState {
         // Dispatch to phase handler
         match &self.phase {
             DNSPhase::InitialisingLivePoints { .. } => self.handle_initialisation(values),
-            DNSPhase::AwaitingSingleReplacement { .. } => self.handle_single_replacement(values),
+            DNSPhase::AwaitingReplacementBatch { .. } => self.handle_replacement_batch(values),
             DNSPhase::AwaitingExpansion { .. } => self.handle_expansion(values),
             DNSPhase::Terminated(_) => unreachable!("Already checked above"),
         }
@@ -249,32 +284,31 @@ impl DynamicNestedSamplerState {
 
     /// Handle initialization phase results
     fn handle_initialisation(&mut self, values: Vec<f64>) -> Result<(), TellError> {
-        let (collected, target, attempts) = match &mut self.phase {
+        let (collected, pending_positions, target, attempts) = match &mut self.phase {
             DNSPhase::InitialisingLivePoints {
                 collected,
+                pending_positions,
                 target,
                 attempts,
-            } => (collected, *target, attempts),
+            } => (collected, pending_positions, *target, attempts),
             _ => unreachable!(),
         };
 
-        // Take phase to avoid borrow issues
+        // Take ownership of phase
         let mut temp_collected = std::mem::take(collected);
+        let temp_pending = std::mem::take(pending_positions);
         let mut temp_attempts = *attempts;
 
-        // Get the candidates that were evaluated (reconstruct from RNG state)
-        let batch_size = values.len();
-        let mut candidates = Vec::with_capacity(batch_size);
-        for _ in 0..batch_size {
-            let mut position = self
-                .bounds
-                .sample(&mut self.rng, self.config.expansion_factor);
-            self.bounds.clamp(&mut position);
-            candidates.push(position);
+        // Validate result count matches pending positions
+        if values.len() != temp_pending.len() {
+            return Err(TellError::ResultCountMismatch {
+                expected: temp_pending.len(),
+                got: values.len(),
+            });
         }
 
-        // Process results
-        for (position, value) in candidates.into_iter().zip(values) {
+        // Process results using stored positions
+        for (position, value) in temp_pending.into_iter().zip(values) {
             temp_attempts += 1;
             let log_likelihood = -value;
 
@@ -297,9 +331,22 @@ impl DynamicNestedSamplerState {
             self.phase = DNSPhase::Terminated(SamplerTermination::InsufficientLivePoints);
             Ok(())
         } else {
-            // Continue initialization
+            // Continue initialization - generate new batch for next iteration
+            let remaining = target.saturating_sub(temp_collected.len());
+            let batch_size = INITIAL_EVAL_BATCH_SIZE.min(remaining);
+
+            let mut new_pending = Vec::with_capacity(batch_size);
+            for _ in 0..batch_size {
+                let mut position = self
+                    .bounds
+                    .sample(&mut self.rng, self.config.expansion_factor);
+                self.bounds.clamp(&mut position);
+                new_pending.push(position);
+            }
+
             self.phase = DNSPhase::InitialisingLivePoints {
                 collected: temp_collected,
+                pending_positions: new_pending,
                 target,
                 attempts: temp_attempts,
             };
@@ -307,37 +354,53 @@ impl DynamicNestedSamplerState {
         }
     }
 
-    /// Handle single replacement phase results
-    fn handle_single_replacement(&mut self, mut values: Vec<f64>) -> Result<(), TellError> {
-        if values.len() != 1 {
+    /// Handle replacement batch phase results
+    ///
+    /// Evaluates a batch of MCMC proposals and selects the best valid one (likelihood > threshold).
+    /// If all proposals are rejected, the removed point is restored.
+    fn handle_replacement_batch(&mut self, values: Vec<f64>) -> Result<(), TellError> {
+        // Extract phase data
+        let (positions, removed, threshold) = match &self.phase {
+            DNSPhase::AwaitingReplacementBatch {
+                pending_positions,
+                removed,
+                threshold,
+            } => (pending_positions.clone(), removed.clone(), *threshold),
+            _ => unreachable!(),
+        };
+
+        // Validate result count
+        if values.len() != positions.len() {
             return Err(TellError::ResultCountMismatch {
-                expected: 1,
+                expected: positions.len(),
                 got: values.len(),
             });
         }
 
-        let value = values.remove(0);
-        let (position, removed, threshold) = match &self.phase {
-            DNSPhase::AwaitingSingleReplacement {
-                pending_position,
-                removed,
-                threshold,
-            } => (pending_position.clone(), removed.clone(), *threshold),
-            _ => unreachable!(),
-        };
+        // Find valid proposals (likelihood > threshold)
+        let mut valid_proposals = Vec::new();
+        for (position, value) in positions.iter().zip(values.iter()) {
+            let log_likelihood = -value;
+            if log_likelihood.is_finite() && log_likelihood > threshold {
+                valid_proposals.push((position.clone(), log_likelihood));
+            }
+        }
 
-        let log_likelihood = -value;
-
-        if log_likelihood.is_finite() && log_likelihood > threshold {
-            // Accept the new point
+        // Accept the best valid proposal or restore removed point
+        if let Some((best_position, best_likelihood)) = valid_proposals
+            .into_iter()
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        {
+            // Accept: finalize removal and insert new point
             self.sampler_state.accept_removed(removed);
             self.sampler_state
-                .insert_live_point(LivePoint::new(position, log_likelihood));
+                .insert_live_point(LivePoint::new(best_position, best_likelihood));
         } else {
-            // Reject - restore the removed point
+            // All rejected: restore removed point (NO LOOP!)
             self.sampler_state.restore_removed(removed);
         }
 
+        // Continue iteration
         self.iterations += 1;
         self.start_next_iteration()
     }
@@ -410,10 +473,13 @@ impl DynamicNestedSamplerState {
             let needed = target_live.saturating_sub(self.sampler_state.live_point_count());
             let batch_size = needed.min(16); // Limit batch size
 
+            // For expansion, use uniform sampling from bounds (simpler for initial population)
             let mut positions = Vec::with_capacity(batch_size);
             for _ in 0..batch_size {
-                let threshold = self.sampler_state.min_log_likelihood();
-                let position = self.generate_proposal(threshold);
+                let mut position = self
+                    .bounds
+                    .sample(&mut self.rng, self.config.expansion_factor);
+                self.bounds.clamp(&mut position);
                 positions.push(position);
             }
 
@@ -424,14 +490,31 @@ impl DynamicNestedSamplerState {
             return Ok(());
         }
 
-        // Remove worst point and request replacement
+        // Remove worst point and generate MCMC replacement batch
         if let Some(worst_index) = self.sampler_state.worst_index() {
             if let Some(removed) = self.sampler_state.remove_at(worst_index) {
                 let threshold = removed.log_likelihood();
-                let position = self.generate_proposal(threshold);
 
-                self.phase = DNSPhase::AwaitingSingleReplacement {
-                    pending_position: position,
+                // Guard against empty live points after removal
+                if self.sampler_state.live_point_count() == 0 {
+                    self.sampler_state.restore_removed(removed);
+                    self.phase = DNSPhase::Terminated(SamplerTermination::InsufficientLivePoints);
+                    return Ok(());
+                }
+
+                // Select random live point as MCMC starting point
+                let start_point = self.sampler_state.random_live_point(&mut self.rng);
+
+                // Generate batch of MCMC proposals
+                let pending_positions = self.mcmc_generator.generate_batch(
+                    start_point.position(),
+                    &self.bounds,
+                    &mut self.rng,
+                    self.config.mcmc_batch_size,
+                );
+
+                self.phase = DNSPhase::AwaitingReplacementBatch {
+                    pending_positions,
                     removed,
                     threshold,
                 };
@@ -443,101 +526,6 @@ impl DynamicNestedSamplerState {
         self.sampler_state.finalize();
         self.phase = DNSPhase::Terminated(SamplerTermination::InsufficientLivePoints);
         Ok(())
-    }
-
-    /// Generate a proposal point using the proposal engine
-    fn generate_proposal(&mut self, threshold: f64) -> Vec<f64> {
-        let live_points = self.sampler_state.live_points();
-
-        if live_points.is_empty() {
-            let mut position = self
-                .bounds
-                .sample(&mut self.rng, self.config.expansion_factor);
-            self.bounds.clamp(&mut position);
-            return position;
-        }
-
-        // Use proposal engine's logic without evaluation
-        let step_sizes =
-            self.compute_scales(live_points, &self.bounds, self.config.expansion_factor);
-        let max_attempts = 64;
-
-        for attempt in 0..max_attempts {
-            let candidate = if attempt % 32 == 0 {
-                let mut position = self
-                    .bounds
-                    .sample(&mut self.rng, self.config.expansion_factor);
-                self.bounds.clamp(&mut position);
-                position
-            } else {
-                use rand::Rng;
-                let anchor_idx = self.rng.random_range(0..live_points.len());
-                let anchor = &live_points[anchor_idx];
-                let mut proposal = anchor.position.clone();
-
-                for (value, scale) in proposal.iter_mut().zip(step_sizes.iter()) {
-                    use rand_distr::StandardNormal;
-                    let perturb: f64 = self.rng.sample(StandardNormal);
-                    *value += perturb * scale;
-                }
-
-                self.bounds.clamp(&mut proposal);
-                proposal
-            };
-
-            // Return first candidate (evaluation will happen in ask/tell cycle)
-            return candidate;
-        }
-
-        // Fallback: sample from bounds
-        let mut position = self
-            .bounds
-            .sample(&mut self.rng, self.config.expansion_factor);
-        self.bounds.clamp(&mut position);
-        position
-    }
-
-    /// Compute Gaussian perturbation scales per dimension
-    fn compute_scales(
-        &self,
-        live_points: &[LivePoint],
-        bounds: &Bounds,
-        expansion_factor: f64,
-    ) -> Vec<f64> {
-        let dimension = bounds.dimension();
-        if live_points.is_empty() {
-            return vec![expansion_factor.max(0.1); dimension];
-        }
-
-        let mut mins = vec![f64::INFINITY; dimension];
-        let mut maxs = vec![f64::NEG_INFINITY; dimension];
-
-        for point in live_points {
-            for (i, value) in point.position.iter().enumerate() {
-                mins[i] = mins[i].min(*value);
-                maxs[i] = maxs[i].max(*value);
-            }
-        }
-
-        mins.iter_mut().zip(maxs.iter_mut()).for_each(|(min, max)| {
-            if !min.is_finite() {
-                *min = -1.0;
-            }
-            if !max.is_finite() {
-                *max = 1.0;
-            }
-            if *max <= *min {
-                *max = *min + 1e-3;
-            }
-        });
-
-        mins.iter()
-            .zip(maxs.iter())
-            .map(|(&min, &max)| {
-                let width = (max - min).abs().max(1e-3);
-                width * expansion_factor.max(0.05)
-            })
-            .collect()
     }
 
     /// Build final results from current state
@@ -562,6 +550,10 @@ impl DynamicNestedSamplerState {
     pub fn live_point_count(&self) -> usize {
         self.sampler_state.live_point_count()
     }
+
+    pub fn phase(&self) -> &DNSPhase {
+        &self.phase
+    }
 }
 
 impl DynamicNestedSampler {
@@ -571,7 +563,9 @@ impl DynamicNestedSampler {
     /// use `init()`, `ask()`, and `tell()` directly.
     ///
     /// # Arguments
-    /// * `objective` - Function to evaluate (returns negative log-likelihood)
+    /// * `objective` - Function to evaluate. **Must return negative log-likelihood** (-log L).
+    ///                 The sampler will negate this internally to obtain log-likelihood for
+    ///                 nested sampling calculations.
     /// * `initial` - Initial point (currently unused, reserved for future)
     /// * `bounds` - Parameter bounds
     pub fn run<F, R, E>(&self, mut objective: F, initial: Point, bounds: Bounds) -> NestedSamples
@@ -584,7 +578,9 @@ impl DynamicNestedSampler {
         let mut results: Vec<_> = first_batch.iter().map(|p| objective(p)).collect();
 
         loop {
-            state.tell(results).ok();
+            state
+                .tell(results)
+                .expect("tell() failed - this indicates a bug in the sampler");
             match state.ask() {
                 AskResult::Evaluate(points) => {
                     results = points.iter().map(|p| objective(p)).collect();
@@ -612,7 +608,9 @@ pub(super) fn logspace_sub(a: f64, b: f64) -> Option<f64> {
         return None;
     }
 
-    if (a - b).abs() < f64::EPSILON {
+    // Use relative tolerance for numerical stability
+    let rel_tol = 1e-15 * a.abs().max(b.abs()).max(1.0);
+    if (a - b).abs() < rel_tol {
         return Some(f64::NEG_INFINITY);
     }
 
@@ -629,7 +627,7 @@ pub(super) fn logspace_sub(a: f64, b: f64) -> Option<f64> {
 mod tests {
     use super::*;
     use crate::builders::ScalarProblemBuilder;
-    use crate::problem::ParameterSpec;
+
     fn gaussian_problem(
         mean: f64,
         sigma: f64,
@@ -749,5 +747,183 @@ mod tests {
         // Test with NaN inputs
         assert!(logspace_sub(f64::NAN, 5.0).is_none());
         assert!(logspace_sub(5.0, f64::NAN).is_none());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DNS-Specific Ask/Tell Tests
+    // ═══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn dns_init_returns_correct_batch_size() {
+        let sampler = DynamicNestedSampler::new()
+            .with_live_points(64)
+            .with_seed(42);
+
+        let (state, initial_batch) = sampler.init(vec![0.0], Bounds::unbounded(1));
+
+        // First batch should be min(INITIAL_EVAL_BATCH_SIZE, target_live_points)
+        let expected_batch = INITIAL_EVAL_BATCH_SIZE.min(64);
+        assert_eq!(
+            initial_batch.len(),
+            expected_batch,
+            "Initial batch size should be min(INITIAL_EVAL_BATCH_SIZE, live_points)"
+        );
+
+        // All points should be within bounds
+        for point in &initial_batch {
+            assert_eq!(point.len(), 1, "Points should be 1-dimensional");
+            assert!(point[0].is_finite(), "Points should be finite");
+        }
+
+        // State should start in InitialisingLivePoints
+        assert!(
+            matches!(state.phase(), DNSPhase::InitialisingLivePoints { .. }),
+            "Should start in InitialisingLivePoints phase"
+        );
+    }
+
+    #[test]
+    fn dns_tell_initialization_collects_points() {
+        let sampler = DynamicNestedSampler::new()
+            .with_live_points(32)
+            .with_seed(42);
+
+        let (mut state, initial_batch) = sampler.init(vec![0.0], Bounds::unbounded(1));
+
+        // Provide results for initial batch
+        let results: Vec<_> = initial_batch
+            .iter()
+            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+            .collect();
+        state.tell(results).unwrap();
+
+        // After first tell, should still be initializing or have transitioned
+        match state.phase() {
+            DNSPhase::InitialisingLivePoints {
+                collected, target, ..
+            } => {
+                assert!(
+                    collected.len() <= *target,
+                    "Collected should not exceed target"
+                );
+            }
+            DNSPhase::AwaitingReplacementBatch { .. }
+            | DNSPhase::AwaitingExpansion { .. }
+            | DNSPhase::Terminated(_) => {
+                // Transitioned out of initialization - ok
+            }
+        }
+    }
+
+    #[test]
+    fn dns_expansion_phase_batching() {
+        let sampler = DynamicNestedSampler::new()
+            .with_live_points(32)
+            .with_seed(42);
+
+        let (mut state, initial_batch) = sampler.init(vec![0.0], Bounds::unbounded(1));
+
+        // Provide initial results
+        let results: Vec<_> = initial_batch
+            .iter()
+            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+            .collect();
+        state.tell(results).unwrap();
+
+        // Run until we potentially see an expansion phase
+        let mut seen_expansion = false;
+        let mut max_batch_size = 0;
+
+        for _ in 0..100 {
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    max_batch_size = max_batch_size.max(points.len());
+
+                    // Check if we're in expansion phase (multiple points)
+                    if let DNSPhase::AwaitingExpansion { .. } = state.phase() {
+                        seen_expansion = true;
+                        // Expansion batches should be limited
+                        assert!(
+                            points.len() <= 16,
+                            "Expansion batch should be limited to max 16"
+                        );
+                    }
+
+                    let results: Vec<_> = points
+                        .iter()
+                        .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+                        .collect();
+                    state.tell(results).unwrap();
+                }
+                AskResult::Done(_) => break,
+            }
+        }
+
+        // We should see some batching (either expansion or initialization)
+        assert!(
+            max_batch_size > 1 || seen_expansion,
+            "Should see batched evaluations or expansion phase"
+        );
+    }
+
+    #[test]
+    fn dns_max_iteration_termination() {
+        // Create a sampler with small live point count
+        let sampler = DynamicNestedSampler::new()
+            .with_live_points(16) // Small live point count
+            .with_seed(42);
+
+        let (mut state, initial_batch) = sampler.init(vec![0.0], Bounds::unbounded(1));
+
+        // Provide initial results with proper objective function
+        let results: Vec<_> = initial_batch
+            .iter()
+            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+            .collect();
+        state.tell(results).unwrap();
+
+        let mut iterations = 0;
+        let max_allowed = 100000; // Safety limit to prevent infinite loop
+
+        loop {
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    let results: Vec<_> = points
+                        .iter()
+                        .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+                        .collect();
+                    state.tell(results).unwrap();
+                    iterations += 1;
+
+                    if iterations > max_allowed {
+                        panic!("Exceeded safety limit - sampler not terminating");
+                    }
+                }
+                AskResult::Done(SamplingResults::Nested(samples)) => {
+                    // Should terminate eventually
+                    assert!(iterations > 0, "Should have run some iterations");
+                    // Sampler should complete and return results (draws may be small with few live points)
+                    let _draws = samples.draws(); // Verify we can get draws
+
+                    // Check termination reason from phase
+                    if let DNSPhase::Terminated(reason) = state.phase() {
+                        match reason {
+                            SamplerTermination::MaxIterationReached
+                            | SamplerTermination::EvidenceConverged
+                            | SamplerTermination::InformationConverged
+                            | SamplerTermination::InsufficientLivePoints => {
+                                // Expected termination reasons
+                            }
+                            other => {
+                                // Other reasons are also ok, just document what we see
+                                eprintln!("Terminated with reason: {:?}", other);
+                            }
+                        }
+                    }
+                    break;
+                }
+                _ => panic!("Unexpected result"),
+            }
+        }
     }
 }

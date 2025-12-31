@@ -80,7 +80,8 @@ impl Scheduler {
         if delta < self.termination_tol {
             self.stagnation_counter = self.stagnation_counter.saturating_add(1);
         } else {
-            self.stagnation_counter = 0;
+            // Use decay instead of full reset - requires sustained progress
+            self.stagnation_counter = self.stagnation_counter.saturating_sub(2);
         }
         self.last_log_evidence = log_z;
 

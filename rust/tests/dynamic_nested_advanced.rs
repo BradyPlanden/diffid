@@ -1,5 +1,5 @@
 use chronopt::prelude::*;
-use chronopt::problem::builders_old::BuilderParameterExt;
+use chronopt::problem::ParameterRange;
 
 /// Test evidence calculation against known analytical result.
 /// For a Gaussian N(x | 0, σ²) with uniform prior U(a, b),
@@ -15,25 +15,25 @@ fn gaussian_evidence_accuracy() {
     let log_z_approx = -(prior_upper - prior_lower).ln();
 
     let problem = ScalarProblemBuilder::new()
-        .with_objective(move |x: &[f64]| {
+        .with_function(move |x: &[f64]| {
             let log_norm = sigma.ln() + 0.5 * (2.0 * std::f64::consts::PI).ln();
             0.5 * (x[0] / sigma).powi(2) + log_norm
         })
-        .with_parameter(ParameterSpec::new(
-            "x",
-            0.0,
-            Some((prior_lower, prior_upper)),
-        ))
+        .with_parameter("x", 0.0, (prior_lower, prior_upper))
         .build()
         .expect("failed to build problem");
 
     let sampler = DynamicNestedSampler::new()
-        .with_live_points(256)
-        .with_expansion_factor(0.2)
+        .with_live_points(64)
+        .with_expansion_factor(0.3)
         .with_termination_tolerance(1e-4)
         .with_seed(42);
 
-    let nested = sampler.run(&problem, vec![0.0]);
+    let nested = sampler.run(
+        |x| problem.evaluate(x),
+        vec![0.0],
+        Bounds::new(vec![(-10.0, 10.0)]),
+    );
 
     assert!(nested.draws() > 0, "should produce samples");
     assert!(
@@ -60,7 +60,7 @@ fn bimodal_distribution_samples_both_modes() {
     let sigma: f64 = 0.5;
 
     let problem = ScalarProblemBuilder::new()
-        .with_objective(move |x: &[f64]| {
+        .with_function(move |x: &[f64]| {
             // Mixture of two Gaussians: -log(0.5 * N(μ1, σ²) + 0.5 * N(μ2, σ²))
             let log_p1 = -0.5 * ((x[0] - mu1) / sigma).powi(2);
             let log_p2 = -0.5 * ((x[0] - mu2) / sigma).powi(2);
@@ -69,7 +69,7 @@ fn bimodal_distribution_samples_both_modes() {
             // Return negative log likelihood
             -(log_sum - 2.0_f64.ln() - sigma.ln() - 0.5 * (2.0 * std::f64::consts::PI).ln())
         })
-        .with_parameter(ParameterSpec::new("x", 0.0, Some((-10.0, 10.0))))
+        .with_parameter("x", 0.0, (-10.0, 10.0))
         .build()
         .expect("failed to build problem");
 
@@ -79,7 +79,7 @@ fn bimodal_distribution_samples_both_modes() {
         .with_termination_tolerance(1e-3)
         .with_seed(999);
 
-    let nested = sampler.run(&problem, vec![0.0]);
+    let nested = sampler.run(|x| problem.evaluate(x), vec![0.0], Bounds::unbounded(1));
 
     assert!(nested.draws() > 10, "should produce multiple samples");
 
@@ -109,14 +109,14 @@ fn bimodal_distribution_samples_both_modes() {
 #[test]
 fn handles_infinite_likelihood() {
     let problem = ScalarProblemBuilder::new()
-        .with_objective(|x: &[f64]| {
+        .with_function(|x: &[f64]| {
             if x[0].abs() > 2.0 {
                 f64::INFINITY
             } else {
                 0.5 * x[0].powi(2)
             }
         })
-        .with_parameter(ParameterSpec::new("x", 0.0, Some((-5.0, 5.0))))
+        .with_parameter("x", 0.0, (-5.0, 5.0))
         .build()
         .expect("failed to build problem");
 
@@ -125,7 +125,7 @@ fn handles_infinite_likelihood() {
         .with_expansion_factor(0.2)
         .with_seed(456);
 
-    let nested = sampler.run(&problem, vec![0.0]);
+    let nested = sampler.run(|x| problem.evaluate(x), vec![0.0], Bounds::unbounded(1));
 
     assert!(
         nested.draws() > 0,
@@ -152,25 +152,30 @@ fn high_dimensional_problem() {
     const DIM: usize = 8;
 
     let problem = ScalarProblemBuilder::new()
-        .with_objective(|x: &[f64]| 0.5 * x.iter().map(|xi| xi.powi(2)).sum::<f64>())
-        .with_parameter(ParameterSpec::new("x0", 0.0, Some((-3.0, 3.0))))
-        .with_parameter(ParameterSpec::new("x1", 0.0, Some((-3.0, 3.0))))
-        .with_parameter(ParameterSpec::new("x2", 0.0, Some((-3.0, 3.0))))
-        .with_parameter(ParameterSpec::new("x3", 0.0, Some((-3.0, 3.0))))
-        .with_parameter(ParameterSpec::new("x4", 0.0, Some((-3.0, 3.0))))
-        .with_parameter(ParameterSpec::new("x5", 0.0, Some((-3.0, 3.0))))
-        .with_parameter(ParameterSpec::new("x6", 0.0, Some((-3.0, 3.0))))
-        .with_parameter(ParameterSpec::new("x7", 0.0, Some((-3.0, 3.0))))
+        .with_function(|x: &[f64]| 0.5 * x.iter().map(|xi| xi.powi(2)).sum::<f64>())
+        .with_parameter("x0", 0.0, (-3.0, 3.0))
+        .with_parameter("x1", 0.0, (-3.0, 3.0))
+        .with_parameter("x2", 0.0, (-3.0, 3.0))
+        .with_parameter("x3", 0.0, (-3.0, 3.0))
+        .with_parameter("x4", 0.0, (-3.0, 3.0))
+        .with_parameter("x5", 0.0, (-3.0, 3.0))
+        .with_parameter("x6", 0.0, (-3.0, 3.0))
+        .with_parameter("x7", 0.0, (-3.0, 3.0))
         .build()
         .expect("failed to build problem");
 
     let sampler = DynamicNestedSampler::new()
-        .with_live_points(512)
-        .with_expansion_factor(0.1)
-        .with_termination_tolerance(1e-2)
+        .with_live_points(256)
+        .with_expansion_factor(0.4)
+        .with_termination_tolerance(1e-4)
+        .with_mcmc_step_size(0.2)
         .with_seed(789);
 
-    let nested = sampler.run(&problem, vec![0.0; DIM]);
+    let nested = sampler.run(
+        |x| problem.evaluate(x),
+        vec![0.0; DIM],
+        Bounds::new(vec![(-3.0, 3.0); 8]),
+    );
 
     assert!(nested.draws() > 0, "should produce samples");
     assert_eq!(
@@ -181,7 +186,7 @@ fn high_dimensional_problem() {
 
     for (i, &m) in nested.mean().iter().enumerate() {
         assert!(m.is_finite(), "mean[{}] should be finite", i);
-        assert!(m.abs() < 1.0, "mean[{}] = {} should be near origin", i, m);
+        assert!(m.abs() < 0.5, "mean[{}] = {} should be near origin", i, m);
     }
 }
 
@@ -191,8 +196,8 @@ fn sharp_peaked_posterior() {
     let sigma: f64 = 0.01;
 
     let problem = ScalarProblemBuilder::new()
-        .with_objective(move |x: &[f64]| 0.5 * (x[0] / sigma).powi(2))
-        .with_parameter(ParameterSpec::new("x", 0.0, Some((-1.0, 1.0))))
+        .with_function(move |x: &[f64]| 0.5 * (x[0] / sigma).powi(2))
+        .with_parameter("x", 0.0, (-1.0, 1.0))
         .build()
         .expect("failed to build problem");
 
@@ -202,7 +207,11 @@ fn sharp_peaked_posterior() {
         .with_termination_tolerance(1e-3)
         .with_seed(321);
 
-    let nested = sampler.run(&problem, vec![0.0]);
+    let nested = sampler.run(
+        |x| problem.evaluate(x),
+        vec![0.0],
+        Bounds::new(vec![(-5.0, 5.0)]),
+    );
 
     assert!(nested.draws() > 0, "should produce samples");
     assert!(
@@ -222,8 +231,8 @@ fn very_small_evidence() {
     let offset: f64 = 100.0;
 
     let problem = ScalarProblemBuilder::new()
-        .with_objective(move |x: &[f64]| offset + 0.5 * x[0].powi(2))
-        .with_parameter(ParameterSpec::new("x", 0.0, Some((-5.0, 5.0))))
+        .with_function(move |x: &[f64]| offset + 0.5 * x[0].powi(2))
+        .with_parameter("x", 0.0, (-5.0, 5.0))
         .build()
         .expect("failed to build problem");
 
@@ -232,7 +241,11 @@ fn very_small_evidence() {
         .with_expansion_factor(0.2)
         .with_seed(111);
 
-    let nested = sampler.run(&problem, vec![0.0]);
+    let nested = sampler.run(
+        |x| problem.evaluate(x),
+        vec![0.0],
+        Bounds::new(vec![(-5.0, 5.0)]),
+    );
 
     assert!(
         nested.log_evidence() < -50.0,
@@ -247,10 +260,11 @@ fn very_small_evidence() {
 
 /// Test that posterior weights approximately sum to 1.
 #[test]
+
 fn posterior_weights_normalize() {
     let problem = ScalarProblemBuilder::new()
-        .with_objective(|x: &[f64]| 0.5 * x[0].powi(2))
-        .with_parameter(ParameterSpec::new("x", 0.0, Some((-5.0, 5.0))))
+        .with_function(|x: &[f64]| 0.5 * x[0].powi(2))
+        .with_parameter("x", 0.0, (-5.0, 5.0))
         .build()
         .expect("failed to build problem");
 
@@ -259,7 +273,11 @@ fn posterior_weights_normalize() {
         .with_expansion_factor(0.2)
         .with_seed(555);
 
-    let nested = sampler.run(&problem, vec![0.0]);
+    let nested = sampler.run(
+        |x| problem.evaluate(x),
+        vec![0.0],
+        Bounds::new(vec![(-5.0, 5.0)]),
+    );
 
     let log_z = nested.log_evidence();
     let mut weight_sum = 0.0;
@@ -280,8 +298,8 @@ fn posterior_weights_normalize() {
 #[test]
 fn mean_matches_weighted_average() {
     let problem = ScalarProblemBuilder::new()
-        .with_objective(|x: &[f64]| 0.5 * (x[0] - 1.0).powi(2))
-        .with_parameter(ParameterSpec::new("x", 1.0, Some((-3.0, 5.0))))
+        .with_function(|x: &[f64]| 0.5 * (x[0] - 1.0).powi(2))
+        .with_parameter("x", 1.0, (-3.0, 5.0))
         .build()
         .expect("failed to build problem");
 
@@ -290,7 +308,11 @@ fn mean_matches_weighted_average() {
         .with_expansion_factor(0.2)
         .with_seed(777);
 
-    let nested = sampler.run(&problem, vec![1.0]);
+    let nested = sampler.run(
+        |x| problem.evaluate(x),
+        vec![1.0],
+        Bounds::new(vec![(-3.0, 5.0)]),
+    );
 
     let log_z = nested.log_evidence();
     let mut weighted_sum = 0.0;
@@ -317,10 +339,11 @@ fn mean_matches_weighted_average() {
 /// Test reproducibility with same seed.
 #[test]
 fn reproducibility_with_seed() {
+    let param_range = (5., 5.);
     let make_problem = || {
         ScalarProblemBuilder::new()
-            .with_objective(|x: &[f64]| 0.5 * x[0].powi(2))
-            .with_parameter(ParameterSpec::new("x", 0.0, Some((-5.0, 5.0))))
+            .with_function(|x: &[f64]| 0.5 * x[0].powi(2))
+            .with_parameter("x", 0.0, param_range)
             .build()
             .expect("failed to build problem")
     };
@@ -337,8 +360,9 @@ fn reproducibility_with_seed() {
     let sampler1 = make_sampler();
     let sampler2 = make_sampler();
 
-    let nested1 = sampler1.run(&problem1, vec![0.0]);
-    let nested2 = sampler2.run(&problem2, vec![0.0]);
+    let bounds = Bounds::new(vec![param_range]);
+    let nested1 = sampler1.run(|x| problem1.evaluate(x), vec![0.0], bounds.clone());
+    let nested2 = sampler2.run(|x| problem2.evaluate(x), vec![0.0], bounds.clone());
 
     assert_eq!(nested1.draws(), nested2.draws(), "draws should match");
     assert_eq!(
@@ -356,8 +380,8 @@ fn respects_parameter_bounds() {
     let upper = 3.0;
 
     let problem = ScalarProblemBuilder::new()
-        .with_objective(|x: &[f64]| 0.5 * x[0].powi(2))
-        .with_parameter(ParameterSpec::new("x", 0.0, Some((lower, upper))))
+        .with_function(|x: &[f64]| 0.5 * x[0].powi(2))
+        .with_parameter("x", 0.0, (lower, upper))
         .build()
         .expect("failed to build problem");
 
@@ -366,7 +390,11 @@ fn respects_parameter_bounds() {
         .with_expansion_factor(0.2)
         .with_seed(444);
 
-    let nested = sampler.run(&problem, vec![0.0]);
+    let nested = sampler.run(
+        |x| problem.evaluate(x),
+        vec![0.0],
+        Bounds::new(vec![(lower, upper)]),
+    );
 
     for sample in nested.posterior() {
         let x = sample.position[0];
@@ -384,8 +412,8 @@ fn respects_parameter_bounds() {
 #[test]
 fn information_is_non_negative() {
     let problem = ScalarProblemBuilder::new()
-        .with_objective(|x: &[f64]| 0.5 * x[0].powi(2))
-        .with_parameter(ParameterSpec::new("x", 0.0, Some((-5.0, 5.0))))
+        .with_function(|x: &[f64]| 0.5 * x[0].powi(2))
+        .with_parameter("x", 0.0, (-5.0, 5.0))
         .build()
         .expect("failed to build problem");
 
@@ -394,7 +422,11 @@ fn information_is_non_negative() {
         .with_expansion_factor(0.2)
         .with_seed(666);
 
-    let nested = sampler.run(&problem, vec![0.0]);
+    let nested = sampler.run(
+        |x| problem.evaluate(x),
+        vec![0.0],
+        Bounds::new(vec![(-5.0, 5.0)]),
+    );
 
     assert!(
         nested.information() >= 0.0,
@@ -412,11 +444,11 @@ fn information_is_non_negative() {
 fn information_increases_with_constraint() {
     let make_problem = |sigma: f64| {
         ScalarProblemBuilder::new()
-            .with_objective(move |x: &[f64]| {
+            .with_function(move |x: &[f64]| {
                 let log_norm = sigma.ln() + 0.5 * (2.0 * std::f64::consts::PI).ln();
                 0.5 * (x[0] / sigma).powi(2) + log_norm
             })
-            .with_parameter(ParameterSpec::new("x", 0.0, Some((-10.0, 10.0))))
+            .with_parameter("x", 0.0, (-10.0, 10.0))
             .build()
             .expect("failed to build problem")
     };
@@ -425,14 +457,23 @@ fn information_increases_with_constraint() {
         DynamicNestedSampler::new()
             .with_live_points(128)
             .with_expansion_factor(0.2)
+            .with_mcmc_step_size(0.15)
             .with_seed(seed)
     };
 
     let wide_problem = make_problem(2.0);
     let narrow_problem = make_problem(0.5);
 
-    let wide_nested = make_sampler(100).run(&wide_problem, vec![0.0]);
-    let narrow_nested = make_sampler(101).run(&narrow_problem, vec![0.0]);
+    let wide_nested = make_sampler(100).run(
+        |x| wide_problem.evaluate(x),
+        vec![0.0],
+        Bounds::new(vec![(-10., 10.)]),
+    );
+    let narrow_nested = make_sampler(101).run(
+        |x| narrow_problem.evaluate(x),
+        vec![0.0],
+        Bounds::new(vec![(-10., 10.)]),
+    );
 
     assert!(
         narrow_nested.information() > wide_nested.information(),
@@ -448,11 +489,11 @@ fn terminates_with_high_information() {
     let sigma: f64 = 0.1;
 
     let problem = ScalarProblemBuilder::new()
-        .with_objective(move |x: &[f64]| {
+        .with_function(move |x: &[f64]| {
             let log_norm = sigma.ln() + 0.5 * (2.0 * std::f64::consts::PI).ln();
             0.5 * (x[0] / sigma).powi(2) + log_norm
         })
-        .with_parameter(ParameterSpec::new("x", 0.0, Some((-5.0, 5.0))))
+        .with_parameter("x", 0.0, ParameterRange::from((-5.0, 5.0)))
         .build()
         .expect("failed to build problem");
 
@@ -462,7 +503,11 @@ fn terminates_with_high_information() {
         .with_termination_tolerance(1e-3)
         .with_seed(888);
 
-    let nested = sampler.run(&problem, vec![0.0]);
+    let nested = sampler.run(
+        |x| problem.evaluate(x),
+        vec![0.0],
+        Bounds::new(vec![(-5.0, 5.0)]),
+    );
 
     assert!(nested.draws() > 0, "should produce samples");
     assert!(

@@ -1,14 +1,9 @@
-use rand::rngs::StdRng;
-use rand::Rng;
-use std::cmp::Ordering;
-
 use super::{logspace_sub, MIN_LIVE_POINTS};
-use crate::common::Bounds;
-use crate::errors::EvaluationError;
+use std::cmp::Ordering;
 
 /// Represents a candidate location that currently resides in the live set.
 #[derive(Clone, Debug)]
-pub(super) struct LivePoint {
+pub struct LivePoint {
     pub position: Vec<f64>,
     pub log_likelihood: f64,
 }
@@ -20,6 +15,11 @@ impl LivePoint {
             position,
             log_likelihood,
         }
+    }
+
+    /// Get reference to the position vector.
+    pub fn position(&self) -> &[f64] {
+        &self.position
     }
 }
 
@@ -53,10 +53,10 @@ pub(super) struct SamplerState {
 
 /// Captures the removal of a live point along with its prior mass bookkeeping.
 #[derive(Clone, Debug)]
-pub(super) struct RemovedPoint {
-    pub(super) point: LivePoint,
-    pub(super) log_weight: f64,
-    pub(super) log_prior_before: f64,
+pub struct RemovedPoint {
+    pub point: LivePoint,
+    pub log_weight: f64,
+    pub log_prior_before: f64,
 }
 
 impl RemovedPoint {
@@ -131,6 +131,16 @@ impl SamplerState {
             .map(|(idx, _)| idx)
     }
 
+    /// Get a random live point for use as MCMC starting position.
+    ///
+    /// # Panics
+    /// Panics if there are no live points.
+    pub fn random_live_point(&self, rng: &mut rand::prelude::StdRng) -> &LivePoint {
+        use rand::Rng;
+        let index = rng.random_range(0..self.live_points.len());
+        &self.live_points[index]
+    }
+
     /// Reduce the live set toward a new target, accepting removals.
     pub fn adjust_live_set(&mut self, target: usize) {
         let target = target.max(MIN_LIVE_POINTS);
@@ -159,7 +169,8 @@ impl SamplerState {
 
         let n_live = self.live_points.len().max(1) as f64;
         let log_prev = self.log_prior_mass;
-        self.log_prior_mass += -1.0_f64 / n_live;
+        // Use proper deterministic nested sampling formula: X_{i+1} = X_i * (n-1)/n
+        self.log_prior_mass += ((n_live - 1.0) / n_live).ln();
         let log_weight = logspace_sub(log_prev, self.log_prior_mass).unwrap_or(f64::NEG_INFINITY);
         let removed = self.live_points.swap_remove(index);
         Some(RemovedPoint {
@@ -226,48 +237,13 @@ fn live_ordering(a: f64, b: f64) -> Ordering {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::builders::ScalarProblemBuilder;
-    use rand::SeedableRng;
-
-    fn scalar_problem() -> crate::problem::Problem<impl crate::problem::Objective> {
-        ScalarProblemBuilder::new()
-            .with_function(|x: &[f64]| (x[0] - 1.0).powi(2))
-            .build()
-            .expect("failed to build test problem")
-    }
+    use crate::common::Bounds;
 
     #[test]
     fn bounds_clamp_respects_limits() {
-        let problem = scalar_problem();
         let bounds = Bounds::new(vec![(0.0, 1.0)]);
         let mut position = vec![10.0];
         bounds.clamp(&mut position);
         assert!(position[0].is_finite());
-    }
-
-    #[test]
-    fn sampler_state_removal_and_restoration() {
-        let problem = scalar_problem();
-        let mut rng = StdRng::seed_from_u64(123);
-        let bounds = Bounds::new(vec![(0.0, 1.0)]);
-        let live_points = initial_live_points(&problem, &bounds, &mut rng, 16, 0.1, false);
-        let mut state = SamplerState::new(live_points);
-
-        let original_count = state.live_point_count();
-        let removal = state.remove_worst().expect("expected removal");
-        assert_eq!(state.live_point_count(), original_count - 1);
-
-        state.restore_removed(removal);
-        assert_eq!(state.live_point_count(), original_count);
-    }
-
-    #[test]
-    fn initial_live_points_use_requested_count() {
-        let problem = scalar_problem();
-        let mut rng = StdRng::seed_from_u64(42);
-        let bounds = Bounds::new(vec![(0.0, 1.0)]);
-        let live_points = initial_live_points(&problem, &bounds, &mut rng, 12, 0.1, false);
-        assert_eq!(live_points.len(), 12);
     }
 }

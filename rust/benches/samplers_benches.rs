@@ -2,19 +2,15 @@ use chronopt::prelude::*;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::time::Duration;
 
-fn gaussian_problem() -> Problem {
-    ScalarProblemBuilder::new()
-        .with_objective(|x: &[f64]| {
+fn bench_metropolis_hastings_gaussian(c: &mut Criterion) {
+    let problem = ScalarProblemBuilder::new()
+        .with_function(|x: &[f64]| {
             let diff = x[0] - 0.5;
             0.5 * diff * diff
         })
-        .with_parameter(ParameterSpec::new("x", 0.6, Some((-5.0, 5.0))))
+        .with_parameter("x", 0.6, (-5.0, 5.0))
         .build()
-        .expect("failed to build gaussian problem")
-}
-
-fn bench_metropolis_hastings_gaussian(c: &mut Criterion) {
-    let problem = gaussian_problem();
+        .expect("failed to build gaussian problem");
     let sampler = MetropolisHastings::new()
         .with_num_chains(4)
         .with_iterations(500)
@@ -27,14 +23,25 @@ fn bench_metropolis_hastings_gaussian(c: &mut Criterion) {
         let sampler = sampler.clone();
         let initial = initial.clone();
         b.iter(|| {
-            let samples = sampler.run(problem, black_box(initial.clone()));
+            let samples = sampler.run(
+                |x| problem.evaluate(x),
+                black_box(initial.clone()),
+                Bounds::new(vec![(-5.0, 5.0)]),
+            );
             black_box(samples.draws());
         });
     });
 }
 
 fn bench_dynamic_nested_gaussian(c: &mut Criterion) {
-    let problem = gaussian_problem();
+    let problem = ScalarProblemBuilder::new()
+        .with_function(|x: &[f64]| {
+            let diff = x[0] - 0.5;
+            0.5 * diff * diff
+        })
+        .with_parameter("x", 0.6, (-5.0, 5.0))
+        .build()
+        .expect("failed to build gaussian problem");
     let sampler = DynamicNestedSampler::new()
         .with_live_points(64)
         .with_expansion_factor(0.2)
@@ -47,7 +54,11 @@ fn bench_dynamic_nested_gaussian(c: &mut Criterion) {
         let sampler = sampler.clone();
         let initial = initial.clone();
         b.iter(|| {
-            let nested = sampler.run_nested(problem, black_box(initial.clone()));
+            let nested = sampler.run(
+                |x| problem.evaluate(x),
+                black_box(initial.clone()),
+                Bounds::new(vec![(-5.0, 5.0)]),
+            );
             black_box((nested.draws(), nested.log_evidence()));
         });
     });

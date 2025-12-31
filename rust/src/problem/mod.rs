@@ -68,7 +68,7 @@ impl ParameterSpec {
     ) -> Self {
         Self {
             name: name.into(),
-            initial_value: initial_value,
+            initial_value,
             range: range.into(),
         }
     }

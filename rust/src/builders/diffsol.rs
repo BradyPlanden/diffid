@@ -86,6 +86,12 @@ pub struct DiffsolProblemBuilder {
     optimiser: Optimiser,
 }
 
+impl Default for DiffsolProblemBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DiffsolProblemBuilder {
     pub fn new() -> Self {
         Self {

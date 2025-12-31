@@ -115,6 +115,7 @@ impl SamplerState {
     }
 
     /// Worst log-likelihood among the current live points.
+    #[allow(dead_code)]
     pub fn min_log_likelihood(&self) -> f64 {
         self.live_points
             .iter()

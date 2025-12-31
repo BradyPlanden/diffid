@@ -444,7 +444,7 @@ mod tests {
 
         // Type-specific access
         let mcmc_samples = results.as_mcmc().expect("Should be MCMC results");
-        assert!(mcmc_samples.chains().len() > 0);
+        assert!(!mcmc_samples.chains().is_empty());
     }
 
     #[test]
@@ -660,8 +660,7 @@ mod tests {
                         .enumerate()
                         .map(|(i, _)| {
                             if iteration == 2 && i == 0 {
-                                Err(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
+                                Err(std::io::Error::other(
                                     "Evaluation failed",
                                 ))
                             } else {
@@ -858,8 +857,7 @@ mod tests {
                         .map(|(i, x)| {
                             if iteration < 3 && i % 3 == 0 {
                                 // Some evaluations fail
-                                Err(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
+                                Err(std::io::Error::other(
                                     "Simulated failure",
                                 ))
                             } else {
@@ -953,25 +951,20 @@ mod tests {
 
         let mut max_iterations = 0;
 
-        loop {
-            match state.ask() {
-                AskResult::Evaluate(points) => {
-                    let results: Vec<_> = points
-                        .iter()
-                        .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
-                        .collect();
-                    state.tell(results).unwrap();
+        while let AskResult::Evaluate(points) = state.ask() {
+            let results: Vec<_> = points
+                .iter()
+                .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+                .collect();
+            state.tell(results).unwrap();
 
-                    // Iterations should increment
-                    let current_iter = state.iterations();
-                    assert!(current_iter > max_iterations || current_iter == max_iterations);
-                    max_iterations = current_iter;
+            // Iterations should increment
+            let current_iter = state.iterations();
+            assert!(current_iter >= max_iterations);
+            max_iterations = current_iter;
 
-                    // Elapsed time should be positive
-                    assert!(state.elapsed().as_nanos() > 0);
-                }
-                AskResult::Done(_) => break,
-            }
+            // Elapsed time should be positive
+            assert!(state.elapsed().as_nanos() > 0);
         }
 
         // Should have completed some iterations

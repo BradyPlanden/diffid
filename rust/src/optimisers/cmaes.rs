@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 use crate::common::{AskResult, Bounds, Point};
 use crate::errors::{EvaluationError, TellError};
 use crate::optimisers::{
@@ -545,9 +547,9 @@ impl CMAESState {
         // Update mean
         let limit = params.mu.min(population.len());
         let mut new_mean = DVector::zeros(self.dim);
-        for i in 0..limit {
+        for (i, item) in population.iter().enumerate().take(limit) {
             let weight = params.weights[i];
-            let candidate_vec = DVector::from_column_slice(&population[i].0.point);
+            let candidate_vec = DVector::from_column_slice(&item.0.point);
             new_mean += candidate_vec * weight;
         }
 
@@ -580,9 +582,9 @@ impl CMAESState {
 
         // Rank-mu update
         let mut rank_mu_update = DMatrix::zeros(self.dim, self.dim);
-        for i in 0..limit {
+        for (i, item) in population.iter().enumerate().take(limit) {
             let weight = params.weights[i];
-            let candidate_vec = DVector::from_column_slice(&population[i].0.point);
+            let candidate_vec = DVector::from_column_slice(&item.0.point);
             let y = (candidate_vec - old_mean) / sigma_denom;
             rank_mu_update += (&y * y.transpose()) * weight;
         }
@@ -719,8 +721,8 @@ impl CMAES {
     }
 
     /// Run optimization with parallel evaluation
-    #[cfg(feature = "rayon")]
     #[allow(dead_code)]
+    #[cfg(feature = "rayon")]
     pub fn run_parallel<F>(
         &self,
         initial: Point,
@@ -808,7 +810,7 @@ mod tests {
     fn test_run_convenience_wrapper() {
         let cmaes = CMAES::new().with_max_iter(100).with_seed(42);
 
-        let results = cmaes.run(|x| sphere(x), vec![5.0, 5.0], Bounds::unbounded(2));
+        let results = cmaes.run(sphere, vec![5.0, 5.0], Bounds::unbounded(2));
 
         assert!(results.value < 1e-3);
     }
@@ -819,7 +821,7 @@ mod tests {
 
         // Todo: convert run to accept vec!, then convert to Bounds if needed
         let bounds = Bounds::new(vec![(-10.0, 10.0), (-10.0, 10.0)]);
-        let results = cmaes.run(|x| sphere(x), vec![5.0, 5.0], bounds);
+        let results = cmaes.run(sphere, vec![5.0, 5.0], bounds);
 
         assert!(results.value < 1e-3);
     }
@@ -1182,8 +1184,7 @@ mod tests {
                         .enumerate()
                         .map(|(i, p)| {
                             if generation == 3 && i < 2 {
-                                Err(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
+                                Err(std::io::Error::other(
                                     "Simulated failure",
                                 ))
                             } else {
@@ -1212,7 +1213,7 @@ mod tests {
         // Check initial point respects bounds
         for &val in &first_point[..] {
             assert!(
-                val >= -2.0 && val <= 2.0,
+                (-2.0..=2.0).contains(&val),
                 "Initial point {:?} violates bounds",
                 first_point
             );
@@ -1229,7 +1230,7 @@ mod tests {
                     for point in &points {
                         for &val in point {
                             assert!(
-                                val >= -2.0 && val <= 2.0,
+                                (-2.0..=2.0).contains(&val),
                                 "Point {:?} violates bounds",
                                 point
                             );
@@ -1240,7 +1241,7 @@ mod tests {
                 AskResult::Done(final_results) => {
                     // Final result should also respect bounds
                     for &val in &final_results.x {
-                        assert!(val >= -2.0 && val <= 2.0, "Final result violates bounds");
+                        assert!((-2.0..=2.0).contains(&val), "Final result violates bounds");
                     }
                     break;
                 }
@@ -1327,7 +1328,7 @@ mod tests {
             match state.ask() {
                 AskResult::Evaluate(points) => {
                     // Verify population size is consistent
-                    assert!(points.len() > 0, "Should have population");
+                    assert!(!points.is_empty(), "Should have population");
                     results = points.iter().map(|p| sphere_cmaes(p)).collect();
                 }
                 AskResult::Done(final_results) => {
@@ -1360,7 +1361,7 @@ mod tests {
             match state.ask() {
                 AskResult::Evaluate(points) => {
                     // Sigma should adapt over time; verify points are being generated
-                    assert!(points.len() > 0, "Should generate points");
+                    assert!(!points.is_empty(), "Should generate points");
                     results = points.iter().map(|p| sphere_cmaes(p)).collect();
                 }
                 AskResult::Done(final_results) => {

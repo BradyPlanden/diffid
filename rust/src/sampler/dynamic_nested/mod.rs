@@ -85,7 +85,7 @@ impl DynamicNestedSampler {
             termination_tol: 1e-3,
             seed: None,
             mcmc_batch_size: 8,
-            mcmc_step_size: 0.1,
+            mcmc_step_size: 0.01,
         }
     }
 
@@ -131,11 +131,11 @@ impl DynamicNestedSampler {
     /// Controls the size of Gaussian perturbations relative to bounds width.
     /// Step size in dimension i is: `mcmc_step_size × (upper[i] - lower[i])`
     ///
-    /// Smaller values (0.01-0.05): Conservative, local exploration
-    /// Medium values (0.1-0.2): Balanced (default: 0.1)
-    /// Larger values (0.3-0.5): Aggressive, global exploration
+    /// Smaller values (0.001-0.005): Conservative, local exploration
+    /// Medium values (0.01-0.02): Balanced (default: 0.01)
+    /// Larger values (0.03-0.1): Aggressive, global exploration
     ///
-    /// Default: 0.1
+    /// Default: 0.01
     pub fn with_mcmc_step_size(mut self, step_size: f64) -> Self {
         self.mcmc_step_size = step_size.max(1e-6);
         self
@@ -564,8 +564,8 @@ impl DynamicNestedSampler {
     ///
     /// # Arguments
     /// * `objective` - Function to evaluate. **Must return negative log-likelihood** (-log L).
-    ///                 The sampler will negate this internally to obtain log-likelihood for
-    ///                 nested sampling calculations.
+    ///   The sampler will negate this internally to obtain log-likelihood for
+    ///   nested sampling calculations.
     /// * `initial` - Initial point (currently unused, reserved for future)
     /// * `bounds` - Parameter bounds
     pub fn run<F, R, E>(&self, mut objective: F, initial: Point, bounds: Bounds) -> NestedSamples

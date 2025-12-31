@@ -598,7 +598,7 @@ mod tests {
         let adam = Adam::new().with_max_iter(1000).with_step_size(0.1);
 
         let results = adam.run(
-            |x| sphere_infallible(x),
+            sphere_infallible,
             vec![5.0, 5.0],
             Bounds::unbounded(2),
         );
@@ -616,7 +616,7 @@ mod tests {
             .with_threshold(1e-8);
 
         let results = adam.run(
-            |x| rosenbrock_infallible(x),
+            rosenbrock_infallible,
             vec![0.0, 0.0],
             Bounds::unbounded(2),
         );
@@ -695,7 +695,7 @@ mod tests {
 
                     // Run interface
                     let run_results = optimizer.run(
-                        |x| sphere_infallible(x),
+                        sphere_infallible,
                         vec![2.0, 2.0],
                         Bounds::unbounded(2),
                     );
@@ -838,7 +838,7 @@ mod tests {
 
         // Use analytical gradient
         let results_analytical = optimizer.run(
-            |x| sphere_infallible(x),
+            sphere_infallible,
             vec![2.0, 2.0],
             Bounds::unbounded(2),
         );
@@ -1064,7 +1064,7 @@ mod tests {
         let mut result = sphere_infallible(&first_point);
 
         // Verify initial point respects bounds
-        assert!(first_point.iter().all(|&x| x >= -2.0 && x <= 2.0));
+        assert!(first_point.iter().all(|&x| (-2.0..=2.0).contains(&x)));
 
         for _ in 0..20 {
             state.tell(result).expect("tell should succeed");
@@ -1119,8 +1119,7 @@ mod tests {
     #[test]
     fn adam_evaluation_error_propagation() {
         fn failing_function(_x: &[f64]) -> Result<(f64, Vec<f64>), std::io::Error> {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            Err(std::io::Error::other(
                 "Evaluation failed",
             ))
         }

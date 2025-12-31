@@ -737,7 +737,7 @@ mod tests {
     fn test_run_convenience_wrapper() {
         let nm = NelderMead::new().with_max_iter(500);
 
-        let results = nm.run(|x| rosenbrock(x), vec![0.0, 0.0], Bounds::unbounded(2));
+        let results = nm.run(rosenbrock, vec![0.0, 0.0], Bounds::unbounded(2));
 
         assert!(results.value < 1e-6);
     }
@@ -895,8 +895,7 @@ mod tests {
                 AskResult::Evaluate(points) => {
                     // Inject an error on the 10th evaluation
                     if eval_count == 10 {
-                        result = Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
+                        result = Err(std::io::Error::other(
                             "Simulated evaluation failure",
                         ));
                         error_injected = true;
@@ -936,7 +935,7 @@ mod tests {
                     for point in &points {
                         for &val in point {
                             assert!(
-                                val >= -1.0 && val <= 1.0,
+                                (-1.0..=1.0).contains(&val),
                                 "Point {:?} violates bounds",
                                 point
                             );
@@ -947,7 +946,7 @@ mod tests {
                 AskResult::Done(results) => {
                     // Final result should also respect bounds
                     for &val in &results.x {
-                        assert!(val >= -1.0 && val <= 1.0, "Final result violates bounds");
+                        assert!((-1.0..=1.0).contains(&val), "Final result violates bounds");
                     }
                     break;
                 }
@@ -1135,15 +1134,10 @@ mod tests {
         let mut ask_count = 0;
         let mut tell_count = 1; // Already told once
 
-        loop {
-            match state.ask() {
-                AskResult::Evaluate(points) => {
-                    ask_count += 1;
-                    state.tell(sphere(&points[0])).unwrap();
-                    tell_count += 1;
-                }
-                AskResult::Done(_) => break,
-            }
+        while let AskResult::Evaluate(points) = state.ask() {
+            ask_count += 1;
+            state.tell(sphere(&points[0])).unwrap();
+            tell_count += 1;
         }
 
         // Should have same number of asks and tells (after initial tell)

@@ -24,8 +24,8 @@ type DenseEqn = DiffSl<NalgebraMat<f64>, CG>;
 type SparseEqn = DiffSl<FaerSparseMat<f64>, CG>;
 
 pub enum DiffsolSimulator {
-    Dense(OdeSolverProblem<DenseEqn>),
-    Sparse(OdeSolverProblem<SparseEqn>),
+    Dense(Box<OdeSolverProblem<DenseEqn>>),
+    Sparse(Box<OdeSolverProblem<SparseEqn>>),
 }
 
 type DenseVector = NalgebraVec<f64>;
@@ -70,7 +70,7 @@ impl DiffsolObjective {
                     .map_err(|e| {
                         ProblemError::BuildFailed(format!("Failed to build ODE model: {}", e))
                     })?;
-                Ok(DiffsolSimulator::Dense(diff_system))
+                Ok(DiffsolSimulator::Dense(Box::new(diff_system)))
             }
             DiffsolBackend::Sparse => {
                 let diff_system = OdeBuilder::<FaerSparseMat<f64>>::new()
@@ -80,7 +80,7 @@ impl DiffsolObjective {
                     .map_err(|e| {
                         ProblemError::BuildFailed(format!("Failed to build ODE model: {}", e))
                     })?;
-                Ok(DiffsolSimulator::Sparse(diff_system))
+                Ok(DiffsolSimulator::Sparse(Box::new(diff_system)))
             }
         }
     }
@@ -250,6 +250,7 @@ mod tests {
     use super::*;
     use crate::cost::{GaussianNll, SumSquaredError};
 
+    #[allow(dead_code)]
     fn build_logistic_problem(backend: DiffsolBackend) -> DiffsolObjective {
         let dsl = r#"
 in = [r, k]
@@ -273,6 +274,7 @@ F_i { (r * y) * (1 - (y / k)) }
         )
     }
 
+    #[allow(dead_code)]
     fn finite_difference<F>(x: &mut [f64], idx: usize, eps: f64, f: F) -> f64
     where
         F: Fn(&[f64]) -> f64,

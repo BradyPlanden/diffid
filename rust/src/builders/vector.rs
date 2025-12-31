@@ -14,6 +14,12 @@ pub struct VectorProblemBuilder {
     optimiser: Optimiser,
 }
 
+impl Default for VectorProblemBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VectorProblemBuilder {
     pub fn new() -> Self {
         Self {

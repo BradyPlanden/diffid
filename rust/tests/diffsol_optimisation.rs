@@ -1,5 +1,4 @@
 use chronopt::prelude::*;
-use chronopt::problem::ParameterSpec;
 use nalgebra::DMatrix;
 
 #[test]
@@ -24,7 +23,6 @@ F_i { a * y }
     }
 
     let data_matrix = DMatrix::from_row_slice(t_span.len(), 2, &data);
-    let params = ParameterSpec::new("a", 0.3, None);
 
     let optimiser = NelderMead::new()
         .with_max_iter(400)
@@ -34,9 +32,8 @@ F_i { a * y }
     let builder = DiffsolProblemBuilder::new()
         .with_diffsl(dsl.to_string())
         .with_data(data_matrix)
-        .with_parameter(params)
-        .with_rtol(1e-7)
-        .with_atol(1e-7)
+        .with_parameter("a", 0.3, Unbounded)
+        .with_tolerances(1e-7, 1e-7)
         .with_optimiser(optimiser.clone());
 
     let problem = builder.build().expect("problem should build");
@@ -63,10 +60,10 @@ F_i { a * y }
         result.message
     );
     assert!(
-        result.fun < initial_cost,
+        result.value < initial_cost,
         "optimisation should reduce cost ({} -> {})",
         initial_cost,
-        result.fun
+        result.value
     );
     assert!(
         (result.x[0] - true_param).abs() < 1e-2,
@@ -79,13 +76,17 @@ F_i { a * y }
     let builder_without_default = DiffsolProblemBuilder::new()
         .with_diffsl(dsl.to_string())
         .with_data(DMatrix::from_row_slice(t_span.len(), 2, &data))
-        .with_parameter(ParameterSpec::new("a", true_param, None));
+        .with_parameter("a", true_param, Unbounded);
 
     let problem_without_default = builder_without_default
         .build()
         .expect("problem should build without default optimiser");
 
-    let explicit_result = optimiser.run(&problem_without_default, vec![initial_guess]);
+    let explicit_result = optimiser.run(
+        |x| problem_without_default.evaluate(x),
+        vec![initial_guess],
+        Bounds::unbounded(1),
+    );
 
     assert!(
         explicit_result.success,
@@ -93,7 +94,7 @@ F_i { a * y }
         explicit_result.message
     );
     assert!(
-        explicit_result.fun < initial_cost,
+        explicit_result.value < initial_cost,
         "explicit optimiser should reduce cost"
     );
 }

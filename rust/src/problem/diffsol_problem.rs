@@ -108,8 +108,8 @@ impl DiffsolObjective {
     where
         M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
     {
-        let sol_rows = solution.nrows();
-        let sol_cols = solution.ncols();
+        let sol_rows = solution.nrows(); // n_states
+        let sol_cols = solution.ncols(); // n_timepoints
         let sol_size = sol_rows * sol_cols;
 
         if sol_size != self.data.len() {
@@ -119,10 +119,13 @@ impl DiffsolObjective {
             });
         }
 
+        // Solution is organized as (n_states, n_timepoints)
+        // Data is organized as (n_timepoints, n_states)
+        // We need to iterate with swapped indices
         let mut residuals = Vec::with_capacity(sol_size);
-        for row in 0..sol_rows {
-            for col in 0..sol_cols {
-                residuals.push(solution[(row, col)] - self.data[(row, col)]);
+        for time_idx in 0..self.data.nrows() {
+            for state_idx in 0..self.data.ncols() {
+                residuals.push(solution[(state_idx, time_idx)] - self.data[(time_idx, state_idx)]);
             }
         }
 
@@ -351,7 +354,8 @@ F_i { (r * y) * (1 - (y / k)) }
             .expect("cost with gradient calculation failed");
 
         assert!(cost.is_finite());
-        assert_eq!(grad.len(), params.len());
+        let grad_vec = grad.expect("gradient should be present");
+        assert_eq!(grad_vec.len(), params.len());
 
         let eps = 1e-5_f64;
 
@@ -364,7 +368,7 @@ F_i { (r * y) * (1 - (y / k)) }
                     .expect("finite-difference evaluation failed")
             });
 
-            let g = grad[i];
+            let g = grad_vec[i];
             let diff = (fd - g).abs();
             assert!(
                 diff < 1e-6,

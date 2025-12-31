@@ -3,14 +3,11 @@ mod cmaes;
 mod nelder_mead;
 
 use nalgebra::DMatrix;
-use rand::prelude::*;
-use rand::SeedableRng;
 use std::cmp::Ordering;
 use std::error::Error as StdError;
 use std::fmt;
 use std::time::Duration;
 
-use crate::builders::ScalarProblemBuilder;
 use crate::common::{Bounds, Point};
 use crate::errors::EvaluationError;
 
@@ -55,19 +52,21 @@ impl ScalarOptimiser {
     ///
     /// # Example
     /// ```
+    /// use chronopt::common::Bounds;
     /// use chronopt::optimisers::{ScalarOptimiser, NelderMead};
     ///
     /// let optimizer = ScalarOptimiser::from(NelderMead::new());
     /// let result = optimizer.run(
-    ///     |x| Ok(x[0].powi(2) + x[1].powi(2)),
+    ///     |x | x[0].powi(2) + x[1].powi(2),
     ///     vec![1.0, 2.0],
-    ///     None
+    ///     Bounds::unbounded(2)
     /// );
     /// ```
-    pub fn run<F, E>(&self, objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
+    pub fn run<F, R, E>(&self, objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
     where
-        F: FnMut(&[f64]) -> Result<f64, E>,
-        E: StdError + Send + Sync + 'static,
+        F: FnMut(&[f64]) -> R,
+        R: TryInto<ScalarEvaluation, Error = E>,
+        E: Into<EvaluationError>,
     {
         match self {
             ScalarOptimiser::NelderMead(nm) => nm.run(objective, initial, bounds),
@@ -92,6 +91,7 @@ impl GradientOptimiser {
     ///
     /// # Example
     /// ```
+    /// use chronopt::common::Bounds;
     /// use chronopt::optimisers::{GradientOptimiser, Adam};
     ///
     /// let optimizer = GradientOptimiser::from(Adam::new());
@@ -99,16 +99,17 @@ impl GradientOptimiser {
     ///     |x| {
     ///         let val = x[0].powi(2) + x[1].powi(2);
     ///         let grad = vec![2.0 * x[0], 2.0 * x[1]];
-    ///         Ok((val, grad))
+    ///         (val, grad)
     ///     },
     ///     vec![1.0, 2.0],
-    ///     None
+    ///     Bounds::unbounded(2)
     /// );
     /// ```
-    pub fn run<F, R>(&self, objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
+    pub fn run<F, R, E>(&self, objective: F, initial: Point, bounds: Bounds) -> OptimisationResults
     where
         F: FnMut(&[f64]) -> R,
-        R: TryInto<GradientEvaluation, Error = EvaluationError>,
+        R: TryInto<GradientEvaluation, Error = E>,
+        E: Into<EvaluationError>,
     {
         match self {
             GradientOptimiser::Adam(ad) => ad.run(objective, initial, bounds),
@@ -437,6 +438,7 @@ impl OptimisationResults {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::builders::ScalarProblemBuilder;
     use crate::optimisers::cmaes::{CMAESState, StrategyParameters};
     use crate::problem::ProblemError;
     use nalgebra::{DMatrix, DVector};
@@ -466,7 +468,9 @@ mod tests {
             .build()
             .expect("Problem builder should succeed");
 
-        let optimizer = Optimiser::adam();
+        // Create Adam optimizer with increased iterations for convergence
+        let adam = Adam::new().with_max_iter(5000).with_step_size(0.05);
+        let optimizer = Optimiser::Gradient(GradientOptimiser::Adam(adam));
 
         // Extract and use the gradient optimizer
         let grad_opt = optimizer
@@ -562,8 +566,8 @@ mod tests {
 
         let result = optimiser.run(
             |x| problem.evaluate(x),
-            vec![1.0],
-            Bounds::new(vec![(-5.0, 4.0)]),
+            vec![1.0, 0.0],
+            Bounds::new(vec![(-5.0, 4.0), (-5.0, 4.0)]),
         );
 
         assert!(result.success, "Expected success: {}", result.message);
@@ -860,12 +864,8 @@ mod tests {
     // Edge case tests
     #[test]
     fn nelder_mead_handles_bounds() {
-        use crate::problem::ParameterSpec;
-
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| (x[0] - 2.0).powi(2) + (x[1] - 3.0).powi(2))
-            .with_parameter("x", 0.0, (-1.0, 1.0))
-            .with_parameter("y", 0.0, (0.0, 2.0))
             .build()
             .expect("Problem builder should succeed with valid parameters");
 
@@ -874,7 +874,7 @@ mod tests {
         let result = optimiser.run(
             |x| problem.evaluate(x),
             vec![0.5, 1.0],
-            Bounds::unbounded(2),
+            Bounds::new(vec![(-1.0, 1.0), (0.0, 2.0)]),
         );
 
         // Should converge to bounds: x=1.0 (clamped from 2.0), y=2.0 (clamped from 3.0)
@@ -900,12 +900,8 @@ mod tests {
 
     #[test]
     fn cmaes_handles_bounds() {
-        use crate::problem::ParameterSpec;
-
         let problem = ScalarProblemBuilder::new()
             .with_function(|x: &[f64]| (x[0] - 5.0).powi(2) + (x[1] + 5.0).powi(2))
-            .with_parameter("x", 0.0, (0.0, 3.0))
-            .with_parameter("y", 0.0, (-3.0, 0.0))
             .build()
             .expect("Problem builder should succeed with valid parameters");
 
@@ -917,7 +913,7 @@ mod tests {
         let result = optimiser.run(
             |x| problem.evaluate(x),
             vec![1.5, -1.5],
-            Bounds::unbounded(2),
+            Bounds::new(vec![(0.0, 3.0), (-3.0, 0.0)]),
         );
 
         // Should converge to bounds: x=3.0 (clamped from 5.0), y=-3.0 (clamped from -5.0)

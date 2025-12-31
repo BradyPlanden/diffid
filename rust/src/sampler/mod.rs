@@ -70,7 +70,7 @@ impl GradientSampler {
     ///
     /// Note: Currently no gradient samplers implemented.
     /// This will be used for HMC, NUTS, etc.
-    pub fn run<F, E, R>(&self, objective: F, initial: Point, bounds: Bounds) -> SamplingResults
+    pub fn run<F, E, R>(&self, _objective: F, _initial: Point, _bounds: Bounds) -> SamplingResults
     where
         F: FnMut(&[f64]) -> R,
         R: TryInto<GradientEvaluation, Error = E>,
@@ -352,6 +352,7 @@ mod tests {
     use crate::builders::ScalarProblemBuilder;
     use crate::common::{AskResult, Unbounded};
     use crate::errors::TellError;
+    use crate::sampler::dynamic_nested::DNSPhase;
 
     #[test]
     fn metropolis_hastings_produces_samples() {
@@ -370,7 +371,7 @@ mod tests {
             .with_step_size(0.3)
             .with_seed(42);
 
-        let samples = sampler.run(|x| problem.evaluate(x), vec![0.0]);
+        let samples = sampler.run(|x| problem.evaluate(x), vec![0.0], Bounds::unbounded(1));
 
         assert_eq!(samples.chains().len(), 4);
         for chain in samples.chains() {
@@ -393,7 +394,7 @@ mod tests {
 
         let sampler = Sampler::metropolis_hastings();
         let scalar_sampler = sampler.as_scalar().expect("Should be scalar sampler");
-        let results = scalar_sampler.run(|x| problem.evaluate(x), vec![0.0]);
+        let results = scalar_sampler.run(|x| problem.evaluate(x), vec![0.0], Bounds::unbounded(1));
 
         assert!(matches!(results, SamplingResults::MCMC(_)));
         assert!(results.is_mcmc());
@@ -433,7 +434,8 @@ mod tests {
             .expect("problem to build");
 
         let mh = MetropolisHastings::new().with_iterations(100).with_seed(42);
-        let results = ScalarSampler::from(mh).run(|x| problem.evaluate(x), vec![0.5]);
+        let results =
+            ScalarSampler::from(mh).run(|x| problem.evaluate(x), vec![0.5], Bounds::unbounded(1));
 
         // Common methods work across result types
         assert!(results.draws() > 0);
@@ -455,7 +457,8 @@ mod tests {
 
         // MCMC results
         let mh = MetropolisHastings::new().with_seed(42);
-        let mcmc_results = ScalarSampler::from(mh).run(|x| problem.evaluate(x), vec![0.0]);
+        let mcmc_results =
+            ScalarSampler::from(mh).run(|x| problem.evaluate(x), vec![0.0], Bounds::unbounded(1));
         assert!(mcmc_results.is_mcmc());
         assert!(!mcmc_results.is_nested());
         assert!(mcmc_results.as_mcmc().is_some());
@@ -465,7 +468,8 @@ mod tests {
         let dns = DynamicNestedSampler::new()
             .with_live_points(32)
             .with_seed(42);
-        let nested_results = ScalarSampler::from(dns).run(|x| problem.evaluate(x), vec![0.0]);
+        let nested_results =
+            ScalarSampler::from(dns).run(|x| problem.evaluate(x), vec![0.0], Bounds::unbounded(1));
         assert!(!nested_results.is_mcmc());
         assert!(nested_results.is_nested());
         assert!(nested_results.as_mcmc().is_none());
@@ -489,7 +493,7 @@ mod tests {
             .with_iterations(100)
             .with_seed(42);
 
-        let mut state = sampler.init(vec![0.0]);
+        let mut state = sampler.init(vec![0.0], Bounds::unbounded(1));
         let mut eval_count = 0;
 
         loop {
@@ -527,7 +531,7 @@ mod tests {
             .with_seed(42);
 
         // Run using ask/tell
-        let mut state = sampler.init(vec![0.0]);
+        let mut state = sampler.init(vec![0.0], Bounds::unbounded(1));
         let ask_tell_results = loop {
             match state.ask() {
                 AskResult::Evaluate(points) => {
@@ -540,7 +544,7 @@ mod tests {
         };
 
         // Run using direct run() method (which now uses ask/tell internally)
-        let run_results = sampler.run(|x| problem.evaluate(x), vec![0.0]);
+        let run_results = sampler.run(|x| problem.evaluate(x), vec![0.0], Bounds::unbounded(1));
 
         // Both should produce same structure
         assert_eq!(ask_tell_results.chains().len(), run_results.chains().len());
@@ -554,7 +558,7 @@ mod tests {
             .with_num_chains(2)
             .with_iterations(1);
 
-        let mut state = sampler.init(vec![0.0]);
+        let mut state = sampler.init(vec![0.0], Bounds::unbounded(1));
 
         match state.ask() {
             AskResult::Evaluate(_) => {
@@ -571,21 +575,32 @@ mod tests {
     fn ask_tell_already_terminated() {
         let sampler = MetropolisHastings::new()
             .with_num_chains(1)
-            .with_iterations(0); // Terminates immediately
+            .with_iterations(0); // Terminates after first evaluation
 
-        let mut state = sampler.init(vec![0.0]);
+        let mut state = sampler.init(vec![0.0], Bounds::unbounded(1));
 
-        // First ask should return Done (no iterations)
+        // First ask returns Evaluate (need to evaluate initial proposal)
         match state.ask() {
-            AskResult::Done(_) => (),
-            _ => panic!("Expected Done on first ask"),
+            AskResult::Evaluate(points) => {
+                // Provide results to complete iteration 0
+                state
+                    .tell(points.into_iter().map(|_| Ok::<f64, std::io::Error>(1.0)))
+                    .expect("tell should succeed");
+            }
+            _ => panic!("Expected Evaluate on first ask"),
         }
 
-        // Trying to tell should fail
+        // Now should be Done
+        match state.ask() {
+            AskResult::Done(_) => (),
+            _ => panic!("Expected Done after iteration 0"),
+        }
+
+        // Trying to tell again should fail
         let err = state
             .tell(vec![Ok::<f64, std::io::Error>(1.0)])
             .unwrap_err();
-        assert_eq!(err, TellError::AlreadyTerminated);
+        assert!(matches!(err, TellError::AlreadyTerminated));
     }
 
     #[test]
@@ -601,7 +616,7 @@ mod tests {
             .with_iterations(10)
             .with_seed(123);
 
-        let mut state = sampler.init(vec![0.5]);
+        let mut state = sampler.init(vec![0.5], Bounds::unbounded(1));
         let mut iteration_count = 0;
 
         loop {
@@ -633,7 +648,7 @@ mod tests {
             .with_iterations(5)
             .with_seed(42);
 
-        let mut state = sampler.init(vec![0.0]);
+        let mut state = sampler.init(vec![0.0], Bounds::unbounded(1));
         let mut iteration = 0;
 
         loop {
@@ -666,5 +681,300 @@ mod tests {
                 _ => panic!("Expected MCMC results"),
             }
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DynamicNestedSampler Ask/Tell Interface Tests
+    // ═══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn dynamic_nested_ask_tell_basic_flow() {
+        let sampler = DynamicNestedSampler::new()
+            .with_live_points(32)
+            .with_seed(42);
+
+        let (mut state, initial_points) = sampler.init(vec![0.0], Bounds::unbounded(1));
+
+        // Evaluate initial points
+        let results: Vec<_> = initial_points
+            .iter()
+            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+            .collect();
+        state.tell(results).expect("initial tell failed");
+
+        let mut eval_count = 0;
+
+        loop {
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    eval_count += points.len();
+                    let results: Vec<_> = points
+                        .iter()
+                        .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+                        .collect();
+                    state.tell(results).unwrap();
+                }
+                AskResult::Done(SamplingResults::Nested(samples)) => {
+                    assert!(samples.draws() > 0, "Should have draws");
+                    assert!(
+                        samples.log_evidence().is_finite(),
+                        "Log evidence should be finite"
+                    );
+                    assert!(eval_count > 0, "Should have evaluated some points");
+                    break;
+                }
+                _ => panic!("Expected Nested results"),
+            }
+        }
+    }
+
+    #[test]
+    fn dynamic_nested_ask_tell_matches_run() {
+        let sampler = DynamicNestedSampler::new()
+            .with_live_points(32)
+            .with_seed(42);
+
+        // Run using ask-tell
+        let (mut state, initial_points) = sampler.init(vec![0.0], Bounds::unbounded(1));
+
+        let results: Vec<_> = initial_points
+            .iter()
+            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+            .collect();
+        state.tell(results).unwrap();
+
+        let ask_tell_results = loop {
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    let results: Vec<_> = points
+                        .iter()
+                        .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+                        .collect();
+                    state.tell(results).unwrap();
+                }
+                AskResult::Done(SamplingResults::Nested(samples)) => break samples,
+                _ => panic!("Expected Nested results"),
+            }
+        };
+
+        // Run using direct run() method
+        let sampler2 = DynamicNestedSampler::new()
+            .with_live_points(32)
+            .with_seed(42);
+
+        let run_results = sampler2.run(
+            |x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)),
+            vec![0.0],
+            Bounds::unbounded(1),
+        );
+
+        // Both should produce same results (deterministic with same seed)
+        assert_eq!(ask_tell_results.draws(), run_results.draws());
+        // Log evidence should be close
+        let diff = (ask_tell_results.log_evidence() - run_results.log_evidence()).abs();
+        assert!(
+            diff < 1e-10,
+            "Log evidence should match exactly with same seed"
+        );
+    }
+
+    #[test]
+    fn dynamic_nested_ask_tell_error_handling() {
+        let sampler = DynamicNestedSampler::new()
+            .with_live_points(32)
+            .with_seed(42);
+
+        let (mut state, initial_points) = sampler.init(vec![0.0], Bounds::unbounded(1));
+
+        // Provide initial results
+        let results: Vec<_> = initial_points
+            .iter()
+            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+            .collect();
+        state.tell(results).unwrap();
+
+        // Complete initialization and get into the sampling phase
+        loop {
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    // Check if we're in a replacement batch phase (8 points expected by default)
+                    // This is smaller than the typical expansion batch but larger than initialization
+                    if points.len() == 8 {
+                        // Test ResultCountMismatch: provide wrong number of results
+                        let wrong_count_results = vec![
+                            Ok::<f64, std::io::Error>(1.0),
+                            Ok::<f64, std::io::Error>(1.0),
+                        ]; // Should be 8
+                        let err = state.tell(wrong_count_results).unwrap_err();
+                        assert!(matches!(err, TellError::ResultCountMismatch { .. }));
+
+                        // Now provide correct results to continue
+                        let results: Vec<_> = points
+                            .iter()
+                            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+                            .collect();
+                        state.tell(results).unwrap();
+                        return; // Test complete
+                    } else {
+                        // Still in initialization or expansion phase, provide correct results
+                        let results: Vec<_> = points
+                            .iter()
+                            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+                            .collect();
+                        state.tell(results).unwrap();
+                    }
+                }
+                AskResult::Done(_) => {
+                    panic!("Should not complete before testing error handling");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dynamic_nested_handles_evaluation_errors() {
+        let sampler = DynamicNestedSampler::new()
+            .with_live_points(32)
+            .with_seed(42);
+
+        let (mut state, initial_points) = sampler.init(vec![0.0], Bounds::unbounded(1));
+
+        // Provide initial results
+        let results: Vec<_> = initial_points
+            .iter()
+            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+            .collect();
+        state.tell(results).unwrap();
+
+        let mut iteration = 0;
+
+        loop {
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    // Mix successful and failed evaluations
+                    let results: Vec<Result<f64, std::io::Error>> = points
+                        .iter()
+                        .enumerate()
+                        .map(|(i, x)| {
+                            if iteration < 3 && i % 3 == 0 {
+                                // Some evaluations fail
+                                Err(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    "Simulated failure",
+                                ))
+                            } else {
+                                Ok(0.5 * x[0].powi(2))
+                            }
+                        })
+                        .collect();
+                    state.tell(results).unwrap();
+                    iteration += 1;
+                }
+                AskResult::Done(SamplingResults::Nested(samples)) => {
+                    // Should complete despite some errors (errors treated as INFINITY/rejected)
+                    assert!(samples.draws() > 0);
+                    break;
+                }
+                _ => panic!("Expected Nested results"),
+            }
+        }
+    }
+
+    #[test]
+    fn dynamic_nested_phase_transitions() {
+        let sampler = DynamicNestedSampler::new()
+            .with_live_points(32)
+            .with_seed(42);
+
+        let (mut state, initial_points) = sampler.init(vec![0.0], Bounds::unbounded(1));
+
+        // Should start in InitialisingLivePoints
+        assert!(
+            matches!(state.phase(), DNSPhase::InitialisingLivePoints { .. }),
+            "Should start in InitialisingLivePoints phase"
+        );
+
+        // Provide initial results
+        let results: Vec<_> = initial_points
+            .iter()
+            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+            .collect();
+        state.tell(results).unwrap();
+
+        let mut seen_single_replacement = false;
+        let mut seen_expansion = false;
+
+        loop {
+            // Track phase transitions
+            match state.phase() {
+                DNSPhase::AwaitingReplacementBatch { .. } => seen_single_replacement = true,
+                DNSPhase::AwaitingExpansion { .. } => seen_expansion = true,
+                DNSPhase::Terminated(_) => break,
+                _ => {}
+            }
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    let results: Vec<_> = points
+                        .iter()
+                        .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+                        .collect();
+                    state.tell(results).unwrap();
+                }
+                AskResult::Done(_) => break,
+            }
+        }
+
+        // Should have transitioned through at least one of the sampling phases
+        assert!(
+            seen_single_replacement || seen_expansion,
+            "Should have seen AwaitingSingleReplacement or AwaitingExpansion phase"
+        );
+    }
+
+    #[test]
+    fn dynamic_nested_query_methods() {
+        let sampler = DynamicNestedSampler::new()
+            .with_live_points(32)
+            .with_seed(42);
+
+        let (mut state, initial_points) = sampler.init(vec![0.0], Bounds::unbounded(1));
+
+        // Check initial state
+        assert_eq!(state.iterations(), 0);
+        assert!(state.elapsed().as_nanos() > 0);
+
+        // Provide initial results
+        let results: Vec<_> = initial_points
+            .iter()
+            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+            .collect();
+        state.tell(results).unwrap();
+
+        let mut max_iterations = 0;
+
+        loop {
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    let results: Vec<_> = points
+                        .iter()
+                        .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+                        .collect();
+                    state.tell(results).unwrap();
+
+                    // Iterations should increment
+                    let current_iter = state.iterations();
+                    assert!(current_iter > max_iterations || current_iter == max_iterations);
+                    max_iterations = current_iter;
+
+                    // Elapsed time should be positive
+                    assert!(state.elapsed().as_nanos() > 0);
+                }
+                AskResult::Done(_) => break,
+            }
+        }
+
+        // Should have completed some iterations
+        assert!(state.iterations() > 0, "Should have completed iterations");
     }
 }

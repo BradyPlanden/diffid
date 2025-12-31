@@ -16,15 +16,15 @@
 
 ## Core capabilities
 - Gradient-free (Nelder-Mead, CMA-ES) and gradient-based (Adam) optimisers with configurable convergence criteria.
-- Paralleled differential equation fitting via [DiffSL](https://github.com/martinjrobins/diffsl) with dense or sparse [Diffsol](https://github.com/martinjrobins/diffsol) backends.
+- Multi-threaded differential equation fitting via [DiffSL](https://github.com/martinjrobins/diffsl) with dense or sparse [Diffsol](https://github.com/martinjrobins/diffsol) backends.
 - Customisable likelihood/cost metrics and Monte-Carlo sampling for posterior exploration.
 - Flexible integration with state-of-the-art differential solvers, such as [Diffrax](https://github.com/patrick-kidger/diffrax), [DifferentialEquations.jl](https://github.com/SciML/diffeqpy)
-- Python builder APIs mirroring the Rust core plus generated type stubs for autocompletion.
+
 
 ## Why Chronopt?
 - Optimisation based workflow run the forward simulation thousands of times, a performance improvement on the process can produce results hour or days earlier
-- With a rust core and python bindings, as the project expands, fewer runtime errors should be encountered
-- You can quickly integrate it into your python tools, and later use the rust crate directly for even higher performance
+- The Rust core provides a high-performance inference loop with fewer runtime errors.
+- Quickly integrated into Python workflows, and later use the rust crate directly for even higher performance.
 
 ## Installation
 
@@ -50,7 +50,7 @@ import chronopt as chron
 
 def rosenbrock(x):
     value = (1 - x[0]) ** 2 + 100 * (x[1] - x[0] ** 2) ** 2
-    return np.asarray([value], dtype=float)
+    return np.asarray([value])
 
 
 builder = (

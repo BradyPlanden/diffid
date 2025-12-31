@@ -1,11 +1,12 @@
+use chronopt::builders::DiffsolBackend;
 use chronopt::prelude::*;
-use chronopt::problem::DiffsolBackend;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use nalgebra::DMatrix;
 use std::time::Duration;
 
-fn build_logistic_problem(backend: DiffsolBackend, parallel: bool) -> Problem {
-    let dsl = r#"
+macro_rules! build_logistic_problem {
+    ($backend:expr, $parallel:expr) => {{
+        let dsl = r#"
 in = [r, k]
 r { 1 }
 k { 1 }
@@ -13,23 +14,24 @@ u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 "#;
 
-    let t_span: Vec<f64> = (0..20).map(|i| i as f64 * 0.1).collect();
-    let data_values: Vec<f64> = t_span.iter().map(|t| 0.1 * (*t).exp()).collect();
-    let data = DMatrix::from_fn(t_span.len(), 2, |i, j| match j {
-        0 => t_span[i],
-        1 => data_values[i],
-        _ => unreachable!(),
-    });
+        let t_span: Vec<f64> = (0..20).map(|i| i as f64 * 0.1).collect();
+        let data_values: Vec<f64> = t_span.iter().map(|t| 0.1 * (*t).exp()).collect();
+        let data = DMatrix::from_fn(t_span.len(), 2, |i, j| match j {
+            0 => t_span[i],
+            1 => data_values[i],
+            _ => unreachable!(),
+        });
 
-    DiffsolProblemBuilder::new()
-        .with_diffsl(dsl.to_string())
-        .with_data(data)
-        .with_parameter(ParameterSpec::new("r", 1.0, Some((0.1, 3.0))))
-        .with_parameter(ParameterSpec::new("k", 1.0, Some((0.5, 2.0))))
-        .with_backend(backend)
-        .with_parallel(parallel)
-        .build()
-        .expect("failed to build diffsol problem for benchmarks")
+        DiffsolProblemBuilder::new()
+            .with_diffsl(dsl.to_string())
+            .with_data(data)
+            .with_parameter("r", 1.0, (0.1, 3.0))
+            .with_parameter("k", 1.0, (0.5, 2.0))
+            .with_backend($backend)
+            .with_parallel($parallel)
+            .build()
+            .expect("failed to build diffsol problem for benchmarks")
+    }};
 }
 
 fn bench_diffsol_single_eval(c: &mut Criterion) {
@@ -37,7 +39,7 @@ fn bench_diffsol_single_eval(c: &mut Criterion) {
     let initial = vec![1.0_f64, 1.0_f64];
 
     for backend in [DiffsolBackend::Dense, DiffsolBackend::Sparse] {
-        let problem = build_logistic_problem(backend, false);
+        let problem = build_logistic_problem!(backend, false);
         group.bench_with_input(
             BenchmarkId::new("evaluate", format!("{:?}", backend)),
             &problem,
@@ -68,7 +70,7 @@ fn bench_diffsol_population_eval(c: &mut Criterion) {
     for backend in [DiffsolBackend::Dense, DiffsolBackend::Sparse] {
         for &parallel in &[false, true] {
             let label = format!("{:?}_parallel={}", backend, parallel);
-            let problem = build_logistic_problem(backend, parallel);
+            let problem = build_logistic_problem!(backend, parallel);
 
             group.bench_with_input(
                 BenchmarkId::new("evaluate_population", label),

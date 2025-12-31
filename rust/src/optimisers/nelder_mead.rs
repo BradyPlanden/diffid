@@ -4,7 +4,6 @@ use crate::optimisers::{
     build_results, EvaluatedPoint, OptimisationResults, ScalarEvaluation, TerminationReason,
 };
 use std::cmp::Ordering;
-use std::error::Error as StdError;
 use std::time::{Duration, Instant};
 
 /// Configuration for the Nelder-Mead optimizer
@@ -165,7 +164,7 @@ pub enum NelderMeadPhase {
 
     /// Waiting for expansion point evaluation
     AwaitingExpansion {
-        centroid: Point,
+        _centroid: Point,
         reflected_point: Point,
         reflected_value: f64,
         expanded_point: Point,
@@ -369,7 +368,7 @@ impl NelderMeadState {
                 self.transform_point(&centroid, &reflected_point, self.config.gamma);
 
             self.phase = NelderMeadPhase::AwaitingExpansion {
-                centroid,
+                _centroid: centroid,
                 reflected_point,
                 reflected_value,
                 expanded_point,
@@ -741,5 +740,452 @@ mod tests {
         let results = nm.run(|x| rosenbrock(x), vec![0.0, 0.0], Bounds::unbounded(2));
 
         assert!(results.value < 1e-6);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Ask/Tell Interface Tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    fn sphere(x: &[f64]) -> Result<f64, std::io::Error> {
+        Ok(x.iter().map(|xi| xi * xi).sum())
+    }
+
+    #[test]
+    fn nelder_mead_ask_tell_basic_workflow() {
+        let optimizer = NelderMead::new().with_max_iter(100).with_threshold(1e-8);
+
+        let (mut state, first_point) = optimizer.init(vec![5.0], Bounds::unbounded(1));
+
+        let mut result = sphere(&first_point[0]);
+        loop {
+            state.tell(result).expect("tell should succeed");
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    result = sphere(&points[0]);
+                }
+                AskResult::Done(results) => {
+                    assert!(results.value < 1e-4, "Should converge to minimum");
+                    assert!(results.x[0].abs() < 1e-2, "x should be near 0");
+                    assert!(results.success, "Should report success");
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nelder_mead_ask_tell_matches_run() {
+        let optimizer = NelderMead::new()
+            .with_max_iter(200)
+            .with_threshold(1e-8)
+            .with_sigma0(1.0);
+
+        // Ask-tell version
+        let (mut state, first_point) = optimizer.init(vec![3.0, -2.0], Bounds::unbounded(2));
+
+        let mut result = sphere(&first_point[0]);
+        let ask_tell_results = loop {
+            state.tell(result).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    result = sphere(&points[0]);
+                }
+                AskResult::Done(results) => break results,
+            }
+        };
+
+        // .run() version
+        let run_results = optimizer.run(sphere, vec![3.0, -2.0], Bounds::unbounded(2));
+
+        // Should produce identical results (deterministic)
+        assert_eq!(ask_tell_results.iterations, run_results.iterations);
+        assert!((ask_tell_results.value - run_results.value).abs() < 1e-12);
+        assert_eq!(ask_tell_results.evaluations, run_results.evaluations);
+        for i in 0..2 {
+            assert!((ask_tell_results.x[i] - run_results.x[i]).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn nelder_mead_simplex_building_phase() {
+        let optimizer = NelderMead::new().with_sigma0(0.5);
+
+        let (mut state, first_point) = optimizer.init(vec![1.0, 1.0], Bounds::unbounded(2));
+
+        // First point should be the initial point
+        assert_eq!(first_point.len(), 1);
+        assert_eq!(first_point[0], vec![1.0, 1.0]);
+
+        // Evaluate first point
+        state.tell(sphere(&first_point[0])).unwrap();
+
+        // Next asks should build the simplex (n+1 points for n dimensions)
+        let mut simplex_build_count = 0;
+        loop {
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    assert_eq!(
+                        points.len(),
+                        1,
+                        "Should ask for one point at a time during simplex building"
+                    );
+                    simplex_build_count += 1;
+                    state.tell(sphere(&points[0])).unwrap();
+
+                    // For 2D problem, need 3 total points (1 initial + 2 to build simplex)
+                    if simplex_build_count == 2 {
+                        break;
+                    }
+                }
+                AskResult::Done(_) => {
+                    panic!("Should not terminate during simplex building");
+                }
+            }
+        }
+
+        assert_eq!(
+            simplex_build_count, 2,
+            "Should build 2 additional simplex points for 2D problem"
+        );
+    }
+
+    #[test]
+    fn nelder_mead_tell_already_terminated() {
+        let optimizer = NelderMead::new().with_max_iter(1).with_threshold(1e-10);
+
+        let (mut state, first_point) = optimizer.init(vec![0.0], Bounds::unbounded(1));
+
+        let mut result = sphere(&first_point[0]);
+        loop {
+            state.tell(result).expect("tell should succeed");
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    result = sphere(&points[0]);
+                }
+                AskResult::Done(_) => break,
+            }
+        }
+
+        // Now try to tell again after termination
+        let err = state.tell(Ok::<f64, std::io::Error>(1.0)).unwrap_err();
+        assert!(matches!(err, TellError::AlreadyTerminated));
+    }
+
+    // Note: NelderMead's ask-tell interface always requests one point at a time,
+    // so ResultCountMismatch errors are handled internally by the type system.
+    // This test is not applicable to NelderMead's current API.
+
+    #[test]
+    fn nelder_mead_handles_evaluation_errors() {
+        let optimizer = NelderMead::new().with_max_iter(50).with_threshold(1e-10);
+
+        let (mut state, first_point) = optimizer.init(vec![3.0, 3.0], Bounds::unbounded(2));
+
+        let mut eval_count = 0;
+        let mut result = sphere(&first_point[0]);
+        let mut error_injected = false;
+
+        loop {
+            state.tell(result).expect("tell should succeed");
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    // Inject an error on the 10th evaluation
+                    if eval_count == 10 {
+                        result = Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Simulated evaluation failure",
+                        ));
+                        error_injected = true;
+                    } else {
+                        result = sphere(&points[0]);
+                    }
+                    eval_count += 1;
+                }
+                AskResult::Done(results) => {
+                    // Should complete despite the error (error treated as high value)
+                    assert!(error_injected, "Should have injected error");
+                    // Just verify it completed without panicking
+                    assert!(results.evaluations > 10, "Should have many evaluations");
+                    break;
+                }
+            }
+        }
+    }
+
+    // Note: NelderMead doesn't expose query_best method currently.
+    // This test is not applicable to the current API.
+
+    #[test]
+    fn nelder_mead_respects_bounds_ask_tell() {
+        let optimizer = NelderMead::new().with_max_iter(100);
+
+        let bounds = Bounds::new(vec![(-1.0, 1.0), (-1.0, 1.0)]);
+        let (mut state, first_point) = optimizer.init(vec![0.8, 0.8], bounds);
+
+        let mut result = sphere(&first_point[0]);
+        loop {
+            state.tell(result).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    // Check all proposed points respect bounds
+                    for point in &points {
+                        for &val in point {
+                            assert!(
+                                val >= -1.0 && val <= 1.0,
+                                "Point {:?} violates bounds",
+                                point
+                            );
+                        }
+                    }
+                    result = sphere(&points[0]);
+                }
+                AskResult::Done(results) => {
+                    // Final result should also respect bounds
+                    for &val in &results.x {
+                        assert!(val >= -1.0 && val <= 1.0, "Final result violates bounds");
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nelder_mead_convergence_by_threshold() {
+        let optimizer = NelderMead::new().with_max_iter(500).with_threshold(1e-6);
+
+        let (mut state, first_point) = optimizer.init(vec![3.0, 3.0], Bounds::unbounded(2));
+
+        let mut result = sphere(&first_point[0]);
+        loop {
+            state.tell(result).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    result = sphere(&points[0]);
+                }
+                AskResult::Done(results) => {
+                    // Should converge by threshold, not max iterations
+                    assert!(
+                        results.iterations < 500,
+                        "Should converge before max iterations"
+                    );
+                    assert!(results.value < 1e-6, "Should meet threshold requirement");
+                    assert!(results.success, "Should report success");
+                    // Message can vary depending on exact convergence condition
+                    assert!(
+                        results.message.contains("tolerance")
+                            || results.message.contains("Converged"),
+                        "Message should indicate convergence"
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nelder_mead_termination_by_max_iter() {
+        let optimizer = NelderMead::new().with_max_iter(10).with_threshold(1e-12); // Very strict threshold
+
+        let (mut state, first_point) = optimizer.init(vec![5.0], Bounds::unbounded(1));
+
+        let mut result = sphere(&first_point[0]);
+        loop {
+            state.tell(result).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    result = sphere(&points[0]);
+                }
+                AskResult::Done(results) => {
+                    assert_eq!(results.iterations, 10, "Should terminate at max iterations");
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nelder_mead_patience_termination() {
+        use std::thread;
+        use std::time::Duration;
+
+        let optimizer = NelderMead::new().with_max_iter(500).with_patience(0.001); // 1 millisecond patience
+
+        // Start near minimum so it gets stuck
+        let (mut state, first_point) = optimizer.init(vec![0.01, 0.01], Bounds::unbounded(2));
+
+        let mut result = sphere(&first_point[0]);
+        loop {
+            state.tell(result).unwrap();
+
+            // Add small delay to trigger patience timeout
+            thread::sleep(Duration::from_millis(2));
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    result = sphere(&points[0]);
+                }
+                AskResult::Done(results) => {
+                    // Should terminate by patience before max iterations
+                    assert!(
+                        results.iterations < 500,
+                        "Should terminate early due to patience"
+                    );
+                    // Patience message may not always appear in message string
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nelder_mead_position_tolerance() {
+        let optimizer = NelderMead::new()
+            .with_max_iter(500)
+            .with_position_tolerance(1e-8);
+
+        let (mut state, first_point) = optimizer.init(vec![2.0, 2.0], Bounds::unbounded(2));
+
+        let mut result = sphere(&first_point[0]);
+        loop {
+            state.tell(result).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    result = sphere(&points[0]);
+                }
+                AskResult::Done(results) => {
+                    // Should converge and report position tolerance
+                    assert!(results.success, "Should succeed");
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nelder_mead_multidimensional() {
+        let optimizer = NelderMead::new().with_max_iter(300).with_threshold(1e-6);
+
+        // 5D sphere function
+        let (mut state, first_point) =
+            optimizer.init(vec![2.0, -3.0, 1.5, -1.0, 2.5], Bounds::unbounded(5));
+
+        let mut result = sphere(&first_point[0]);
+        loop {
+            state.tell(result).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    assert_eq!(points[0].len(), 5, "Should maintain dimensionality");
+                    result = sphere(&points[0]);
+                }
+                AskResult::Done(results) => {
+                    assert_eq!(results.x.len(), 5, "Result should have 5 dimensions");
+                    assert!(results.value < 1e-4, "Should converge to minimum");
+                    for &x in &results.x {
+                        assert!(x.abs() < 0.1, "Each coordinate should be near 0");
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nelder_mead_rosenbrock_ask_tell() {
+        let optimizer = NelderMead::new().with_max_iter(800).with_threshold(1e-6);
+
+        let (mut state, first_point) = optimizer.init(vec![0.0, 0.0], Bounds::unbounded(2));
+
+        let mut result = rosenbrock(&first_point[0]);
+        loop {
+            state.tell(result).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    result = rosenbrock(&points[0]);
+                }
+                AskResult::Done(results) => {
+                    assert!(results.value < 1e-5, "Should converge on Rosenbrock");
+                    assert!((results.x[0] - 1.0).abs() < 0.01, "x[0] should be near 1");
+                    assert!((results.x[1] - 1.0).abs() < 0.01, "x[1] should be near 1");
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nelder_mead_state_machine_integrity() {
+        let optimizer = NelderMead::new().with_max_iter(20);
+
+        let (mut state, first_point) = optimizer.init(vec![1.0], Bounds::unbounded(1));
+
+        // Cannot call ask before tell for first point
+        state.tell(sphere(&first_point[0])).unwrap();
+
+        let mut ask_count = 0;
+        let mut tell_count = 1; // Already told once
+
+        loop {
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    ask_count += 1;
+                    state.tell(sphere(&points[0])).unwrap();
+                    tell_count += 1;
+                }
+                AskResult::Done(_) => break,
+            }
+        }
+
+        // Should have same number of asks and tells (after initial tell)
+        assert_eq!(
+            ask_count + 1,
+            tell_count,
+            "Ask/tell calls should be balanced"
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Error Handling Tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn nelder_mead_nonfinite_handling() {
+        let optimizer = NelderMead::new().with_max_iter(50);
+
+        let (mut state, first_point) = optimizer.init(vec![1.0], Bounds::unbounded(1));
+
+        let mut iteration = 0;
+        let mut result = sphere(&first_point[0]);
+
+        loop {
+            state.tell(result).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    // Return NaN on iteration 3
+                    if iteration == 3 {
+                        result = Ok(f64::NAN);
+                    } else {
+                        result = sphere(&points[0]);
+                    }
+                    iteration += 1;
+                }
+                AskResult::Done(results) => {
+                    // Should handle NaN and continue
+                    assert!(results.value.is_finite(), "Final value should be finite");
+                    break;
+                }
+            }
+        }
     }
 }

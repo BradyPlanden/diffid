@@ -278,7 +278,7 @@ impl PyDynamicNestedSampler {
     #[pyo3(signature = (problem, initial=None))]
     fn run(&self, problem: &PyProblem, initial: Option<Vec<f64>>) -> PyNestedSamples {
         let initial = initial.unwrap_or_else(|| problem.inner.default_parameters());
-        let nested = self.inner.run_nested(&problem.inner, initial);
+        let nested = self.inner.run(&problem.inner, initial);
         PyNestedSamples { inner: nested }
     }
 }

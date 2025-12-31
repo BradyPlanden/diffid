@@ -6,7 +6,7 @@ mod diffsol_problem;
 
 use crate::common::{Bounds, Unbounded};
 use crate::cost::CostMetric;
-use crate::optimisers::{OptimisationResults, Optimiser};
+use crate::prelude::{OptimisationResults, Optimiser, Sampler, SamplingResults};
 pub use diffsol_problem::DiffsolObjective;
 
 pub struct NoGradient;
@@ -319,14 +319,16 @@ pub struct Problem<O: Objective> {
     objective: O,
     parameters: ParameterSet,
     optimiser: Optimiser,
+    sampler: Sampler,
 }
 
 impl<O: Objective> Problem<O> {
-    pub fn new(objective: O, parameters: ParameterSet, optimiser: Optimiser) -> Self {
+    pub fn new(objective: O, parameters: ParameterSet) -> Self {
         Self {
             objective,
             parameters,
-            optimiser,
+            optimiser: Optimiser::default(),
+            sampler: Sampler::default(),
         }
     }
 
@@ -357,6 +359,7 @@ impl<O: Objective> Problem<O> {
         self.parameters.iter().map(|s| s.initial_value).collect()
     }
 
+    /// A convenience function for optimisation of the problem
     pub fn optimize(
         &self,
         initial: Option<Vec<f64>>,
@@ -406,6 +409,22 @@ impl<O: Objective> Problem<O> {
             }
         }
     }
+
+    /// A convenience function for sampling the posterior
+    pub fn sample(&self, initial: Option<Vec<f64>>, sampler: Option<&Sampler>) -> SamplingResults {
+        let x0 = initial.unwrap_or_else(|| self.default_parameters());
+
+        let sampler = sampler.or(Some(&self.sampler)).cloned().unwrap_or_default();
+
+        match sampler {
+            Sampler::Scalar(scalar_sampler) => {
+                scalar_sampler.run(|x| self.evaluate(x), x0, self.parameters.bounds())
+            }
+            Sampler::Gradient(_grad_sampler) => {
+                unimplemented!("Gradient samplers not yet implemented")
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -444,7 +463,7 @@ mod tests {
         params.push(ParameterSpec::new("r", 1.0, 0.0..=3.0));
         params.push(ParameterSpec::new("y0", 1.0, 0.0..=5.0));
 
-        let problem = Problem::new(objective, params, Optimiser::default());
+        let problem = Problem::new(objective, params);
 
         // Test with true parameters
         let cost = problem
@@ -477,7 +496,7 @@ mod tests {
         )
         .expect("failed to create vector objective");
 
-        let problem = Problem::new(objective, ParameterSet::new(), Optimiser::default());
+        let problem = Problem::new(objective, ParameterSet::new());
 
         let result = problem.evaluate(&[1.0]);
         assert!(result.is_err(), "expected error for dimension mismatch");
@@ -507,7 +526,7 @@ mod tests {
         )
         .expect("failed to create vector objective");
 
-        let problem = Problem::new(objective, ParameterSet::new(), Optimiser::default());
+        let problem = Problem::new(objective, ParameterSet::new());
 
         let population = vec![vec![1.0], vec![0.5], vec![1.5], vec![2.0]];
 
@@ -545,7 +564,7 @@ mod tests {
         )
         .expect("failed to create vector objective");
 
-        let problem = Problem::new(objective, ParameterSet::new(), Optimiser::default());
+        let problem = Problem::new(objective, ParameterSet::new());
 
         // Perfect fit
         let cost = problem.evaluate(&[0.0]).expect("evaluation failed");

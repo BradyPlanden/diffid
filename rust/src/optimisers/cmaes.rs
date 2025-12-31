@@ -5,9 +5,8 @@ use crate::optimisers::{
 };
 use nalgebra::{DMatrix, DVector};
 use rand::prelude::*;
-use rand_distr::{Distribution, StandardNormal};
+use rand_distr::StandardNormal;
 use std::cmp::Ordering;
-use std::error::Error as StdError;
 use std::time::{Duration, Instant};
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -721,6 +720,7 @@ impl CMAES {
 
     /// Run optimization with parallel evaluation
     #[cfg(feature = "rayon")]
+    #[allow(dead_code)]
     pub fn run_parallel<F>(
         &self,
         initial: Point,
@@ -992,6 +992,580 @@ mod tests {
 
         for (exp, got) in expected.iter().zip(updated.iter()) {
             assert!((exp - got).abs() < 1e-12, "expected {} got {}", exp, got);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Ask/Tell Interface Tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    fn sphere_cmaes(x: &[f64]) -> Result<f64, std::io::Error> {
+        Ok(x.iter().map(|xi| xi * xi).sum())
+    }
+
+    #[test]
+    fn cmaes_ask_tell_basic_workflow() {
+        let optimizer = CMAES::new()
+            .with_max_iter(100)
+            .with_threshold(1e-6)
+            .with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![3.0, -2.0], Bounds::unbounded(2));
+
+        // CMAES asks for population of points
+        let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
+
+        loop {
+            state.tell(results).expect("tell should succeed");
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    results = points.iter().map(|p| sphere_cmaes(p)).collect();
+                }
+                AskResult::Done(final_results) => {
+                    assert!(final_results.value < 1e-4, "Should converge to minimum");
+                    assert!(final_results.x[0].abs() < 0.1, "x[0] should be near 0");
+                    assert!(final_results.x[1].abs() < 0.1, "x[1] should be near 0");
+                    assert!(final_results.success, "Should report success");
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cmaes_ask_tell_matches_run() {
+        let optimizer = CMAES::new()
+            .with_max_iter(80)
+            .with_threshold(1e-6)
+            .with_seed(123);
+
+        // Ask-tell version
+        let (mut state, first_point) = optimizer.init(vec![5.0, -5.0], Bounds::unbounded(2));
+
+        let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
+        let ask_tell_results = loop {
+            state.tell(results).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    results = points.iter().map(|p| sphere_cmaes(p)).collect();
+                }
+                AskResult::Done(final_results) => break final_results,
+            }
+        };
+
+        // .run() version
+        let run_results = optimizer.run(sphere_cmaes, vec![5.0, -5.0], Bounds::unbounded(2));
+
+        // Should produce identical results (deterministic with same seed)
+        assert_eq!(ask_tell_results.iterations, run_results.iterations);
+        assert!((ask_tell_results.value - run_results.value).abs() < 1e-12);
+        assert_eq!(ask_tell_results.evaluations, run_results.evaluations);
+    }
+
+    #[test]
+    fn cmaes_population_evaluation_batching() {
+        let optimizer = CMAES::new().with_population_size(10).with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![1.0, 1.0], Bounds::unbounded(2));
+
+        // Evaluate initial point
+        let mut results = vec![sphere_cmaes(&first_point)];
+        state.tell(results).unwrap();
+
+        // First ask should request population_size points
+        match state.ask() {
+            AskResult::Evaluate(points) => {
+                assert_eq!(points.len(), 10, "Should request population_size points");
+                results = points.iter().map(|p| sphere_cmaes(p)).collect();
+                state.tell(results).unwrap();
+            }
+            AskResult::Done(_) => panic!("Should not terminate on first ask"),
+        }
+
+        // Subsequent asks should also request population_size points
+        match state.ask() {
+            AskResult::Evaluate(points) => {
+                assert_eq!(
+                    points.len(),
+                    10,
+                    "Should consistently request population_size points"
+                );
+            }
+            AskResult::Done(_) => panic!("Should not terminate immediately"),
+        }
+    }
+
+    #[test]
+    fn cmaes_tell_already_terminated() {
+        let optimizer = CMAES::new()
+            .with_max_iter(1)
+            .with_threshold(1e-10)
+            .with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![0.0], Bounds::unbounded(1));
+
+        let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
+        loop {
+            state.tell(results).expect("tell should succeed");
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    results = points.iter().map(|p| sphere_cmaes(p)).collect();
+                }
+                AskResult::Done(_) => break,
+            }
+        }
+
+        // Now try to tell again after termination
+        let err = state
+            .tell(
+                (0..5)
+                    .map(|_| Ok::<f64, std::io::Error>(1.0))
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap_err();
+        assert!(matches!(err, TellError::AlreadyTerminated));
+    }
+
+    #[test]
+    fn cmaes_result_count_mismatch() {
+        let optimizer = CMAES::new().with_population_size(8).with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![1.0], Bounds::unbounded(1));
+
+        // Evaluate initial point
+        state.tell(vec![sphere_cmaes(&first_point)]).unwrap();
+
+        // Get first ask which should request 8 points (population_size)
+        match state.ask() {
+            AskResult::Evaluate(points) => {
+                assert_eq!(points.len(), 8, "Should request 8 points");
+
+                // Provide wrong number of results (should be 8, provide 5)
+                let wrong_results: Vec<Result<f64, std::io::Error>> =
+                    (0..5).map(|_| Ok(1.0)).collect();
+                let err = state.tell(wrong_results).unwrap_err();
+                assert!(matches!(
+                    err,
+                    TellError::ResultCountMismatch {
+                        expected: 8,
+                        got: 5
+                    }
+                ));
+            }
+            AskResult::Done(_) => panic!("Should not be done yet"),
+        }
+    }
+
+    #[test]
+    fn cmaes_handles_evaluation_errors() {
+        let optimizer = CMAES::new()
+            .with_max_iter(20)
+            .with_population_size(6)
+            .with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![2.0, 2.0], Bounds::unbounded(2));
+
+        let mut generation = 0;
+        let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
+
+        loop {
+            state.tell(results).expect("tell should succeed");
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    // Inject errors in some population members on generation 3
+                    results = points
+                        .iter()
+                        .enumerate()
+                        .map(|(i, p)| {
+                            if generation == 3 && i < 2 {
+                                Err(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    "Simulated failure",
+                                ))
+                            } else {
+                                sphere_cmaes(&p[..])
+                            }
+                        })
+                        .collect();
+                    generation += 1;
+                }
+                AskResult::Done(final_results) => {
+                    // Should complete despite errors
+                    assert!(final_results.iterations > 3, "Should continue past error");
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cmaes_respects_bounds_ask_tell() {
+        let optimizer = CMAES::new().with_max_iter(50).with_seed(42);
+
+        let bounds = Bounds::new(vec![(-2.0, 2.0), (-2.0, 2.0)]);
+        let (mut state, first_point) = optimizer.init(vec![1.5, 1.5], bounds);
+
+        // Check initial point respects bounds
+        for &val in &first_point[..] {
+            assert!(
+                val >= -2.0 && val <= 2.0,
+                "Initial point {:?} violates bounds",
+                first_point
+            );
+        }
+
+        let mut results = vec![sphere_cmaes(&first_point)];
+
+        loop {
+            state.tell(results).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    // Check all proposed points respect bounds
+                    for point in &points {
+                        for &val in point {
+                            assert!(
+                                val >= -2.0 && val <= 2.0,
+                                "Point {:?} violates bounds",
+                                point
+                            );
+                        }
+                    }
+                    results = points.iter().map(|p| sphere_cmaes(p)).collect();
+                }
+                AskResult::Done(final_results) => {
+                    // Final result should also respect bounds
+                    for &val in &final_results.x {
+                        assert!(val >= -2.0 && val <= 2.0, "Final result violates bounds");
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cmaes_convergence_by_threshold() {
+        let optimizer = CMAES::new()
+            .with_max_iter(200)
+            .with_threshold(1e-6)
+            .with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![4.0, -3.0], Bounds::unbounded(2));
+
+        let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
+        loop {
+            state.tell(results).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    results = points.iter().map(|p| sphere_cmaes(p)).collect();
+                }
+                AskResult::Done(final_results) => {
+                    // Should converge by threshold, not max iterations
+                    assert!(
+                        final_results.iterations < 200,
+                        "Should converge before max iterations"
+                    );
+                    assert!(
+                        final_results.value < 1e-6,
+                        "Should meet threshold requirement"
+                    );
+                    assert!(final_results.success, "Should report success");
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cmaes_termination_by_max_iter() {
+        let optimizer = CMAES::new()
+            .with_max_iter(5)
+            .with_threshold(1e-12) // Very strict threshold
+            .with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![8.0], Bounds::unbounded(1));
+
+        let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
+        loop {
+            state.tell(results).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    results = points.iter().map(|p| sphere_cmaes(p)).collect();
+                }
+                AskResult::Done(final_results) => {
+                    assert_eq!(
+                        final_results.iterations, 5,
+                        "Should terminate at max iterations"
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cmaes_covariance_evolution() {
+        let optimizer = CMAES::new().with_max_iter(30).with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![5.0, 5.0], Bounds::unbounded(2));
+
+        let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
+        let mut iterations = 0;
+
+        loop {
+            state.tell(results).unwrap();
+
+            iterations += 1;
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    // Verify population size is consistent
+                    assert!(points.len() > 0, "Should have population");
+                    results = points.iter().map(|p| sphere_cmaes(p)).collect();
+                }
+                AskResult::Done(final_results) => {
+                    // Should have done multiple iterations to evolve covariance
+                    assert!(iterations > 5, "Should run multiple iterations");
+                    assert!(
+                        final_results.evaluations > iterations,
+                        "Evaluations should exceed iterations"
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cmaes_sigma_adaptation() {
+        let optimizer = CMAES::new()
+            .with_max_iter(50)
+            .with_sigma0(0.5)
+            .with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![3.0], Bounds::unbounded(1));
+
+        let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
+
+        loop {
+            state.tell(results).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    // Sigma should adapt over time; verify points are being generated
+                    assert!(points.len() > 0, "Should generate points");
+                    results = points.iter().map(|p| sphere_cmaes(p)).collect();
+                }
+                AskResult::Done(final_results) => {
+                    // Should converge despite starting sigma
+                    assert!(final_results.value < 1.0, "Should improve significantly");
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cmaes_multidimensional() {
+        let optimizer = CMAES::new()
+            .with_max_iter(150)
+            .with_threshold(1e-5)
+            .with_seed(777);
+
+        // 6D sphere function
+        let (mut state, first_point) =
+            optimizer.init(vec![3.0, -2.0, 1.5, -1.0, 2.5, -3.5], Bounds::unbounded(6));
+
+        let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
+
+        loop {
+            state.tell(results).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    assert_eq!(points[0].len(), 6, "Should maintain dimensionality");
+                    results = points.iter().map(|p| sphere_cmaes(p)).collect();
+                }
+                AskResult::Done(final_results) => {
+                    assert_eq!(final_results.x.len(), 6, "Result should have 6 dimensions");
+                    assert!(final_results.value < 1e-3, "Should converge to minimum");
+                    for &x in &final_results.x {
+                        assert!(x.abs() < 0.5, "Each coordinate should be near 0");
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    fn rosenbrock_cmaes(x: &[f64]) -> Result<f64, std::io::Error> {
+        let a = 1.0;
+        let b = 100.0;
+        let x0 = x[0];
+        let x1 = x[1];
+        Ok((a - x0).powi(2) + b * (x1 - x0.powi(2)).powi(2))
+    }
+
+    #[test]
+    fn cmaes_rosenbrock_ask_tell() {
+        let optimizer = CMAES::new()
+            .with_max_iter(300)
+            .with_threshold(1e-5)
+            .with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![0.0, 0.0], Bounds::unbounded(2));
+
+        let mut results: Vec<_> = vec![rosenbrock_cmaes(&first_point)];
+
+        loop {
+            state.tell(results).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    results = points.iter().map(|p| rosenbrock_cmaes(p)).collect();
+                }
+                AskResult::Done(final_results) => {
+                    assert!(final_results.value < 1e-3, "Should converge on Rosenbrock");
+                    assert!(
+                        (final_results.x[0] - 1.0).abs() < 0.1,
+                        "x[0] should be near 1"
+                    );
+                    assert!(
+                        (final_results.x[1] - 1.0).abs() < 0.1,
+                        "x[1] should be near 1"
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cmaes_state_machine_integrity() {
+        let optimizer = CMAES::new()
+            .with_max_iter(15)
+            .with_population_size(6)
+            .with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![1.0], Bounds::unbounded(1));
+
+        let mut ask_count = 0;
+        let mut tell_count = 1; // Initial tell about to happen
+
+        let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
+
+        loop {
+            state.tell(results).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    ask_count += 1;
+                    results = points.iter().map(|p| sphere_cmaes(p)).collect();
+                    tell_count += 1;
+                }
+                AskResult::Done(_) => break,
+            }
+        }
+
+        // Should have same number of asks and tells (after initial tell)
+        assert_eq!(
+            ask_count + 1,
+            tell_count,
+            "Ask/tell calls should be balanced"
+        );
+    }
+
+    #[test]
+    fn cmaes_nonfinite_handling() {
+        let optimizer = CMAES::new()
+            .with_max_iter(30)
+            .with_population_size(5)
+            .with_seed(42);
+
+        let (mut state, first_point) = optimizer.init(vec![2.0], Bounds::unbounded(1));
+
+        let mut generation = 0;
+        let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
+
+        loop {
+            state.tell(results).unwrap();
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    // Return NaN for one member on generation 5
+                    results = points
+                        .iter()
+                        .enumerate()
+                        .map(|(i, p)| {
+                            if generation == 5 && i == 0 {
+                                Ok(f64::NAN)
+                            } else {
+                                sphere_cmaes(&p[..])
+                            }
+                        })
+                        .collect();
+                    generation += 1;
+                }
+                AskResult::Done(final_results) => {
+                    // Should handle NaN and continue
+                    assert!(
+                        final_results.value.is_finite(),
+                        "Final value should be finite"
+                    );
+                    assert!(generation > 5, "Should continue past NaN");
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cmaes_reproducibility_with_seed() {
+        let seed = 999;
+
+        let optimizer1 = CMAES::new().with_max_iter(50).with_seed(seed);
+
+        let (mut state1, first_point1) = optimizer1.init(vec![2.0, -1.0], Bounds::unbounded(2));
+        let mut results1 = vec![sphere_cmaes(&first_point1)];
+
+        let result1 = loop {
+            state1.tell(results1).unwrap();
+            match state1.ask() {
+                AskResult::Evaluate(points) => {
+                    results1 = points.iter().map(|p| sphere_cmaes(p)).collect();
+                }
+                AskResult::Done(r) => break r,
+            }
+        };
+
+        let optimizer2 = CMAES::new().with_max_iter(50).with_seed(seed);
+
+        let (mut state2, first_point2) = optimizer2.init(vec![2.0, -1.0], Bounds::unbounded(2));
+        let mut results2 = vec![sphere_cmaes(&first_point2)];
+
+        let result2 = loop {
+            state2.tell(results2).unwrap();
+            match state2.ask() {
+                AskResult::Evaluate(points) => {
+                    results2 = points.iter().map(|p| sphere_cmaes(p)).collect();
+                }
+                AskResult::Done(r) => break r,
+            }
+        };
+
+        // With same seed, should produce identical results
+        assert_eq!(result1.iterations, result2.iterations);
+        assert_eq!(result1.evaluations, result2.evaluations);
+        assert!((result1.value - result2.value).abs() < 1e-12);
+        for i in 0..result1.x.len() {
+            assert!((result1.x[i] - result2.x[i]).abs() < 1e-12);
         }
     }
 }

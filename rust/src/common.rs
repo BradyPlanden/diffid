@@ -91,9 +91,9 @@ impl Bounds {
     /// ```
     /// use chronopt::common::Bounds;
     ///
-    /// let initial = vec![(0.0, 1.0)];
-    /// let bounds = Bounds::unbounded_like(&initial))
-    /// assert_eq!(bounds.dimension, 1)
+    /// let initial = [0.0];
+    /// let bounds = Bounds::unbounded_like(&initial);
+    /// assert_eq!(bounds.dimension(), 1)
     /// ```
     pub fn unbounded_like<T: AsRef<[f64]>>(point: T) -> Self {
         Self::unbounded(point.as_ref().len())
@@ -187,7 +187,7 @@ impl Bounds {
                     };
                     let sigma = scale;
                     let offset = rng.sample::<f64, _>(StandardNormal);
-                    (base + offset * sigma)
+                    base + offset * sigma
                 }
             })
             .collect()
@@ -207,7 +207,7 @@ impl From<Vec<(f64, f64)>> for Bounds {
     /// ```
     fn from(tuples: Vec<(f64, f64)>) -> Self {
         Self {
-            limits: tuples.into_iter().map(|(lo, hi)| (lo..=hi)).collect(),
+            limits: tuples.into_iter().map(|(lo, hi)| lo..=hi).collect(),
         }
     }
 }

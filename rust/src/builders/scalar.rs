@@ -92,7 +92,7 @@ where
         let objective = ScalarObjective::new(self.f);
 
         // Build problem
-        Ok(Problem::new(objective, self.parameters, self.optimiser))
+        Ok(Problem::new(objective, self.parameters))
     }
 }
 
@@ -105,6 +105,6 @@ where
     pub fn build(self) -> Result<Problem<ScalarObjective<F, G>>, ProblemBuilderError> {
         // Build objective
         let objective = ScalarObjective::with_gradient(self.f, self.gradient);
-        Ok(Problem::new(objective, self.parameters, self.optimiser))
+        Ok(Problem::new(objective, self.parameters))
     }
 }

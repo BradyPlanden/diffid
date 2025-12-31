@@ -86,7 +86,7 @@ F_i { (r * y) * (1 - (y / k)) }
         // Test that we can evaluate the problems
         let x0 = vec![1.0, 1.0]; // r, k parameters
         let cost = problem.evaluate(&x0).unwrap();
-        let cost2 = problem.evaluate(&x0).unwrap();
+        let cost2 = problem2.evaluate(&x0).unwrap();
 
         assert_eq!(cost, cost2);
     }

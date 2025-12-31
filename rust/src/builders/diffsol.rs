@@ -2,7 +2,6 @@ use super::{ParameterSet, ProblemBuilderError};
 use crate::cost::{CostMetric, SumSquaredError};
 use crate::prelude::{Optimiser, ParameterSpec};
 use crate::problem::{DiffsolObjective, ParameterRange, Problem};
-use diffsol::OdeSolverMethod;
 use nalgebra::DMatrix;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -213,6 +212,6 @@ impl DiffsolProblemBuilder {
         let objective = DiffsolObjective::new(equations, t_span, data, self.config, costs);
 
         // Build problem
-        Ok(Problem::new(objective, self.parameters, self.optimiser))
+        Ok(Problem::new(objective, self.parameters))
     }
 }

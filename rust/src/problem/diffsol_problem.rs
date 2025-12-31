@@ -11,8 +11,11 @@ use diffsol::{
 use nalgebra::DMatrix;
 
 use rayon::prelude::*;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ops::Index;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 #[cfg(feature = "cranelift-backend")]
@@ -35,8 +38,24 @@ type SparseSolver = FaerSparseLU<f64>;
 
 const FAILED_SOLVE_PENALTY: f64 = 1e5;
 
+// Global ID counter for unique objective identification
+static NEXT_OBJECTIVE_ID: AtomicUsize = AtomicUsize::new(1);
+
+// Cache structure to hold simulator and its last parameters
+struct CachedSimulator {
+    simulator: DiffsolSimulator,
+    last_params: Vec<f64>,
+}
+
+// Thread-local cache: each thread maintains its own cache of simulators
+thread_local! {
+    static SIMULATOR_CACHE: RefCell<HashMap<usize, CachedSimulator>>
+        = RefCell::new(HashMap::new());
+}
+
 /// Diffsol Objective
 pub struct DiffsolObjective {
+    id: usize,
     dsl: String,
     t_span: Vec<f64>,
     data: DMatrix<f64>,
@@ -52,7 +71,9 @@ impl DiffsolObjective {
         config: DiffsolConfig,
         costs: Vec<Arc<dyn CostMetric>>,
     ) -> Self {
+        let id = NEXT_OBJECTIVE_ID.fetch_add(1, Ordering::Relaxed);
         Self {
+            id,
             dsl,
             t_span,
             data,
@@ -85,12 +106,42 @@ impl DiffsolObjective {
         }
     }
 
-    fn with_simulator<F, R>(&self, f: F) -> Result<R, ProblemError>
+    fn with_simulator_cached<F, R>(&self, params: &[f64], f: F) -> Result<R, ProblemError>
     where
         F: FnOnce(&mut DiffsolSimulator) -> Result<R, ProblemError>,
     {
-        let mut simulator = self.build_simulator()?;
-        f(&mut simulator)
+        SIMULATOR_CACHE.with(|cache| {
+            let mut cache_map = cache.borrow_mut();
+
+            let cached = match cache_map.entry(self.id) {
+                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    let simulator = self.build_simulator()?;
+                    entry.insert(CachedSimulator {
+                        simulator,
+                        last_params: Vec::new(),
+                    })
+                }
+            };
+
+            if cached.last_params.as_slice() != params {
+                match &mut cached.simulator {
+                    DiffsolSimulator::Dense(p) => {
+                        let ctx = *p.eqn().context();
+                        p.eqn_mut()
+                            .set_params(&DenseVector::from_vec(params.to_vec(), ctx));
+                    }
+                    DiffsolSimulator::Sparse(p) => {
+                        let ctx = *p.eqn().context();
+                        p.eqn_mut()
+                            .set_params(&SparseVector::from_vec(params.to_vec(), ctx));
+                    }
+                }
+                cached.last_params = params.to_vec();
+            }
+
+            f(&mut cached.simulator)
+        })
     }
 
     /// Helper to solve with panic recovery
@@ -174,12 +225,8 @@ impl DiffsolObjective {
 
 impl Objective for DiffsolObjective {
     fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
-        self.with_simulator(|problem| match problem {
+        self.with_simulator_cached(x, |problem| match problem {
             DiffsolSimulator::Dense(p) => {
-                let ctx = *p.eqn().context();
-                p.eqn_mut()
-                    .set_params(&DenseVector::from_vec(x.to_vec(), ctx));
-
                 let solver_result = p.bdf::<DenseSolver>();
                 let mut solver = match solver_result {
                     Ok(s) => s,
@@ -192,10 +239,6 @@ impl Objective for DiffsolObjective {
                 }
             }
             DiffsolSimulator::Sparse(p) => {
-                let ctx = *p.eqn().context();
-                p.eqn_mut()
-                    .set_params(&SparseVector::from_vec(x.to_vec(), ctx));
-
                 let solver_result = p.bdf::<SparseSolver>();
                 let mut solver = match solver_result {
                     Ok(s) => s,
@@ -211,12 +254,8 @@ impl Objective for DiffsolObjective {
     }
 
     fn evaluate_with_gradient(&self, x: &[f64]) -> Result<(f64, Option<Vec<f64>>), ProblemError> {
-        self.with_simulator(|problem| match problem {
+        self.with_simulator_cached(x, |problem| match problem {
             DiffsolSimulator::Dense(p) => {
-                let ctx = *p.eqn().context();
-                p.eqn_mut()
-                    .set_params(&DenseVector::from_vec(x.to_vec(), ctx));
-
                 let mut solver = p
                     .bdf_sens::<DenseSolver>()
                     .map_err(|e| ProblemError::SolverError(e.to_string()))?;
@@ -242,6 +281,14 @@ impl Objective for DiffsolObjective {
     fn has_gradient(&self) -> bool {
         // Check the backend config
         matches!(self.config.backend, DiffsolBackend::Dense)
+    }
+}
+
+impl Drop for DiffsolObjective {
+    fn drop(&mut self) {
+        SIMULATOR_CACHE.with(|cache| {
+            cache.borrow_mut().remove(&self.id);
+        });
     }
 }
 
@@ -381,5 +428,128 @@ F_i { (r * y) * (1 - (y / k)) }
                 diff
             );
         }
+    }
+
+    #[test]
+    fn test_cache_reuses_simulator() {
+        let problem = build_logistic_problem(DiffsolBackend::Dense);
+        let params1 = [1.0_f64, 1.0_f64];
+        let params2 = [1.1_f64, 0.9_f64];
+
+        // First evaluation - should build simulator
+        let cost1 = problem.evaluate(&params1).expect("First evaluation failed");
+        assert!(cost1.is_finite());
+
+        // Second evaluation with different params - should reuse simulator
+        let cost2 = problem
+            .evaluate(&params2)
+            .expect("Second evaluation failed");
+        assert!(cost2.is_finite());
+
+        // Third evaluation with same params as second - should reuse and skip set_params
+        let cost3 = problem.evaluate(&params2).expect("Third evaluation failed");
+        assert!(
+            (cost2 - cost3).abs() < 1e-10,
+            "Same params should give same cost"
+        );
+
+        // Verify cache contains entry
+        SIMULATOR_CACHE.with(|cache| {
+            assert!(
+                cache.borrow().contains_key(&problem.id),
+                "Cache should contain problem"
+            );
+        });
+    }
+
+    #[test]
+    fn test_cache_per_thread() {
+        use std::thread;
+
+        let problem = build_logistic_problem(DiffsolBackend::Dense);
+        let params = [1.0_f64, 1.0_f64];
+
+        // Evaluate in main thread
+        problem
+            .evaluate(&params)
+            .expect("Main thread evaluation failed");
+
+        let main_thread_has_cache =
+            SIMULATOR_CACHE.with(|cache| cache.borrow().contains_key(&problem.id));
+        assert!(main_thread_has_cache, "Main thread should have cache entry");
+
+        // Spawn a new thread and verify it has separate cache
+        let handle = thread::spawn(move || {
+            SIMULATOR_CACHE.with(|cache| cache.borrow().contains_key(&problem.id))
+        });
+
+        let other_thread_has_cache = handle.join().expect("Thread join failed");
+        assert!(
+            !other_thread_has_cache,
+            "Other thread should not have cache entry initially"
+        );
+    }
+
+    #[test]
+    fn test_cache_cleanup_on_drop() {
+        let problem_id = {
+            let problem = build_logistic_problem(DiffsolBackend::Dense);
+            let params = [1.0_f64, 1.0_f64];
+
+            problem.evaluate(&params).expect("Evaluation failed");
+
+            // Verify cache has entry
+            SIMULATOR_CACHE.with(|cache| {
+                assert!(
+                    cache.borrow().contains_key(&problem.id),
+                    "Cache should contain problem"
+                );
+            });
+
+            problem.id
+        }; // problem dropped here
+
+        // Verify cache was cleaned up
+        SIMULATOR_CACHE.with(|cache| {
+            assert!(
+                !cache.borrow().contains_key(&problem_id),
+                "Cache should not contain dropped problem"
+            );
+        });
+    }
+
+    #[test]
+    fn test_multiple_objectives_different_caches() {
+        let problem1 = build_logistic_problem(DiffsolBackend::Dense);
+        let problem2 = build_logistic_problem(DiffsolBackend::Dense);
+        let params = [1.0_f64, 1.0_f64];
+
+        // Verify different IDs
+        assert_ne!(
+            problem1.id, problem2.id,
+            "Different problems should have different IDs"
+        );
+
+        // Evaluate both
+        problem1
+            .evaluate(&params)
+            .expect("Problem 1 evaluation failed");
+        problem2
+            .evaluate(&params)
+            .expect("Problem 2 evaluation failed");
+
+        // Verify both have cache entries
+        SIMULATOR_CACHE.with(|cache| {
+            let cache_map = cache.borrow();
+            assert!(
+                cache_map.contains_key(&problem1.id),
+                "Cache should contain problem1"
+            );
+            assert!(
+                cache_map.contains_key(&problem2.id),
+                "Cache should contain problem2"
+            );
+            assert_eq!(cache_map.len(), 2, "Cache should have exactly 2 entries");
+        });
     }
 }

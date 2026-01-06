@@ -74,10 +74,10 @@ result = (
     .with_parameter("beta", 0.3)
     .with_parameter("delta", 0.05)
     .with_parameter("gamma", 0.6)
-    .with_cost(chron.cost.SSE())
+    .with_cost(chron.SSE())
     .with_optimiser(chron.NelderMead().with_max_iter(1000))
     .build()
-    .optimize()
+    .optimise()
 )
 
 # Display results
@@ -85,7 +85,7 @@ print("Parameter Identification Results")
 print("-" * 50)
 print(f"True parameters:      {TRUE_PARAMS}")
 print(f"Estimated parameters: {np.array(result.x)}")
-print(f"Final SSE:            {result.fun:.6f}")
+print(f"Final SSE:            {result.value:.6f}")
 print(
     f"Relative error:       {np.linalg.norm(result.x - TRUE_PARAMS) / np.linalg.norm(TRUE_PARAMS):.2%}"
 )

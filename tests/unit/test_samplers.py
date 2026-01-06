@@ -19,9 +19,9 @@ def test_metropolis_hastings_runs_and_returns_samples():
     )
 
     sampler = (
-        chron.sampler.MetropolisHastings()
+        chron.MetropolisHastings()
         .with_num_chains(3)
-        .with_num_steps(400)
+        .with_iterations(400)
         .with_step_size(0.4)
         .with_seed(123)
     )
@@ -51,7 +51,7 @@ def test_dynamic_nested_sampler_runs_on_scalar_problem():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(32)
         .with_expansion_factor(0.1)
         .with_seed(99)
@@ -73,14 +73,14 @@ def test_dynamic_nested_invalid_live_points_are_clamped():
         .build()
     )
 
-    sampler = chron.sampler.DynamicNestedSampler().with_live_points(1)
+    sampler = chron.DynamicNestedSampler().with_live_points(1)
     nested = sampler.run(problem)
 
     assert nested.draws >= 0
 
 
 def test_dynamic_nested_requires_problem_instance():
-    sampler = chron.sampler.DynamicNestedSampler()
+    sampler = chron.DynamicNestedSampler()
 
     with pytest.raises(TypeError):
         sampler.run(object())  # type: ignore[arg-type]

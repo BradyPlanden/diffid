@@ -33,7 +33,7 @@ def test_adam_direct_run_minimises_quadratic():
     result = optimiser.run(problem, [5.0, -4.0])
 
     assert result.success
-    assert result.fun < 1e-6
+    assert result.value < 1e-6
     assert np.allclose(result.x, np.array([1.5, -0.5]), atol=1e-2)
 
 
@@ -51,14 +51,14 @@ def test_python_builder_optimise_with_adam_default():
     builder.with_optimiser(optimiser)
     problem = builder.build()
 
-    result = problem.optimize(initial=[3.0, -3.0])
+    result = problem.optimise(initial=[3.0, -3.0])
 
     assert result.success
-    assert result.fun < 1e-5
+    assert result.value < 1e-5
     assert np.allclose(result.x, np.array([1.5, -0.5]), atol=1e-2)
 
 
-def test_adam_requires_gradient():
+def test_adam_falls_back_with_numerical_grad():
     builder = (
         chron.ScalarBuilder()
         .with_callable(quadratic)
@@ -71,5 +71,5 @@ def test_adam_requires_gradient():
     optimiser = chron.Adam().with_max_iter(10)
     result = optimiser.run(problem, [0.0, 0.0])
 
+    assert result.iterations == 10
     assert not result.success
-    assert "requires an available gradient" in result.message

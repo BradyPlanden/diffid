@@ -23,8 +23,7 @@ builder = (
     chron.DiffsolBuilder()
     .with_diffsl(ds)
     .with_data(stacked_data)
-    .with_rtol(1e-6)
-    .with_atol(1e-8)
+    .with_tolerances(1e-6, 1e-8)
     .with_parameter("r", 100)
     .with_parameter("k", 100)
     .with_parallel(True)
@@ -32,14 +31,14 @@ builder = (
 )
 problem = builder.build()
 
-# Optimize
-results = problem.optimize()
+# Optimise
+results = problem.optimise()
 
 print(f"result: {results}")
 
 # For now, just print the optimization result since Hamiltonian sampler is not implemented yet
 print(f"Optimal parameters: {results.x}")
-print(f"Optimal cost: {results.fun}")
+print(f"Optimal cost: {results.value}")
 print(f"Optimization success: {results.success}")
-print(f"Iterations: {results.nit}")
+print(f"Iterations: {results.iterations}")
 print(f"Optimisation time: {results.time}")

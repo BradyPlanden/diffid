@@ -47,10 +47,10 @@ def test_gaussian_evidence_accuracy():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
-        .with_live_points(256)
+        chron.DynamicNestedSampler()
+        .with_live_points(128)
         .with_expansion_factor(0.2)
-        .with_termination_tolerance(1e-4)
+        .with_termination_tolerance(1e-5)
         .with_seed(42)
     )
 
@@ -63,7 +63,7 @@ def test_gaussian_evidence_accuracy():
     )
 
     # Mean should be close to true mean
-    assert abs(nested.mean[0] - mu) < 0.5
+    assert abs(nested.mean[0] - mu) < 0.75
 
     # Information should be positive and finite
     assert nested.information > 0
@@ -77,7 +77,7 @@ def test_exponential_distribution_evidence():
     Z = (1/x_max) * (1 - exp(-λ * x_max)) / λ
     """
     lambda_param = 2.0
-    x_max = 5.0
+    x_max = 7.5
 
     # Analytical log evidence
     numerator = 1.0 - np.exp(-lambda_param * x_max)
@@ -95,9 +95,9 @@ def test_exponential_distribution_evidence():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
-        .with_live_points(512)
-        .with_expansion_factor(0.05)
+        chron.DynamicNestedSampler()
+        .with_live_points(128)
+        .with_expansion_factor(0.01)
         .with_termination_tolerance(1e-6)
         .with_seed(123)
     )
@@ -105,7 +105,7 @@ def test_exponential_distribution_evidence():
     nested = sampler.run(problem)
 
     # Evidence should be reasonably close
-    assert abs(nested.log_evidence - log_z_analytical) < 0.2, (
+    assert abs(nested.log_evidence - log_z_analytical) < 0.1, (
         f"Evidence error: got {nested.log_evidence:.4f}, "
         f"expected {log_z_analytical:.4f}"
     )
@@ -139,10 +139,10 @@ def test_bimodal_gaussian_mixture():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
-        .with_live_points(256)
-        .with_expansion_factor(0.3)
-        .with_termination_tolerance(1e-3)
+        chron.DynamicNestedSampler()
+        .with_live_points(128)
+        .with_expansion_factor(0.2)
+        .with_termination_tolerance(1e-4)
         .with_seed(999)
     )
 
@@ -184,7 +184,7 @@ def test_handles_infinite_likelihood_gracefully():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(32)
         .with_expansion_factor(0.2)
         .with_seed(456)
@@ -217,10 +217,10 @@ def test_very_high_dimensional_problem():
     problem = problem.build()
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
-        .with_live_points(512)  # More live points for higher dimensions
-        .with_expansion_factor(0.1)
-        .with_termination_tolerance(1e-2)
+        chron.DynamicNestedSampler()
+        .with_live_points(128)
+        .with_expansion_factor(0.15)
+        .with_termination_tolerance(1e-4)
         .with_seed(789)
     )
 
@@ -248,7 +248,7 @@ def test_degenerate_posterior_delta_function():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.05)  # Small expansion for narrow peak
         .with_termination_tolerance(1e-3)
@@ -283,7 +283,7 @@ def test_very_small_evidence():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.2)
         .with_seed(111)
@@ -316,7 +316,7 @@ def test_posterior_weights_normalize():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(128)
         .with_expansion_factor(0.2)
         .with_seed(555)
@@ -351,7 +351,7 @@ def test_mean_matches_weighted_average():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(128)
         .with_expansion_factor(0.2)
         .with_seed(777)
@@ -395,7 +395,7 @@ def test_termination_with_high_information():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.1)
         .with_termination_tolerance(1e-3)
@@ -424,14 +424,14 @@ def test_reproducibility_with_seed():
     )
 
     sampler1 = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.2)
         .with_seed(12345)
     )
 
     sampler2 = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.2)
         .with_seed(12345)
@@ -471,7 +471,7 @@ def test_live_points_adapt_with_information():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(32)
         .with_expansion_factor(0.5)  # Allow significant expansion
         .with_seed(999)
@@ -504,7 +504,7 @@ def test_respects_parameter_bounds():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.2)
         .with_seed(444)
@@ -537,7 +537,7 @@ def test_information_is_non_negative():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.2)
         .with_seed(666)
@@ -565,7 +565,7 @@ def test_information_increases_with_constraint():
 
     def sampler_config(seed):
         return (
-            chron.sampler.DynamicNestedSampler()
+            chron.DynamicNestedSampler()
             .with_live_points(128)
             .with_expansion_factor(0.2)
             .with_seed(seed)

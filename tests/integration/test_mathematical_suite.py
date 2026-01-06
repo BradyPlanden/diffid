@@ -63,8 +63,9 @@ def make_nelder_mead() -> chron.NelderMead:
     return (
         chron.NelderMead()
         .with_max_iter(800)
+        .with_step_size(0.2)
         .with_threshold(1e-8)
-        .with_position_tolerance(1e-6)
+        .with_position_tolerance(1e-8)
     )
 
 
@@ -73,7 +74,7 @@ def make_cmaes() -> chron.CMAES:
         chron.CMAES()
         .with_max_iter(1500)
         .with_threshold(1e-8)
-        .with_sigma0(0.8)
+        .with_step_size(0.8)
         .with_patience(20.0)
         .with_seed(123)
     )
@@ -170,7 +171,7 @@ def test_python_objectives_converge(
     result = optimiser.run(problem, initial.tolist())
 
     assert result.success
-    assert result.fun < fun_tol
+    assert result.value < fun_tol
     assert np.allclose(result.x, expected, atol=position_tol)
 
 
@@ -199,7 +200,7 @@ def test_diffsol_logistic_convergence():
         chron.DiffsolBuilder()
         .with_diffsl(_LOGISTIC_DSL)
         .with_data(stacked_data)
-        .with_rtol(1e-6)
+        .with_tolerances(rtol=1e-6, atol=1e-6)
         .with_parameter("r", r_true)
         .with_parameter("k", k_true)
     )
@@ -215,5 +216,5 @@ def test_diffsol_logistic_convergence():
     result = optimiser.run(problem, [0.6, 1.4])
 
     assert result.success
-    assert result.fun < 1e-3
+    assert result.value < 1e-3
     assert np.allclose(result.x, [r_true, k_true], atol=0.2)

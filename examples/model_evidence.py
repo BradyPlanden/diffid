@@ -19,9 +19,9 @@ builder = (
 )
 problem = builder.build()
 
-optimised = problem.optimize()
+optimised = problem.optimise()
 
-sampler = chron.DynamicNestedSampler().with_live_points(512).with_seed(1234)
+sampler = chron.DynamicNestedSampler().with_live_points(256).with_seed(1234)
 samples = sampler.run(problem, initial=optimised.x)
 
 print("time       :", samples.time)

@@ -17,8 +17,8 @@ builder = (
     .with_optimiser(chron.NelderMead().with_max_iter(1000))
 )
 problem = builder.build()
-result = problem.optimize(initial=[10.0, 10.0])
+result = problem.optimise(initial=[10.0, 10.0])
 
 print(result)
 print(f"Optimal x: {result.x}")
-print(f"Optimal function val: {result.fun}")
+print(f"Optimal function val: {result.value}")

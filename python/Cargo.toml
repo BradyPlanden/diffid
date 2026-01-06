@@ -3,9 +3,10 @@ name = "chronopt-py"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+readme = "../README.md"
 
 [package.metadata.maturin]
-name = "chronopt._chronopt"
+name = "chronopt"
 python-source = "src"
 artifact = "dist"
 
@@ -15,7 +16,7 @@ extension-module = ["pyo3/extension-module"]
 stubgen = ["clap", "pyo3-stub-gen", "pyo3-stub-gen-derive"]
 
 [lib]
-name = "chronopt"
+name = "_chronopt"
 crate-type = ["cdylib", "rlib"]
 [dependencies]
 pyo3 = { workspace = true, default-features = false, features = ["macros"] }

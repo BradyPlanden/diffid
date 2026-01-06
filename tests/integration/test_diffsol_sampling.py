@@ -33,9 +33,7 @@ stop {x}
         .with_data(data)
         .with_parameter("g", g_true)
         .with_parameter("h", h_true)
-        .with_rtol(1e-6)
-        .with_atol(1e-6)
-        .with_cost(chron.cost.SSE())
+        .with_cost(chron.SSE())
     )
 
     problem = builder.build()
@@ -44,9 +42,9 @@ stop {x}
     initial_cost = problem.evaluate(initial_guess)
 
     sampler = (
-        chron.sampler.MetropolisHastings()
+        chron.MetropolisHastings()
         .with_num_chains(2)
-        .with_num_steps(250)
+        .with_iterations(250)
         .with_step_size(0.25)
         .with_seed(1234)
     )
@@ -93,15 +91,14 @@ stop {x}
         .with_data(data)
         .with_parameter("g", g_true)
         .with_parameter("h", h_true)
-        .with_rtol(1e-6)
-        .with_atol(1e-6)
-        .with_cost(chron.cost.SSE())
+        .with_tolerances(rtol = 1e-6, atol = 1e-6)
+        .with_cost(chron.SSE())
     )
 
     problem = builder.build()
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.15)
         .with_termination_tolerance(1e-3)

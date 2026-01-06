@@ -35,8 +35,7 @@ builder = (
     chron.DiffsolBuilder()
     .with_diffsl(ode)
     .with_data(stacked_data)
-    .with_rtol(1e-6)
-    .with_atol(1e-8)
+    .with_tolerances(rtol=1e-6, atol=1e-8)
     .with_parameter("a", 1.3)
     .with_parameter("b", 0.3)
     .with_parameter("c", 0.05)
@@ -48,14 +47,14 @@ builder = (
 )
 problem = builder.build()
 
-# Optimize
-results = problem.optimize()
+# Optimise
+results = problem.optimise()
 
 # Display results
 print(results)
 print(f"Optimal parameters: {results.x}")
-print(f"Optimal cost: {results.fun}")
+print(f"Optimal cost: {results.value}")
 print(f"Optimization success: {results.success}")
-print(f"Iterations: {results.nit}")
+print(f"Iterations: {results.iterations}")
 print(f"Optimisation time: {results.time}")
-print(f"Eval per ms: {results.nfev / (results.time.total_seconds() * 1000)}")
+print(f"Eval per ms: {results.evaluations / (results.time.total_seconds() * 1000)}")

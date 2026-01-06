@@ -40,7 +40,7 @@ def test_dynamic_nested_diffsol_parallel_vs_sequential():
     initial = [1.0, 1.0]
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(32)
         .with_expansion_factor(0.3)
         .with_termination_tolerance(1e-3)
@@ -75,7 +75,7 @@ def test_dynamic_nested_sampler_parallel_fallback_for_non_parallel_problems():
     )
 
     sampler = (
-        chron.sampler.DynamicNestedSampler()
+        chron.DynamicNestedSampler()
         .with_live_points(24)
         .with_expansion_factor(0.2)
         .with_termination_tolerance(1e-3)

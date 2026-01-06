@@ -22,7 +22,7 @@ def test_vector_builder_basic():
         .with_data(data)
         .with_parameter("rate", 1.0, None)
         .with_parameter("y0", 1.0, None)
-        .with_cost(chron.cost.SSE())
+        .with_cost(chron.SSE())
     )
 
     problem = builder.build()
@@ -36,10 +36,10 @@ def test_vector_builder_basic():
 
     # Test optimization
     optimiser = chron.NelderMead().with_max_iter(1000).with_threshold(1e-8)
-    result = problem.optimize(x0, optimiser)
+    result = problem.optimise(x0, optimiser)
 
     assert result.success
-    assert result.fun < 1e-6
+    assert result.value < 1e-6
     # Check parameters are close to true values
     assert np.allclose(result.x, true_params, rtol=1e-2, atol=1e-2)
 
@@ -86,20 +86,20 @@ def test_vector_builder_sinusoidal():
         .with_parameter("amplitude", 2.0, (0.0, 5.0))
         .with_parameter("frequency", 1.0, (0.1, 3.0))
         .with_parameter("phase", 0.0, (-np.pi, np.pi))
-        .with_cost(chron.cost.RMSE())
+        .with_cost(chron.RMSE())
         .build()
     )
 
     x0 = [2.0, 1.0, 0.0]
     optimiser = chron.NelderMead().with_max_iter(2000).with_threshold(1e-9)
-    result = problem.optimize(x0, optimiser)
+    result = problem.optimise(x0, optimiser)
 
     # Note: Sinusoidal fitting can be challenging due to local minima
     # We just verify the optimization runs and produces reasonable results
-    assert result.success or result.nit >= 1000  # Either converged or tried hard enough
+    assert result.success or result.iterations >= 1000  # Either converged or tried hard enough
     # Cost should be reduced from initial
     initial_cost = problem.evaluate(x0)
-    assert result.fun < initial_cost
+    assert result.value < initial_cost
 
 
 def test_vector_builder_cost_metrics():
@@ -122,9 +122,9 @@ def test_vector_builder_cost_metrics():
         return builder.build()
 
     sse_problem = build_problem()
-    sse_problem_explicit = build_problem(chron.cost.SSE())
-    rmse_problem = build_problem(chron.cost.RMSE())
-    gaussian_problem = build_problem(chron.cost.GaussianNLL(1.0))
+    sse_problem_explicit = build_problem(chron.SSE())
+    rmse_problem = build_problem(chron.RMSE())
+    gaussian_problem = build_problem(chron.GaussianNLL(1.0))
 
     test_params = [1.5]
     sse_cost = sse_problem.evaluate(test_params)
@@ -159,7 +159,7 @@ def test_vector_builder_remove_methods():
         .with_objective(model)
         .with_data(data)
         .with_parameter("a", 1.0)
-        .with_cost(chron.cost.SSE())
+        .with_cost(chron.SSE())
     )
     problem1 = builder1.build()
 
@@ -169,7 +169,7 @@ def test_vector_builder_remove_methods():
         .with_objective(model)
         .with_data(data)
         .with_parameter("a", 1.0)
-        .with_cost(chron.cost.RMSE())
+        .with_cost(chron.RMSE())
     )
     problem2 = builder2.build()
 
@@ -199,9 +199,9 @@ def test_vector_builder_with_default_optimiser():
     )
 
     # Should use default optimiser when none specified
-    result = problem.optimize()
+    result = problem.optimise()
     assert result.success
-    assert result.nit <= 100
+    assert result.iterations <= 100
 
 
 def test_vector_builder_dimension_mismatch():
@@ -220,7 +220,7 @@ def test_vector_builder_dimension_mismatch():
     )
 
     with pytest.raises(
-        ValueError, match="produced 5 elements but data.*expects 3 elements"
+        chron.errors.EvaluationError, match="Evaluation failed: Evaluation failed:: expected 3 elements, got 5"
     ):
         problem.evaluate([1.0])
 
@@ -238,12 +238,12 @@ def test_vector_builder_multiple_builds():
         .with_objective(model)
         .with_data(data)
         .with_parameter("scale", 1.0)
-        .with_cost(chron.cost.RMSE())
+        .with_cost(chron.RMSE())
     )
 
     problem1 = builder.build()
     builder.remove_cost()
-    builder.with_cost(chron.cost.SSE())
+    builder.with_cost(chron.SSE())
     problem2 = builder.build()
 
     # Should produce same results

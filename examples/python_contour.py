@@ -48,7 +48,7 @@ ax.plot(
 ax.legend()
 
 print(f"Optimised parameters: {result.x}")
-print(f"Objective value: {result.fun:.3e}")
+print(f"Objective value: {result.value:.3e}")
 
 output_path = Path(__file__).with_suffix(".png")
 plt.savefig(output_path, dpi=200, bbox_inches="tight")

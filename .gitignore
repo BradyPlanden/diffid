@@ -1,6 +1,6 @@
 /target
 
-# Byte-compiled / optimized / DLL files
+# Byte-compiled / optimised / DLL files
 __pycache__/
 .pytest_cache/
 *.py[cod]

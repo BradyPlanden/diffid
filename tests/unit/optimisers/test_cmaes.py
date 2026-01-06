@@ -25,14 +25,14 @@ def test_cmaes_direct_run_minimises_rosenbrock():
         chron.CMAES()
         .with_max_iter(400)
         .with_threshold(1e-8)
-        .with_sigma0(0.6)
+        .with_step_size(0.6)
         .with_seed(42)
     )
 
     result = optimiser.run(problem, [5.0, -4.0])
 
     assert result.success
-    assert result.fun < 1e-6
+    assert result.value < 1e-6
     assert np.allclose(result.x, np.ones(2), atol=1e-2)
 
 
@@ -48,17 +48,17 @@ def test_python_builder_optimise_with_cmaes_default():
         chron.CMAES()
         .with_max_iter(300)
         .with_threshold(1e-8)
-        .with_sigma0(0.5)
+        .with_step_size(0.5)
         .with_seed(7)
     )
 
     builder.with_optimiser(optimiser)
     problem = builder.build()
 
-    result = problem.optimize(initial=[3.0, -3.0])
+    result = problem.optimise(initial=[3.0, -3.0])
 
     assert result.success
-    assert result.fun < 1e-5
+    assert result.value < 1e-5
     assert np.allclose(result.x, np.ones(2), atol=1e-2)
 
 

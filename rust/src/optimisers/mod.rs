@@ -12,9 +12,9 @@ use crate::common::{Bounds, Point};
 use crate::errors::EvaluationError;
 
 pub use crate::types::*;
-pub use adam::Adam;
-pub use cmaes::CMAES;
-pub use nelder_mead::NelderMead;
+pub use adam::{Adam, AdamState};
+pub use cmaes::{CMAESState, CMAES};
+pub use nelder_mead::{NelderMead, NelderMeadState};
 
 // Re-export common types for convenience
 pub use crate::common::AskResult as OptimiserAskResult;
@@ -40,7 +40,7 @@ pub enum Optimiser {
 }
 
 impl ScalarOptimiser {
-    /// Run the optimizer with a scalar objective function
+    /// Run the optimiser with a scalar objective function
     ///
     /// # Arguments
     /// * `objective` - Function that evaluates the objective at a point
@@ -55,8 +55,8 @@ impl ScalarOptimiser {
     /// use chronopt::common::Bounds;
     /// use chronopt::optimisers::{ScalarOptimiser, NelderMead};
     ///
-    /// let optimizer = ScalarOptimiser::from(NelderMead::new());
-    /// let result = optimizer.run(
+    /// let optimiser = ScalarOptimiser::from(NelderMead::new());
+    /// let result = optimiser.run(
     ///     |x | x[0].powi(2) + x[1].powi(2),
     ///     vec![1.0, 2.0],
     ///     Bounds::unbounded(2)
@@ -76,7 +76,7 @@ impl ScalarOptimiser {
 }
 
 impl GradientOptimiser {
-    /// Run the optimizer with a gradient-based objective function
+    /// Run the optimiser with a gradient-based objective function
     ///
     /// The objective function must return both the value and gradient.
     /// Use `run_with_numerical_gradient()` if analytical gradients are unavailable.
@@ -94,8 +94,8 @@ impl GradientOptimiser {
     /// use chronopt::common::Bounds;
     /// use chronopt::optimisers::{GradientOptimiser, Adam};
     ///
-    /// let optimizer = GradientOptimiser::from(Adam::new());
-    /// let result = optimizer.run(
+    /// let optimiser = GradientOptimiser::from(Adam::new());
+    /// let result = optimiser.run(
     ///     |x| {
     ///         let val = x[0].powi(2) + x[1].powi(2);
     ///         let grad = vec![2.0 * x[0], 2.0 * x[1]];
@@ -136,17 +136,17 @@ impl GradientOptimiser {
 }
 
 impl Optimiser {
-    /// Create a Nelder-Mead optimizer with default settings
+    /// Create a Nelder-Mead optimiser with default settings
     pub fn nelder_mead() -> Self {
         Optimiser::Scalar(ScalarOptimiser::NelderMead(NelderMead::default()))
     }
 
-    /// Create a CMAES optimizer with default settings
+    /// Create a CMAES optimiser with default settings
     pub fn cmaes() -> Self {
         Optimiser::Scalar(ScalarOptimiser::CMAES(CMAES::default()))
     }
 
-    /// Create an Adam optimizer with default settings
+    /// Create an Adam optimiser with default settings
     pub fn adam() -> Self {
         Optimiser::Gradient(GradientOptimiser::Adam(Adam::default()))
     }
@@ -187,10 +187,10 @@ impl Optimiser {
         }
     }
 
-    /// Try to convert into a scalar optimizer
+    /// Try to convert into a scalar optimiser
     ///
     /// Returns `Ok(ScalarOptimiser)` on success, or `Err(self)` if this is not
-    /// a scalar optimizer.
+    /// a scalar optimiser.
     pub fn into_scalar(self) -> Result<ScalarOptimiser, Self> {
         match self {
             Optimiser::Scalar(opt) => Ok(opt),
@@ -198,10 +198,10 @@ impl Optimiser {
         }
     }
 
-    /// Try to convert into a gradient optimizer
+    /// Try to convert into a gradient optimiser
     ///
     /// Returns `Ok(GradientOptimiser)` on success, or `Err(self)` if this is not
-    /// a gradient optimizer.
+    /// a gradient optimiser.
     pub fn into_gradient(self) -> Result<GradientOptimiser, Self> {
         match self {
             Optimiser::Gradient(opt) => Ok(opt),
@@ -229,7 +229,7 @@ impl Optimiser {
     }
 }
 
-// Conversions: Individual Optimizers -> ScalarOptimiser
+// Conversions: Individual Optimisers -> ScalarOptimiser
 impl From<NelderMead> for ScalarOptimiser {
     fn from(nm: NelderMead) -> Self {
         ScalarOptimiser::NelderMead(nm)
@@ -242,7 +242,7 @@ impl From<CMAES> for ScalarOptimiser {
     }
 }
 
-// Conversions: Individual Optimizers -> GradientOptimiser
+// Conversions: Individual Optimisers -> GradientOptimiser
 
 impl From<Adam> for GradientOptimiser {
     fn from(adam: Adam) -> Self {
@@ -429,7 +429,7 @@ pub struct OptimisationResults {
 impl OptimisationResults {
     fn __repr__(&self) -> String {
         format!(
-            "OptimisationResults(x={:?}, fun={:.6}, nit={}, nfev={}, time={:?}, success={}, reason={})",
+            "OptimisationResults(x={:?}, fun={:.6}, nit={}, evaluations={}, time={:?}, success={}, reason={})",
             self.x, self.value, self.iterations, self.evaluations, self.time, self.success, self.message
         )
     }
@@ -450,11 +450,11 @@ mod tests {
             .build()
             .expect("Problem builder should succeed");
 
-        let optimizer = Optimiser::nelder_mead();
+        let optimiser = Optimiser::nelder_mead();
         let bounds = Bounds::unbounded(2);
 
-        // Extract and use the scalar optimizer
-        let scalar_opt = optimizer.as_scalar().expect("Should be scalar optimizer");
+        // Extract and use the scalar optimiser
+        let scalar_opt = optimiser.as_scalar().expect("Should be scalar optimiser");
         let result = scalar_opt.run(|x| problem.evaluate(x), vec![5.0, -5.0], bounds);
 
         assert!(result.value < 1e-6);
@@ -468,14 +468,14 @@ mod tests {
             .build()
             .expect("Problem builder should succeed");
 
-        // Create Adam optimizer with increased iterations for convergence
+        // Create Adam optimiser with increased iterations for convergence
         let adam = Adam::new().with_max_iter(5000).with_step_size(0.05);
-        let optimizer = Optimiser::Gradient(GradientOptimiser::Adam(adam));
+        let optimiser = Optimiser::Gradient(GradientOptimiser::Adam(adam));
 
-        // Extract and use the gradient optimizer
-        let grad_opt = optimizer
+        // Extract and use the gradient optimiser
+        let grad_opt = optimiser
             .as_gradient()
-            .expect("Should be gradient optimizer");
+            .expect("Should be gradient optimiser");
         let result = grad_opt.run(
             |x| {
                 let (val, grad) = problem.evaluate_with_gradient(x).expect("Should succeed");
@@ -535,9 +535,9 @@ mod tests {
             .build()
             .expect("Problem builder should succeed");
 
-        let optimizer = GradientOptimiser::from(Adam::new().with_step_size(0.1));
+        let optimiser = GradientOptimiser::from(Adam::new().with_step_size(0.1));
 
-        let result = optimizer.run_with_numerical_gradient(
+        let result = optimiser.run_with_numerical_gradient(
             |x| problem.evaluate(x),
             vec![5.0, -5.0],
             Bounds::unbounded(2),
@@ -561,7 +561,7 @@ mod tests {
         let optimiser = NelderMead::new()
             .with_max_iter(400)
             .with_threshold(1e-10)
-            .with_sigma0(0.6)
+            .with_step_size(0.6)
             .with_position_tolerance(1e-8);
 
         let result = optimiser.run(
@@ -589,7 +589,7 @@ mod tests {
             .build()
             .expect("Problem builder should succeed with valid parameters");
 
-        let optimiser = NelderMead::new().with_max_iter(1).with_sigma0(1.0);
+        let optimiser = NelderMead::new().with_max_iter(1).with_step_size(1.0);
         let result = optimiser.run(
             |x| problem.evaluate(x),
             vec![10.0, -10.0],
@@ -610,7 +610,7 @@ mod tests {
 
         let optimiser = NelderMead::new()
             .with_max_evaluations(2)
-            .with_sigma0(0.5)
+            .with_step_size(0.5)
             .with_max_iter(500);
 
         let result = optimiser.run(
@@ -637,7 +637,7 @@ mod tests {
             .build()
             .expect("Problem builder should succeed with valid parameters");
 
-        let optimiser = NelderMead::new().with_sigma0(0.5).with_patience(0.01);
+        let optimiser = NelderMead::new().with_step_size(0.5).with_patience(0.01);
 
         let result = optimiser.run(
             |x| problem.evaluate(x),
@@ -663,7 +663,7 @@ mod tests {
         let optimiser = CMAES::new()
             .with_max_iter(400)
             .with_threshold(1e-10)
-            .with_sigma0(0.6)
+            .with_step_size(0.6)
             .with_patience(5.0)
             .with_seed(42);
 
@@ -692,7 +692,10 @@ mod tests {
             .build()
             .expect("Problem builder should succeed with valid parameters");
 
-        let optimiser = CMAES::new().with_max_iter(1).with_sigma0(0.5).with_seed(7);
+        let optimiser = CMAES::new()
+            .with_max_iter(1)
+            .with_step_size(0.5)
+            .with_seed(7);
         let result = optimiser.run(
             |x| problem.evaluate(x),
             vec![10.0, -10.0],
@@ -715,7 +718,7 @@ mod tests {
             .expect("Problem builder should succeed with valid parameters");
 
         let optimiser = CMAES::new()
-            .with_sigma0(0.5)
+            .with_step_size(0.5)
             .with_patience(0.01)
             .with_seed(5);
 
@@ -947,7 +950,7 @@ mod tests {
         let optimiser = CMAES::new()
             .with_max_iter(300)
             .with_threshold(1e-8)
-            .with_sigma0(0.7)
+            .with_step_size(0.7)
             .with_seed(2024);
 
         let initial = vec![3.0, -2.0];
@@ -989,7 +992,7 @@ mod tests {
             .build()
             .expect("Problem builder should succeed with valid parameters");
 
-        let optimiser = NelderMead::new().with_max_iter(50).with_sigma0(2.0); // Larger sigma to ensure we hit NaN region
+        let optimiser = NelderMead::new().with_max_iter(50).with_step_size(2.0); // Larger sigma to ensure we hit NaN region
 
         let result = optimiser.run(|x| problem.evaluate(x), vec![0.5], Bounds::unbounded(2));
 
@@ -1044,7 +1047,7 @@ mod tests {
         let optimiser = CMAES::new()
             .with_max_iter(400)
             .with_threshold(1e-10)
-            .with_sigma0(0.6)
+            .with_step_size(0.6)
             .with_seed(4242);
 
         let result = optimiser.run(

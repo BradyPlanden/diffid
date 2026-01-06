@@ -6,12 +6,12 @@ use crate::optimisers::{
 use std::cmp::Ordering;
 use std::time::{Duration, Instant};
 
-/// Configuration for the Nelder-Mead optimizer
+/// Configuration for the Nelder-Mead optimiser
 #[derive(Clone, Debug)]
 pub struct NelderMead {
     max_iter: usize,
     threshold: f64,
-    sigma0: f64,
+    step_size: f64,
     position_tolerance: f64,
     max_evaluations: Option<usize>,
     alpha: f64,
@@ -26,7 +26,7 @@ impl NelderMead {
         Self {
             max_iter: 1000,
             threshold: 1e-6,
-            sigma0: 0.1,
+            step_size: 0.1,
             position_tolerance: 1e-6,
             max_evaluations: None,
             alpha: 1.0,
@@ -47,8 +47,8 @@ impl NelderMead {
         self
     }
 
-    pub fn with_sigma0(mut self, sigma0: f64) -> Self {
-        self.sigma0 = sigma0;
+    pub fn with_step_size(mut self, step_size: f64) -> Self {
+        self.step_size = step_size;
         self
     }
 
@@ -90,8 +90,8 @@ impl NelderMead {
             bounds,
             dim,
             initial_point: initial_point.clone(),
-            nit: 0,
-            nfev: 0,
+            iterations: 0,
+            evaluations: 0,
             start_time: Instant::now(),
         };
 
@@ -188,7 +188,7 @@ pub enum NelderMeadPhase {
     Terminated(TerminationReason),
 }
 
-/// Runtime state of the Nelder-Mead optimizer
+/// Runtime state of the Nelder-Mead optimiser
 pub struct NelderMeadState {
     config: NelderMead,
     simplex: Vec<EvaluatedPoint>,
@@ -196,8 +196,8 @@ pub struct NelderMeadState {
     bounds: Bounds,
     dim: usize,
     initial_point: Point,
-    nit: usize,
-    nfev: usize,
+    iterations: usize,
+    evaluations: usize,
     start_time: Instant,
 }
 
@@ -252,7 +252,7 @@ impl NelderMeadState {
             }
         };
 
-        self.nfev += 1;
+        self.evaluations += 1;
 
         // Take ownership of current phase to enable destructuring
         let phase = std::mem::replace(
@@ -306,12 +306,12 @@ impl NelderMeadState {
 
     /// Get current iteration count
     pub fn iterations(&self) -> usize {
-        self.nit
+        self.iterations
     }
 
     /// Get current function evaluation count
     pub fn evaluations(&self) -> usize {
-        self.nfev
+        self.evaluations
     }
 
     /// Get the current best point and value (if simplex is non-empty)
@@ -321,9 +321,7 @@ impl NelderMeadState {
             .map(|ep| (ep.point.as_slice(), ep.value))
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Phase Handlers
-    // ─────────────────────────────────────────────────────────────────────────
 
     fn handle_initial_evaluated(&mut self, value: f64) {
         self.simplex
@@ -505,7 +503,7 @@ impl NelderMeadState {
             return;
         }
 
-        self.nit += 1;
+        self.iterations += 1;
 
         // Compute centroid of all points except the worst
         let (worst, rest) = self
@@ -546,9 +544,9 @@ impl NelderMeadState {
         let mut point = self.initial_point.clone();
 
         if point[dim] != 0.0 {
-            point[dim] *= 1.0 + self.config.sigma0;
+            point[dim] *= 1.0 + self.config.step_size;
         } else {
-            point[dim] = self.config.sigma0;
+            point[dim] = self.config.step_size;
         }
 
         // Ensure the point differs from the initial point
@@ -557,7 +555,7 @@ impl NelderMeadState {
             .zip(&self.simplex[0].point)
             .all(|(a, b)| (a - b).abs() <= f64::EPSILON)
         {
-            point[dim] += self.config.sigma0;
+            point[dim] += self.config.step_size;
         }
 
         // Apply bounds
@@ -606,7 +604,7 @@ impl NelderMeadState {
     fn reached_max_evaluations(&self) -> bool {
         self.config
             .max_evaluations
-            .is_some_and(|limit| self.nfev >= limit)
+            .is_some_and(|limit| self.evaluations >= limit)
     }
 
     fn check_and_handle_max_evals_with_update(&mut self, point: &Point, value: f64) -> bool {
@@ -629,7 +627,7 @@ impl NelderMeadState {
         }
 
         // Check max iterations
-        if self.nit >= self.config.max_iter {
+        if self.iterations >= self.config.max_iter {
             return Some(TerminationReason::MaxIterationsReached);
         }
 
@@ -679,8 +677,8 @@ impl NelderMeadState {
     fn build_results(&self, reason: TerminationReason) -> OptimisationResults {
         build_results(
             &self.simplex,
-            self.nit,
-            self.nfev,
+            self.iterations,
+            self.evaluations,
             self.start_time.elapsed(),
             reason,
             None,
@@ -742,19 +740,15 @@ mod tests {
         assert!(results.value < 1e-6);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // Ask/Tell Interface Tests
-    // ═══════════════════════════════════════════════════════════════════
-
     fn sphere(x: &[f64]) -> Result<f64, std::io::Error> {
         Ok(x.iter().map(|xi| xi * xi).sum())
     }
 
     #[test]
     fn nelder_mead_ask_tell_basic_workflow() {
-        let optimizer = NelderMead::new().with_max_iter(100).with_threshold(1e-8);
+        let optimiser = NelderMead::new().with_max_iter(100).with_threshold(1e-8);
 
-        let (mut state, first_point) = optimizer.init(vec![5.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![5.0], Bounds::unbounded(1));
 
         let mut result = sphere(&first_point[0]);
         loop {
@@ -776,13 +770,13 @@ mod tests {
 
     #[test]
     fn nelder_mead_ask_tell_matches_run() {
-        let optimizer = NelderMead::new()
+        let optimiser = NelderMead::new()
             .with_max_iter(200)
             .with_threshold(1e-8)
-            .with_sigma0(1.0);
+            .with_step_size(1.0);
 
         // Ask-tell version
-        let (mut state, first_point) = optimizer.init(vec![3.0, -2.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![3.0, -2.0], Bounds::unbounded(2));
 
         let mut result = sphere(&first_point[0]);
         let ask_tell_results = loop {
@@ -797,7 +791,7 @@ mod tests {
         };
 
         // .run() version
-        let run_results = optimizer.run(sphere, vec![3.0, -2.0], Bounds::unbounded(2));
+        let run_results = optimiser.run(sphere, vec![3.0, -2.0], Bounds::unbounded(2));
 
         // Should produce identical results (deterministic)
         assert_eq!(ask_tell_results.iterations, run_results.iterations);
@@ -810,9 +804,9 @@ mod tests {
 
     #[test]
     fn nelder_mead_simplex_building_phase() {
-        let optimizer = NelderMead::new().with_sigma0(0.5);
+        let optimiser = NelderMead::new().with_step_size(0.5);
 
-        let (mut state, first_point) = optimizer.init(vec![1.0, 1.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![1.0, 1.0], Bounds::unbounded(2));
 
         // First point should be the initial point
         assert_eq!(first_point.len(), 1);
@@ -853,9 +847,9 @@ mod tests {
 
     #[test]
     fn nelder_mead_tell_already_terminated() {
-        let optimizer = NelderMead::new().with_max_iter(1).with_threshold(1e-10);
+        let optimiser = NelderMead::new().with_max_iter(1).with_threshold(1e-10);
 
-        let (mut state, first_point) = optimizer.init(vec![0.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![0.0], Bounds::unbounded(1));
 
         let mut result = sphere(&first_point[0]);
         loop {
@@ -880,9 +874,9 @@ mod tests {
 
     #[test]
     fn nelder_mead_handles_evaluation_errors() {
-        let optimizer = NelderMead::new().with_max_iter(50).with_threshold(1e-10);
+        let optimiser = NelderMead::new().with_max_iter(50).with_threshold(1e-10);
 
-        let (mut state, first_point) = optimizer.init(vec![3.0, 3.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![3.0, 3.0], Bounds::unbounded(2));
 
         let mut eval_count = 0;
         let mut result = sphere(&first_point[0]);
@@ -895,9 +889,7 @@ mod tests {
                 AskResult::Evaluate(points) => {
                     // Inject an error on the 10th evaluation
                     if eval_count == 10 {
-                        result = Err(std::io::Error::other(
-                            "Simulated evaluation failure",
-                        ));
+                        result = Err(std::io::Error::other("Simulated evaluation failure"));
                         error_injected = true;
                     } else {
                         result = sphere(&points[0]);
@@ -920,10 +912,10 @@ mod tests {
 
     #[test]
     fn nelder_mead_respects_bounds_ask_tell() {
-        let optimizer = NelderMead::new().with_max_iter(100);
+        let optimiser = NelderMead::new().with_max_iter(100);
 
         let bounds = Bounds::new(vec![(-1.0, 1.0), (-1.0, 1.0)]);
-        let (mut state, first_point) = optimizer.init(vec![0.8, 0.8], bounds);
+        let (mut state, first_point) = optimiser.init(vec![0.8, 0.8], bounds);
 
         let mut result = sphere(&first_point[0]);
         loop {
@@ -956,9 +948,9 @@ mod tests {
 
     #[test]
     fn nelder_mead_convergence_by_threshold() {
-        let optimizer = NelderMead::new().with_max_iter(500).with_threshold(1e-6);
+        let optimiser = NelderMead::new().with_max_iter(500).with_threshold(1e-6);
 
-        let (mut state, first_point) = optimizer.init(vec![3.0, 3.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![3.0, 3.0], Bounds::unbounded(2));
 
         let mut result = sphere(&first_point[0]);
         loop {
@@ -990,9 +982,9 @@ mod tests {
 
     #[test]
     fn nelder_mead_termination_by_max_iter() {
-        let optimizer = NelderMead::new().with_max_iter(10).with_threshold(1e-12); // Very strict threshold
+        let optimiser = NelderMead::new().with_max_iter(10).with_threshold(1e-12); // Very strict threshold
 
-        let (mut state, first_point) = optimizer.init(vec![5.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![5.0], Bounds::unbounded(1));
 
         let mut result = sphere(&first_point[0]);
         loop {
@@ -1015,10 +1007,10 @@ mod tests {
         use std::thread;
         use std::time::Duration;
 
-        let optimizer = NelderMead::new().with_max_iter(500).with_patience(0.001); // 1 millisecond patience
+        let optimiser = NelderMead::new().with_max_iter(500).with_patience(0.001); // 1 millisecond patience
 
         // Start near minimum so it gets stuck
-        let (mut state, first_point) = optimizer.init(vec![0.01, 0.01], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![0.01, 0.01], Bounds::unbounded(2));
 
         let mut result = sphere(&first_point[0]);
         loop {
@@ -1046,11 +1038,11 @@ mod tests {
 
     #[test]
     fn nelder_mead_position_tolerance() {
-        let optimizer = NelderMead::new()
+        let optimiser = NelderMead::new()
             .with_max_iter(500)
             .with_position_tolerance(1e-8);
 
-        let (mut state, first_point) = optimizer.init(vec![2.0, 2.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![2.0, 2.0], Bounds::unbounded(2));
 
         let mut result = sphere(&first_point[0]);
         loop {
@@ -1071,11 +1063,11 @@ mod tests {
 
     #[test]
     fn nelder_mead_multidimensional() {
-        let optimizer = NelderMead::new().with_max_iter(300).with_threshold(1e-6);
+        let optimiser = NelderMead::new().with_max_iter(300).with_threshold(1e-6);
 
         // 5D sphere function
         let (mut state, first_point) =
-            optimizer.init(vec![2.0, -3.0, 1.5, -1.0, 2.5], Bounds::unbounded(5));
+            optimiser.init(vec![2.0, -3.0, 1.5, -1.0, 2.5], Bounds::unbounded(5));
 
         let mut result = sphere(&first_point[0]);
         loop {
@@ -1100,9 +1092,9 @@ mod tests {
 
     #[test]
     fn nelder_mead_rosenbrock_ask_tell() {
-        let optimizer = NelderMead::new().with_max_iter(800).with_threshold(1e-6);
+        let optimiser = NelderMead::new().with_max_iter(800).with_threshold(1e-6);
 
-        let (mut state, first_point) = optimizer.init(vec![0.0, 0.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![0.0, 0.0], Bounds::unbounded(2));
 
         let mut result = rosenbrock(&first_point[0]);
         loop {
@@ -1124,9 +1116,9 @@ mod tests {
 
     #[test]
     fn nelder_mead_state_machine_integrity() {
-        let optimizer = NelderMead::new().with_max_iter(20);
+        let optimiser = NelderMead::new().with_max_iter(20);
 
-        let (mut state, first_point) = optimizer.init(vec![1.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![1.0], Bounds::unbounded(1));
 
         // Cannot call ask before tell for first point
         state.tell(sphere(&first_point[0])).unwrap();
@@ -1148,15 +1140,11 @@ mod tests {
         );
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // Error Handling Tests
-    // ═══════════════════════════════════════════════════════════════════
-
     #[test]
     fn nelder_mead_nonfinite_handling() {
-        let optimizer = NelderMead::new().with_max_iter(50);
+        let optimiser = NelderMead::new().with_max_iter(50);
 
-        let (mut state, first_point) = optimizer.init(vec![1.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![1.0], Bounds::unbounded(1));
 
         let mut iteration = 0;
         let mut result = sphere(&first_point[0]);

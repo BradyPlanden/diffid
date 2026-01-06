@@ -34,7 +34,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let optimiser = NelderMead::new().with_max_iter(500).with_sigma0(0.4);
+        let optimiser = NelderMead::new().with_max_iter(500).with_step_size(0.4);
         let result = optimiser.run(
             |x| problem.evaluate(x),
             vec![1.0, 1.0],
@@ -44,7 +44,7 @@ mod tests {
         assert!(result.success);
         assert!(
             result.value < 0.01,
-            "Expected fun < 0.01, but got: {}",
+            "Expected value < 0.01, but got: {}",
             result.value
         );
     }

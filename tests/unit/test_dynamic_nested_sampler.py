@@ -9,10 +9,6 @@ import numpy as np
 import pytest
 from scipy.stats import norm
 
-# =============================================================================
-# Test Problems with Known Evidence
-# =============================================================================
-
 
 def test_gaussian_evidence_accuracy():
     """Test evidence calculation against known analytical result.
@@ -111,11 +107,6 @@ def test_exponential_distribution_evidence():
     )
 
 
-# =============================================================================
-# Multimodal Distribution Tests
-# =============================================================================
-
-
 def test_bimodal_gaussian_mixture():
     """Test sampler on well-separated bimodal distribution."""
     mu1, mu2 = -3.0, 3.0
@@ -160,11 +151,6 @@ def test_bimodal_gaussian_mixture():
 
     # Mean should be somewhere between the modes
     assert -4.0 < nested.mean[0] < 4.0
-
-
-# =============================================================================
-# Edge Cases and Robustness
-# =============================================================================
 
 
 def test_handles_infinite_likelihood_gracefully():
@@ -263,11 +249,6 @@ def test_degenerate_posterior_delta_function():
     assert abs(nested.mean[0]) < 0.1
 
 
-# =============================================================================
-# Numerical Stability Tests
-# =============================================================================
-
-
 def test_very_small_evidence():
     """Test with problem that has very small evidence (large negative log Z)."""
 
@@ -295,11 +276,6 @@ def test_very_small_evidence():
     assert nested.log_evidence < -50
     assert math.isfinite(nested.log_evidence)
     assert nested.draws > 0
-
-
-# =============================================================================
-# Weight Normalization and Consistency Tests
-# =============================================================================
 
 
 def test_posterior_weights_normalize():
@@ -374,11 +350,6 @@ def test_mean_matches_weighted_average():
     np.testing.assert_allclose(nested.mean, manual_mean, rtol=1e-6, atol=1e-6)
 
 
-# =============================================================================
-# Termination and Convergence Tests
-# =============================================================================
-
-
 def test_termination_with_high_information():
     """Ensure sampler terminates even with high information content."""
 
@@ -446,11 +417,6 @@ def test_reproducibility_with_seed():
     np.testing.assert_array_equal(nested1.mean, nested2.mean)
 
 
-# =============================================================================
-# Scheduler and Adaptation Tests
-# =============================================================================
-
-
 def test_live_points_adapt_with_information():
     """Test that live points increase with information content."""
     # This is more of an observational test - we can't easily assert
@@ -484,11 +450,6 @@ def test_live_points_adapt_with_information():
     assert math.isfinite(nested.information)
 
 
-# =============================================================================
-# Boundary Handling Tests
-# =============================================================================
-
-
 def test_respects_parameter_bounds():
     """Verify all samples respect parameter bounds."""
     lower, upper = -2.0, 3.0
@@ -516,11 +477,6 @@ def test_respects_parameter_bounds():
     positions = np.array([entry[0][0] for entry in nested.posterior])
     assert np.all(positions >= lower)
     assert np.all(positions <= upper)
-
-
-# =============================================================================
-# Information Calculation Tests
-# =============================================================================
 
 
 def test_information_is_non_negative():

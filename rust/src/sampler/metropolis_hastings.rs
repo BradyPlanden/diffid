@@ -300,6 +300,16 @@ impl MetropolisHastingsState {
         Ok(())
     }
 
+    /// Get current iteration count
+    pub fn iterations(&self) -> usize {
+        self.iteration
+    }
+
+    /// Get number of chains
+    pub fn num_chains(&self) -> usize {
+        self.chains.len()
+    }
+
     /// Build final sampling results from accumulated chain data
     fn build_results(&self) -> Samples {
         let chains: Vec<Vec<Vec<f64>>> = self

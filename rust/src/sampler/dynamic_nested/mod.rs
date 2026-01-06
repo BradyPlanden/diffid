@@ -749,10 +749,7 @@ mod tests {
         assert!(logspace_sub(5.0, f64::NAN).is_none());
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
     // DNS-Specific Ask/Tell Tests
-    // ═══════════════════════════════════════════════════════════════════════
-
     #[test]
     fn dns_init_returns_correct_batch_size() {
         let sampler = DynamicNestedSampler::new()

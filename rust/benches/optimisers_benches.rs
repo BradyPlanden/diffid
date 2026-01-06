@@ -15,7 +15,7 @@ fn bench_nelder_mead_quadratic(c: &mut Criterion) {
     let optimiser = NelderMead::new()
         .with_max_iter(200)
         .with_threshold(1e-8)
-        .with_sigma0(0.6)
+        .with_step_size(0.6)
         .with_position_tolerance(1e-6);
     let initial = vec![5.0_f64, -4.0_f64];
 
@@ -46,7 +46,7 @@ fn bench_cmaes_quadratic(c: &mut Criterion) {
     let optimiser = CMAES::new()
         .with_max_iter(200)
         .with_threshold(1e-8)
-        .with_sigma0(0.6)
+        .with_step_size(0.6)
         .with_seed(42);
     let initial = vec![5.0_f64, -4.0_f64];
 

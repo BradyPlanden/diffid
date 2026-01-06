@@ -359,8 +359,12 @@ impl<O: Objective> Problem<O> {
         self.parameters.iter().map(|s| s.initial_value).collect()
     }
 
+    pub fn bounds(&self) -> Bounds {
+        self.parameters.bounds()
+    }
+
     /// A convenience function for optimisation of the problem
-    pub fn optimize(
+    pub fn optimise(
         &self,
         initial: Option<Vec<f64>>,
         optimiser: Option<&Optimiser>,

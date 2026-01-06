@@ -60,10 +60,10 @@ builder = (
     .with_parameter("y", -1.5)
 )
 problem = builder.build()
-result = problem.optimize()
+result = problem.optimise()
 
 print(f"Optimal parameters: {result.x}")
-print(f"Objective value: {result.fun:.3e}")
+print(f"Objective value: {result.value:.3e}")
 print(f"Success: {result.success}")
 ```
 

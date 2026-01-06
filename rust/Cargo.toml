@@ -10,7 +10,7 @@ documentation = "https://docs.rs/chronopt"
 readme = "../README.md"
 keywords = ["optimisation", "time-series", "differential-equations", "sampler", "inference"]
 categories = ["algorithms", "science", "simulation"]
-include = ["src/**", "Cargo.toml", "../README.md", "../LICENSE"]
+include = ["src/**", "benches/**", "Cargo.toml", "../README.md", "../LICENSE"]
 
 [dependencies]
 diffsol = { version = "0.8.0" }

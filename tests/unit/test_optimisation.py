@@ -38,7 +38,9 @@ def test_python_builder_rosenbrock():
     problem = builder.build()
 
     # Create the optimisation
-    optimiser = chron.NelderMead().with_max_iter(500).with_threshold(1e-6).with_step_size(0.15)
+    optimiser = (
+        chron.NelderMead().with_max_iter(500).with_threshold(1e-6).with_step_size(0.15)
+    )
     results = optimiser.run(problem, [1.5, -1.5])
 
     # Validation metrics

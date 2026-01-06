@@ -27,7 +27,7 @@ F_i { a * y }
     let optimiser = NelderMead::new()
         .with_max_iter(400)
         .with_threshold(1e-12)
-        .with_sigma0(0.25);
+        .with_step_size(0.25);
 
     let builder = DiffsolProblemBuilder::new()
         .with_diffsl(dsl.to_string())
@@ -52,7 +52,7 @@ F_i { a * y }
         .expect("evaluation at initial guess should succeed");
     assert!(initial_cost > true_cost);
 
-    let result = problem.optimize(Some(vec![initial_guess]), None);
+    let result = problem.optimise(Some(vec![initial_guess]), None);
 
     assert!(
         result.success,

@@ -10,16 +10,13 @@ use rand::prelude::*;
 use rand_distr::StandardNormal;
 use std::cmp::Ordering;
 use std::time::{Duration, Instant};
-// ─────────────────────────────────────────────────────────────────────────────
-// Configuration
-// ─────────────────────────────────────────────────────────────────────────────
 
-/// Configuration for the CMA-ES optimizer
+/// Configuration for the CMA-ES optimiser
 #[derive(Clone, Debug)]
 pub struct CMAES {
     max_iter: usize,
     threshold: f64,
-    sigma0: f64,
+    step_size: f64,
     patience: Option<Duration>,
     population_size: Option<usize>,
     seed: Option<u64>,
@@ -30,7 +27,7 @@ impl CMAES {
         Self {
             max_iter: 1000,
             threshold: 1e-6,
-            sigma0: 0.5,
+            step_size: 0.5,
             patience: None,
             population_size: None,
             seed: None,
@@ -47,8 +44,8 @@ impl CMAES {
         self
     }
 
-    pub fn with_sigma0(mut self, sigma0: f64) -> Self {
-        self.sigma0 = sigma0.max(1e-12);
+    pub fn with_step_size(mut self, step_size: f64) -> Self {
+        self.step_size = step_size.max(1e-12);
         self
     }
 
@@ -99,10 +96,6 @@ impl Default for CMAES {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Phase Enum
-// ─────────────────────────────────────────────────────────────────────────────
-
 /// The current phase of the CMA-ES algorithm
 #[derive(Clone, Debug)]
 pub enum CMAESPhase {
@@ -119,10 +112,6 @@ pub enum CMAESPhase {
     /// Algorithm has terminated
     Terminated(TerminationReason),
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CMA-ES Strategy Parameters
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// Pre-computed CMA-ES strategy parameters
 #[derive(Clone, Debug)]
@@ -183,10 +172,6 @@ impl StrategyParameters {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CMA-ES Distribution State
-// ─────────────────────────────────────────────────────────────────────────────
-
 /// State of the CMA-ES sampling distribution
 #[derive(Clone)]
 struct DistributionState {
@@ -238,11 +223,7 @@ impl DistributionState {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CMA-ES State
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Runtime state of the CMA-ES optimizer
+/// Runtime state of the CMA-ES optimiser
 pub struct CMAESState {
     config: CMAES,
     bounds: Bounds,
@@ -257,8 +238,8 @@ pub struct CMAESState {
     phase: CMAESPhase,
 
     // Tracking
-    nit: usize,
-    nfev: usize,
+    iterations: usize,
+    evaluations: usize,
     start_time: Instant,
     best_point: Option<EvaluatedPoint>,
     final_population: Vec<EvaluatedPoint>,
@@ -270,7 +251,7 @@ impl CMAESState {
         let params = StrategyParameters::new(dim, lambda);
 
         let mut distribution = DistributionState::new(&initial_point);
-        distribution.sigma = config.sigma0.max(1e-12);
+        distribution.sigma = config.step_size.max(1e-12);
 
         let rng = match config.seed {
             Some(seed) => StdRng::seed_from_u64(seed),
@@ -285,8 +266,8 @@ impl CMAESState {
             params,
             rng,
             phase: CMAESPhase::EvaluatingInitial { initial_point },
-            nit: 0,
-            nfev: 0,
+            iterations: 0,
+            evaluations: 0,
             start_time: Instant::now(),
             best_point: None,
             final_population: Vec::new(),
@@ -354,12 +335,12 @@ impl CMAESState {
 
     /// Get current iteration count
     pub fn iterations(&self) -> usize {
-        self.nit
+        self.iterations
     }
 
     /// Get current function evaluation count
     pub fn evaluations(&self) -> usize {
-        self.nfev
+        self.evaluations
     }
 
     /// Get the current best point and value
@@ -374,15 +355,17 @@ impl CMAESState {
         self.distribution.sigma
     }
 
+    /// Get the current mean of the search distribution
+    pub fn mean(&self) -> &[f64] {
+        self.distribution.mean.as_slice()
+    }
+
     /// Get reference to current covariance matrix
     pub fn covariance(&self) -> &DMatrix<f64> {
         &self.distribution.cov
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Phase Handlers
-    // ─────────────────────────────────────────────────────────────────────────
-
     fn handle_initial_evaluated(
         &mut self,
         initial_point: Point,
@@ -395,7 +378,7 @@ impl CMAESState {
             });
         }
 
-        self.nfev += 1;
+        self.evaluations += 1;
         let value = results[0];
 
         let evaluated = EvaluatedPoint::new(initial_point.clone(), value);
@@ -426,7 +409,7 @@ impl CMAESState {
             });
         }
 
-        self.nfev += results.len();
+        self.evaluations += results.len();
 
         // Process results into population
         let mut population: Vec<(EvaluatedPoint, DVector<f64>)> = Vec::with_capacity(expected);
@@ -470,7 +453,7 @@ impl CMAESState {
             }
         }
 
-        self.nit += 1;
+        self.iterations += 1;
 
         // Check termination
         if let Some(reason) = termination_reason {
@@ -483,10 +466,7 @@ impl CMAESState {
         Ok(())
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // State Transitions
-    // ─────────────────────────────────────────────────────────────────────────
-
     fn start_generation(&mut self) {
         // Check termination conditions first
         if let Some(reason) = self.check_pre_generation_termination() {
@@ -565,7 +545,7 @@ impl CMAESState {
         dist.p_sigma = &dist.p_sigma * (1.0 - params.c_sigma) + &delta * norm_factor;
 
         let norm_p_sigma = dist.p_sigma.norm();
-        let exponent = 2.0 * ((self.nit + 1) as f64);
+        let exponent = 2.0 * ((self.iterations + 1) as f64);
         let factor = (1.0 - (1.0 - params.c_sigma).powf(exponent))
             .max(1e-12)
             .sqrt();
@@ -637,7 +617,7 @@ impl CMAESState {
         }
 
         // Check max iterations
-        if self.nit >= self.config.max_iter {
+        if self.iterations >= self.config.max_iter {
             return Some(TerminationReason::MaxIterationsReached);
         }
 
@@ -671,8 +651,8 @@ impl CMAESState {
     fn build_results(&self, reason: TerminationReason) -> OptimisationResults {
         build_results(
             &self.final_population,
-            self.nit,
-            self.nfev,
+            self.iterations,
+            self.evaluations,
             self.start_time.elapsed(),
             reason,
             Some(&self.distribution.cov),
@@ -759,10 +739,6 @@ impl CMAES {
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tests
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -866,7 +842,7 @@ mod tests {
         let optimiser = CMAES::new()
             .with_max_iter(400)
             .with_threshold(1e-10)
-            .with_sigma0(0.6)
+            .with_step_size(0.6)
             .with_seed(4242);
 
         let result = optimiser.run(
@@ -997,22 +973,18 @@ mod tests {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // Ask/Tell Interface Tests
-    // ═══════════════════════════════════════════════════════════════════
-
     fn sphere_cmaes(x: &[f64]) -> Result<f64, std::io::Error> {
         Ok(x.iter().map(|xi| xi * xi).sum())
     }
 
     #[test]
     fn cmaes_ask_tell_basic_workflow() {
-        let optimizer = CMAES::new()
+        let optimiser = CMAES::new()
             .with_max_iter(100)
             .with_threshold(1e-6)
             .with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![3.0, -2.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![3.0, -2.0], Bounds::unbounded(2));
 
         // CMAES asks for population of points
         let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
@@ -1037,13 +1009,13 @@ mod tests {
 
     #[test]
     fn cmaes_ask_tell_matches_run() {
-        let optimizer = CMAES::new()
+        let optimiser = CMAES::new()
             .with_max_iter(80)
             .with_threshold(1e-6)
             .with_seed(123);
 
         // Ask-tell version
-        let (mut state, first_point) = optimizer.init(vec![5.0, -5.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![5.0, -5.0], Bounds::unbounded(2));
 
         let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
         let ask_tell_results = loop {
@@ -1058,7 +1030,7 @@ mod tests {
         };
 
         // .run() version
-        let run_results = optimizer.run(sphere_cmaes, vec![5.0, -5.0], Bounds::unbounded(2));
+        let run_results = optimiser.run(sphere_cmaes, vec![5.0, -5.0], Bounds::unbounded(2));
 
         // Should produce identical results (deterministic with same seed)
         assert_eq!(ask_tell_results.iterations, run_results.iterations);
@@ -1068,9 +1040,9 @@ mod tests {
 
     #[test]
     fn cmaes_population_evaluation_batching() {
-        let optimizer = CMAES::new().with_population_size(10).with_seed(42);
+        let optimiser = CMAES::new().with_population_size(10).with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![1.0, 1.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![1.0, 1.0], Bounds::unbounded(2));
 
         // Evaluate initial point
         let mut results = vec![sphere_cmaes(&first_point)];
@@ -1101,12 +1073,12 @@ mod tests {
 
     #[test]
     fn cmaes_tell_already_terminated() {
-        let optimizer = CMAES::new()
+        let optimiser = CMAES::new()
             .with_max_iter(1)
             .with_threshold(1e-10)
             .with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![0.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![0.0], Bounds::unbounded(1));
 
         let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
         loop {
@@ -1133,9 +1105,9 @@ mod tests {
 
     #[test]
     fn cmaes_result_count_mismatch() {
-        let optimizer = CMAES::new().with_population_size(8).with_seed(42);
+        let optimiser = CMAES::new().with_population_size(8).with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![1.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![1.0], Bounds::unbounded(1));
 
         // Evaluate initial point
         state.tell(vec![sphere_cmaes(&first_point)]).unwrap();
@@ -1163,12 +1135,12 @@ mod tests {
 
     #[test]
     fn cmaes_handles_evaluation_errors() {
-        let optimizer = CMAES::new()
+        let optimiser = CMAES::new()
             .with_max_iter(20)
             .with_population_size(6)
             .with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![2.0, 2.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![2.0, 2.0], Bounds::unbounded(2));
 
         let mut generation = 0;
         let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
@@ -1184,9 +1156,7 @@ mod tests {
                         .enumerate()
                         .map(|(i, p)| {
                             if generation == 3 && i < 2 {
-                                Err(std::io::Error::other(
-                                    "Simulated failure",
-                                ))
+                                Err(std::io::Error::other("Simulated failure"))
                             } else {
                                 sphere_cmaes(&p[..])
                             }
@@ -1205,10 +1175,10 @@ mod tests {
 
     #[test]
     fn cmaes_respects_bounds_ask_tell() {
-        let optimizer = CMAES::new().with_max_iter(50).with_seed(42);
+        let optimiser = CMAES::new().with_max_iter(50).with_seed(42);
 
         let bounds = Bounds::new(vec![(-2.0, 2.0), (-2.0, 2.0)]);
-        let (mut state, first_point) = optimizer.init(vec![1.5, 1.5], bounds);
+        let (mut state, first_point) = optimiser.init(vec![1.5, 1.5], bounds);
 
         // Check initial point respects bounds
         for &val in &first_point[..] {
@@ -1251,12 +1221,12 @@ mod tests {
 
     #[test]
     fn cmaes_convergence_by_threshold() {
-        let optimizer = CMAES::new()
+        let optimiser = CMAES::new()
             .with_max_iter(200)
             .with_threshold(1e-6)
             .with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![4.0, -3.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![4.0, -3.0], Bounds::unbounded(2));
 
         let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
         loop {
@@ -1285,12 +1255,12 @@ mod tests {
 
     #[test]
     fn cmaes_termination_by_max_iter() {
-        let optimizer = CMAES::new()
+        let optimiser = CMAES::new()
             .with_max_iter(5)
             .with_threshold(1e-12) // Very strict threshold
             .with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![8.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![8.0], Bounds::unbounded(1));
 
         let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
         loop {
@@ -1313,9 +1283,9 @@ mod tests {
 
     #[test]
     fn cmaes_covariance_evolution() {
-        let optimizer = CMAES::new().with_max_iter(30).with_seed(42);
+        let optimiser = CMAES::new().with_max_iter(30).with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![5.0, 5.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![5.0, 5.0], Bounds::unbounded(2));
 
         let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
         let mut iterations = 0;
@@ -1346,12 +1316,12 @@ mod tests {
 
     #[test]
     fn cmaes_sigma_adaptation() {
-        let optimizer = CMAES::new()
+        let optimiser = CMAES::new()
             .with_max_iter(50)
-            .with_sigma0(0.5)
+            .with_step_size(0.5)
             .with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![3.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![3.0], Bounds::unbounded(1));
 
         let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
 
@@ -1375,14 +1345,14 @@ mod tests {
 
     #[test]
     fn cmaes_multidimensional() {
-        let optimizer = CMAES::new()
+        let optimiser = CMAES::new()
             .with_max_iter(150)
             .with_threshold(1e-5)
             .with_seed(777);
 
         // 6D sphere function
         let (mut state, first_point) =
-            optimizer.init(vec![3.0, -2.0, 1.5, -1.0, 2.5, -3.5], Bounds::unbounded(6));
+            optimiser.init(vec![3.0, -2.0, 1.5, -1.0, 2.5, -3.5], Bounds::unbounded(6));
 
         let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
 
@@ -1416,12 +1386,12 @@ mod tests {
 
     #[test]
     fn cmaes_rosenbrock_ask_tell() {
-        let optimizer = CMAES::new()
+        let optimiser = CMAES::new()
             .with_max_iter(300)
             .with_threshold(1e-5)
             .with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![0.0, 0.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![0.0, 0.0], Bounds::unbounded(2));
 
         let mut results: Vec<_> = vec![rosenbrock_cmaes(&first_point)];
 
@@ -1450,12 +1420,12 @@ mod tests {
 
     #[test]
     fn cmaes_state_machine_integrity() {
-        let optimizer = CMAES::new()
+        let optimiser = CMAES::new()
             .with_max_iter(15)
             .with_population_size(6)
             .with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![1.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![1.0], Bounds::unbounded(1));
 
         let mut ask_count = 0;
         let mut tell_count = 1; // Initial tell about to happen
@@ -1485,12 +1455,12 @@ mod tests {
 
     #[test]
     fn cmaes_nonfinite_handling() {
-        let optimizer = CMAES::new()
+        let optimiser = CMAES::new()
             .with_max_iter(30)
             .with_population_size(5)
             .with_seed(42);
 
-        let (mut state, first_point) = optimizer.init(vec![2.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![2.0], Bounds::unbounded(1));
 
         let mut generation = 0;
         let mut results: Vec<_> = vec![sphere_cmaes(&first_point)];
@@ -1531,9 +1501,9 @@ mod tests {
     fn cmaes_reproducibility_with_seed() {
         let seed = 999;
 
-        let optimizer1 = CMAES::new().with_max_iter(50).with_seed(seed);
+        let optimiser1 = CMAES::new().with_max_iter(50).with_seed(seed);
 
-        let (mut state1, first_point1) = optimizer1.init(vec![2.0, -1.0], Bounds::unbounded(2));
+        let (mut state1, first_point1) = optimiser1.init(vec![2.0, -1.0], Bounds::unbounded(2));
         let mut results1 = vec![sphere_cmaes(&first_point1)];
 
         let result1 = loop {

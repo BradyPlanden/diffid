@@ -106,6 +106,11 @@ impl Bounds {
             .all(|r| r.start().is_infinite() && r.end().is_infinite())
     }
 
+    /// Returns a reference to the inner limits as a slice
+    pub fn limits(&self) -> &[RangeInclusive<f64>] {
+        &self.limits
+    }
+
     /// Clamps a vector of positions in-place to remain within the bounds.
     ///
     /// Each element is clamped to its corresponding bound range. For infinite bounds,

@@ -114,17 +114,17 @@ def test_all_builders_support_copy():
     # ScalarBuilder
     scalar_builder = chron.ScalarBuilder().with_callable(lambda x: x[0] ** 2)
     scalar_copy = copy.copy(scalar_builder)
-    scalar_deepcopy = copy.deepcopy(scalar_builder)
+    copy.deepcopy(scalar_builder)  # Test deepcopy
 
     # DiffsolBuilder
     diffsol_builder = chron.DiffsolBuilder().with_diffsl("in = [a]")
     diffsol_copy = copy.copy(diffsol_builder)
-    diffsol_deepcopy = copy.deepcopy(diffsol_builder)
+    copy.deepcopy(diffsol_builder)  # Test deepcopy
 
     # VectorBuilder
     vector_builder = chron.VectorBuilder().with_objective(lambda x: [x[0]])
     vector_copy = copy.copy(vector_builder)
-    vector_deepcopy = copy.deepcopy(vector_builder)
+    copy.deepcopy(vector_builder)  # Test deepcopy
 
     # All should succeed without error
     assert scalar_copy is not scalar_builder

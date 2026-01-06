@@ -65,7 +65,7 @@ class CMAES:
         r"""
         Set the stopping threshold on the best objective value.
         """
-    def with_sigma0(self, sigma0: builtins.float) -> CMAES:
+    def with_step_size(self, step_size: builtins.float) -> CMAES:
         r"""
         Set the initial global step-size (standard deviation).
         """
@@ -131,9 +131,7 @@ class DiffsolBuilder:
         r"""
         Choose whether to use dense or sparse diffusion solvers.
         """
-    def with_parallel(
-        self, parallel: builtins.bool | None = None
-    ) -> DiffsolBuilder:
+    def with_parallel(self, parallel: builtins.bool | None = None) -> DiffsolBuilder:
         r"""
         Opt into parallel proposal generation when supported by the backend.
         """
@@ -171,7 +169,7 @@ class DiffsolBuilder:
         """
     def with_optimiser(self, optimiser: NelderMead | CMAES | Adam) -> DiffsolBuilder:
         r"""
-        Configure the default optimiser used when `Problem.optimize` omits one.
+        Configure the default optimiser used when `Problem.optimise` omits one.
         """
     def build(self) -> Problem:
         r"""
@@ -245,7 +243,7 @@ class OptimisationResults:
         Number of iterations performed by the optimiser.
         """
     @property
-    def nfev(self) -> builtins.int:
+    def evaluations(self) -> builtins.int:
         r"""
         Total number of objective function evaluations.
         """
@@ -306,7 +304,7 @@ class Problem:
         r"""
         Evaluate the gradient of the objective function at `x` if available.
         """
-    def optimize(
+    def optimise(
         self,
         initial: typing.Sequence[builtins.float] | None = None,
         optimiser: NelderMead | CMAES | Adam | None = None,
@@ -351,7 +349,7 @@ class ScalarBuilder:
         """
     def with_optimiser(self, optimiser: NelderMead | CMAES | Adam) -> ScalarBuilder:
         r"""
-        Configure the default optimiser used when `Problem.optimize` omits one.
+        Configure the default optimiser used when `Problem.optimise` omits one.
         """
     def with_callable(self, obj: typing.Any) -> ScalarBuilder:
         r"""
@@ -425,7 +423,7 @@ class VectorBuilder:
         """
     def with_optimiser(self, optimiser: NelderMead | CMAES | Adam) -> VectorBuilder:
         r"""
-        Configure the default optimiser used when `Problem.optimize` omits one.
+        Configure the default optimiser used when `Problem.optimise` omits one.
         """
     def build(self) -> Problem:
         r"""

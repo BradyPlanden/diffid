@@ -91,7 +91,7 @@ stop {x}
         .with_data(data)
         .with_parameter("g", g_true)
         .with_parameter("h", h_true)
-        .with_tolerances(rtol = 1e-6, atol = 1e-6)
+        .with_tolerances(rtol=1e-6, atol=1e-6)
         .with_cost(chron.SSE())
     )
 

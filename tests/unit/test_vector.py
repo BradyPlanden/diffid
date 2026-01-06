@@ -96,7 +96,9 @@ def test_vector_builder_sinusoidal():
 
     # Note: Sinusoidal fitting can be challenging due to local minima
     # We just verify the optimization runs and produces reasonable results
-    assert result.success or result.iterations >= 1000  # Either converged or tried hard enough
+    assert (
+        result.success or result.iterations >= 1000
+    )  # Either converged or tried hard enough
     # Cost should be reduced from initial
     initial_cost = problem.evaluate(x0)
     assert result.value < initial_cost
@@ -220,7 +222,8 @@ def test_vector_builder_dimension_mismatch():
     )
 
     with pytest.raises(
-        chron.errors.EvaluationError, match="Evaluation failed: Evaluation failed:: expected 3 elements, got 5"
+        chron.errors.EvaluationError,
+        match="Evaluation failed: Evaluation failed:: expected 3 elements, got 5",
     ):
         problem.evaluate([1.0])
 

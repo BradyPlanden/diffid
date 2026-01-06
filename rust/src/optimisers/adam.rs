@@ -6,7 +6,7 @@ use crate::optimisers::{
 use std::error::Error as StdError;
 use std::time::{Duration, Instant};
 
-/// Configuration for the Adam optimizer
+/// Configuration for the Adam optimiser
 #[derive(Clone, Debug)]
 pub struct Adam {
     max_iter: usize,
@@ -99,10 +99,6 @@ impl Default for Adam {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Phase Enum
-// ─────────────────────────────────────────────────────────────────────────────
-
 /// The current phase of the Adam algorithm
 #[derive(Clone, Debug)]
 pub enum AdamPhase {
@@ -112,10 +108,6 @@ pub enum AdamPhase {
     /// Algorithm has terminated
     Terminated(TerminationReason),
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Adam Momentum State
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// State of the Adam momentum estimates
 #[derive(Clone, Debug)]
@@ -177,11 +169,7 @@ impl MomentumState {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Adam State
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Runtime state of the Adam optimizer
+/// Runtime state of the Adam optimiser
 pub struct AdamState {
     config: Adam,
     bounds: Bounds,
@@ -197,8 +185,8 @@ pub struct AdamState {
     phase: AdamPhase,
 
     // Tracking
-    nit: usize,
-    nfev: usize,
+    iterations: usize,
+    evaluations: usize,
     start_time: Instant,
     history: Vec<EvaluatedPoint>,
     prev_cost: Option<f64>,
@@ -215,8 +203,8 @@ impl AdamState {
             phase: AdamPhase::AwaitingEvaluation {
                 pending_point: initial_point,
             },
-            nit: 0,
-            nfev: 0,
+            iterations: 0,
+            evaluations: 0,
             start_time: Instant::now(),
             history: Vec::new(),
             prev_cost: None,
@@ -267,7 +255,7 @@ impl AdamState {
             });
         }
 
-        self.nfev += 1;
+        self.evaluations += 1;
 
         // Take ownership of current phase
         let phase = std::mem::replace(
@@ -287,12 +275,12 @@ impl AdamState {
 
     /// Get current iteration count
     pub fn iterations(&self) -> usize {
-        self.nit
+        self.iterations
     }
 
     /// Get current function evaluation count
     pub fn evaluations(&self) -> usize {
-        self.nfev
+        self.evaluations
     }
 
     /// Get the current best point and value
@@ -314,10 +302,7 @@ impl AdamState {
         (&self.momentum.m, &self.momentum.v)
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Phase Handler
-    // ─────────────────────────────────────────────────────────────────────────
-
     fn handle_evaluation(&mut self, _pending_point: Point, eval: GradientEvaluation) {
         let GradientEvaluation { value, gradient } = eval;
 
@@ -352,7 +337,7 @@ impl AdamState {
         self.prev_cost = Some(value);
 
         // Check max iterations (before computing next step)
-        if self.nit >= self.config.max_iter {
+        if self.iterations >= self.config.max_iter {
             self.phase = AdamPhase::Terminated(TerminationReason::MaxIterationsReached);
             return;
         }
@@ -382,7 +367,7 @@ impl AdamState {
         // Apply bounds
         self.bounds.clamp(&mut self.x);
 
-        self.nit += 1;
+        self.iterations += 1;
 
         // Prepare for next evaluation
         self.phase = AdamPhase::AwaitingEvaluation {
@@ -404,8 +389,8 @@ impl AdamState {
 
         build_results(
             &points,
-            self.nit,
-            self.nfev,
+            self.iterations,
+            self.evaluations,
             self.start_time.elapsed(),
             reason,
             None,
@@ -413,10 +398,7 @@ impl AdamState {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Convenience wrapper
-// ─────────────────────────────────────────────────────────────────────────────
-
 impl Adam {
     /// Run optimization using a closure for evaluation
     ///
@@ -497,10 +479,6 @@ impl Adam {
         )
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tests
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -597,11 +575,7 @@ mod tests {
     fn test_run_convenience_wrapper() {
         let adam = Adam::new().with_max_iter(1000).with_step_size(0.1);
 
-        let results = adam.run(
-            sphere_infallible,
-            vec![5.0, 5.0],
-            Bounds::unbounded(2),
-        );
+        let results = adam.run(sphere_infallible, vec![5.0, 5.0], Bounds::unbounded(2));
 
         println!("Final value: {}", results.value);
         println!("Iterations: {}", results.iterations);
@@ -615,11 +589,7 @@ mod tests {
             .with_step_size(0.001)
             .with_threshold(1e-8);
 
-        let results = adam.run(
-            rosenbrock_infallible,
-            vec![0.0, 0.0],
-            Bounds::unbounded(2),
-        );
+        let results = adam.run(rosenbrock_infallible, vec![0.0, 0.0], Bounds::unbounded(2));
 
         println!("Rosenbrock result: {}", results.value);
         println!("Iterations: {}", results.iterations);
@@ -647,12 +617,12 @@ mod tests {
 
     #[test]
     fn adam_ask_tell_basic_workflow() {
-        let optimizer = Adam::new()
+        let optimiser = Adam::new()
             .with_max_iter(500)
             .with_step_size(0.1)
             .with_threshold(1e-8);
 
-        let (mut state, first_point) = optimizer.init(vec![3.0, -2.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![3.0, -2.0], Bounds::unbounded(2));
         let mut result = sphere_infallible(&first_point);
 
         loop {
@@ -675,13 +645,13 @@ mod tests {
 
     #[test]
     fn adam_ask_tell_matches_run() {
-        let optimizer = Adam::new()
+        let optimiser = Adam::new()
             .with_max_iter(100)
             .with_step_size(0.1)
             .with_threshold(1e-6);
 
         // Ask-tell interface
-        let (mut state, first_point) = optimizer.clone().init(vec![2.0, 2.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.clone().init(vec![2.0, 2.0], Bounds::unbounded(2));
         let mut result = sphere_infallible(&first_point);
 
         loop {
@@ -694,11 +664,8 @@ mod tests {
                     let ask_tell_value = results.value;
 
                     // Run interface
-                    let run_results = optimizer.run(
-                        sphere_infallible,
-                        vec![2.0, 2.0],
-                        Bounds::unbounded(2),
-                    );
+                    let run_results =
+                        optimiser.run(sphere_infallible, vec![2.0, 2.0], Bounds::unbounded(2));
 
                     // Should get very similar results
                     assert!((ask_tell_value - run_results.value).abs() < 1e-10);
@@ -710,9 +677,9 @@ mod tests {
 
     #[test]
     fn adam_momentum_accumulation() {
-        let optimizer = Adam::new().with_max_iter(100).with_step_size(0.01);
+        let optimiser = Adam::new().with_max_iter(100).with_step_size(0.01);
 
-        let (mut state, first_point) = optimizer.init(vec![1.0, 1.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![1.0, 1.0], Bounds::unbounded(2));
         let mut result = sphere_infallible(&first_point);
 
         // Initial momentum should be zero
@@ -752,12 +719,12 @@ mod tests {
 
     #[test]
     fn adam_bias_correction() {
-        let optimizer = Adam::new()
+        let optimiser = Adam::new()
             .with_max_iter(10)
             .with_step_size(0.1)
             .with_betas(0.9, 0.999);
 
-        let (mut state, first_point) = optimizer.init(vec![1.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![1.0], Bounds::unbounded(1));
         let mut result = sphere_infallible(&first_point);
 
         let mut positions = vec![first_point[0]];
@@ -784,9 +751,9 @@ mod tests {
 
     #[test]
     fn adam_query_momentum_state() {
-        let optimizer = Adam::new().with_max_iter(50).with_step_size(0.1);
+        let optimiser = Adam::new().with_max_iter(50).with_step_size(0.1);
 
-        let (mut state, first_point) = optimizer.init(vec![2.0, -3.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![2.0, -3.0], Bounds::unbounded(2));
         let mut result = sphere_infallible(&first_point);
 
         // Run a few iterations
@@ -826,10 +793,10 @@ mod tests {
 
     #[test]
     fn adam_numerical_gradient_accuracy() {
-        let optimizer = Adam::new().with_max_iter(200).with_step_size(0.1);
+        let optimiser = Adam::new().with_max_iter(200).with_step_size(0.1);
 
         // Use numerical gradient approximation
-        let results_numerical = optimizer.run_with_numerical_gradient(
+        let results_numerical = optimiser.run_with_numerical_gradient(
             |x| -> Result<f64, std::io::Error> { Ok(x.iter().map(|xi| xi * xi).sum()) },
             vec![2.0, 2.0],
             Bounds::unbounded(2),
@@ -837,11 +804,8 @@ mod tests {
         );
 
         // Use analytical gradient
-        let results_analytical = optimizer.run(
-            sphere_infallible,
-            vec![2.0, 2.0],
-            Bounds::unbounded(2),
-        );
+        let results_analytical =
+            optimiser.run(sphere_infallible, vec![2.0, 2.0], Bounds::unbounded(2));
 
         // Both should converge to similar values
         assert!(
@@ -862,9 +826,9 @@ mod tests {
 
     #[test]
     fn adam_tell_already_terminated() {
-        let optimizer = Adam::new().with_max_iter(1).with_step_size(0.1);
+        let optimiser = Adam::new().with_max_iter(1).with_step_size(0.1);
 
-        let (mut state, first_point) = optimizer.init(vec![1.0], Bounds::unbounded(1));
+        let (mut state, first_point) = optimiser.init(vec![1.0], Bounds::unbounded(1));
         let mut result = sphere_infallible(&first_point);
 
         // First tell should succeed
@@ -898,9 +862,9 @@ mod tests {
 
     #[test]
     fn adam_nonfinite_gradient_handling() {
-        let optimizer = Adam::new().with_max_iter(100).with_step_size(0.1);
+        let optimiser = Adam::new().with_max_iter(100).with_step_size(0.1);
 
-        let (mut state, first_point) = optimizer.init(vec![1.0, 1.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![1.0, 1.0], Bounds::unbounded(2));
 
         // First evaluation is normal
         let result1 = sphere_infallible(&first_point);
@@ -931,12 +895,12 @@ mod tests {
 
     #[test]
     fn adam_max_iterations_termination() {
-        let optimizer = Adam::new()
+        let optimiser = Adam::new()
             .with_max_iter(5)
             .with_step_size(0.001) // Very small step to prevent early convergence
             .with_threshold(1e-20); // Very tight threshold to prevent early convergence
 
-        let (mut state, first_point) = optimizer.init(vec![10.0, 10.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![10.0, 10.0], Bounds::unbounded(2));
         let mut result = sphere_infallible(&first_point);
 
         let mut iterations = 0;
@@ -965,12 +929,12 @@ mod tests {
     fn adam_patience_timeout() {
         use std::time::Duration;
 
-        let optimizer = Adam::new()
+        let optimiser = Adam::new()
             .with_max_iter(10000)
             .with_step_size(0.1)
             .with_patience(0.001); // 1ms timeout
 
-        let (mut state, first_point) = optimizer.init(vec![5.0, 5.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![5.0, 5.0], Bounds::unbounded(2));
         let mut result = sphere_infallible(&first_point);
 
         // Add a small delay in the loop to ensure timeout is reached
@@ -995,12 +959,12 @@ mod tests {
 
     #[test]
     fn adam_function_tolerance_triggers() {
-        let optimizer = Adam::new()
+        let optimiser = Adam::new()
             .with_max_iter(1000)
             .with_step_size(0.1)
             .with_threshold(1e-4); // Loose threshold for function value change
 
-        let (mut state, first_point) = optimizer.init(vec![0.001, 0.001], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![0.001, 0.001], Bounds::unbounded(2));
         let mut result = sphere_infallible(&first_point);
 
         loop {
@@ -1029,12 +993,12 @@ mod tests {
 
     #[test]
     fn adam_gradient_tolerance_triggers() {
-        let optimizer = Adam::new()
+        let optimiser = Adam::new()
             .with_max_iter(1000)
             .with_step_size(0.1)
             .with_gradient_threshold(0.5); // Loose gradient threshold
 
-        let (mut state, first_point) = optimizer.init(vec![0.1, 0.1], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![0.1, 0.1], Bounds::unbounded(2));
         let mut result = sphere_infallible(&first_point);
 
         loop {
@@ -1057,10 +1021,10 @@ mod tests {
 
     #[test]
     fn adam_respects_bounds() {
-        let optimizer = Adam::new().with_max_iter(100).with_step_size(1.0); // Large step size to test clamping
+        let optimiser = Adam::new().with_max_iter(100).with_step_size(1.0); // Large step size to test clamping
 
         let bounds = Bounds::new(vec![(-2.0, 2.0), (-2.0, 2.0)]);
-        let (mut state, first_point) = optimizer.init(vec![1.5, -1.5], bounds.clone());
+        let (mut state, first_point) = optimiser.init(vec![1.5, -1.5], bounds.clone());
         let mut result = sphere_infallible(&first_point);
 
         // Verify initial point respects bounds
@@ -1088,12 +1052,12 @@ mod tests {
 
     #[test]
     fn adam_rosenbrock_ask_tell() {
-        let optimizer = Adam::new()
+        let optimiser = Adam::new()
             .with_max_iter(5000)
             .with_step_size(0.001)
             .with_threshold(1e-6);
 
-        let (mut state, first_point) = optimizer.init(vec![0.0, 0.0], Bounds::unbounded(2));
+        let (mut state, first_point) = optimiser.init(vec![0.0, 0.0], Bounds::unbounded(2));
         let mut result = rosenbrock_infallible(&first_point);
 
         loop {
@@ -1119,13 +1083,11 @@ mod tests {
     #[test]
     fn adam_evaluation_error_propagation() {
         fn failing_function(_x: &[f64]) -> Result<(f64, Vec<f64>), std::io::Error> {
-            Err(std::io::Error::other(
-                "Evaluation failed",
-            ))
+            Err(std::io::Error::other("Evaluation failed"))
         }
 
-        let optimizer = Adam::new().with_max_iter(100).with_step_size(0.1);
-        let (mut state, first_point) = optimizer.init(vec![1.0, 1.0], Bounds::unbounded(2));
+        let optimiser = Adam::new().with_max_iter(100).with_step_size(0.1);
+        let (mut state, first_point) = optimiser.init(vec![1.0, 1.0], Bounds::unbounded(2));
 
         // First evaluation succeeds
         let result1 = sphere_fallible(&first_point).expect("first eval should succeed");

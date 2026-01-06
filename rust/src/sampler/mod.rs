@@ -7,7 +7,9 @@ mod metropolis_hastings;
 
 use crate::errors::EvaluationError;
 use crate::optimisers::{GradientEvaluation, ScalarEvaluation};
-pub use dynamic_nested::{DynamicNestedSampler, NestedSample, NestedSamples};
+pub use dynamic_nested::{
+    DynamicNestedSampler, DynamicNestedSamplerState, NestedSample, NestedSamples,
+};
 pub use metropolis_hastings::{MetropolisHastings, MetropolisHastingsState};
 
 /// Samplers that only require objective function values (no gradients)
@@ -230,10 +232,7 @@ impl Default for Sampler {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // Result Types (Samples, etc.)
-// ═══════════════════════════════════════════════════════════════════════════
-
 #[derive(Clone, Debug)]
 pub struct Samples {
     chains: Vec<Vec<Vec<f64>>>,
@@ -476,10 +475,7 @@ mod tests {
         assert!(nested_results.as_nested().is_some());
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
     // Ask/Tell Interface Tests
-    // ═══════════════════════════════════════════════════════════════════════
-
     #[test]
     fn metropolis_hastings_ask_tell_works() {
         let problem = ScalarProblemBuilder::new()
@@ -660,9 +656,7 @@ mod tests {
                         .enumerate()
                         .map(|(i, _)| {
                             if iteration == 2 && i == 0 {
-                                Err(std::io::Error::other(
-                                    "Evaluation failed",
-                                ))
+                                Err(std::io::Error::other("Evaluation failed"))
                             } else {
                                 Ok(1.0)
                             }
@@ -682,10 +676,7 @@ mod tests {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
     // DynamicNestedSampler Ask/Tell Interface Tests
-    // ═══════════════════════════════════════════════════════════════════════
-
     #[test]
     fn dynamic_nested_ask_tell_basic_flow() {
         let sampler = DynamicNestedSampler::new()
@@ -857,9 +848,7 @@ mod tests {
                         .map(|(i, x)| {
                             if iteration < 3 && i % 3 == 0 {
                                 // Some evaluations fail
-                                Err(std::io::Error::other(
-                                    "Simulated failure",
-                                ))
+                                Err(std::io::Error::other("Simulated failure"))
                             } else {
                                 Ok(0.5 * x[0].powi(2))
                             }

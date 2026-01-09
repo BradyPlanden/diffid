@@ -26,6 +26,16 @@
 - The Rust core provides a high-performance inference loop with fewer runtime errors.
 - Quickly integrated into Python workflows, and later use the rust crate directly for even higher performance.
 
+## Documentation
+
+📚 **[Full Documentation](https://bradyplanden.github.io/chronopt/)**
+
+Visit the comprehensive documentation for:
+- Getting started guides and tutorials
+- Complete API reference
+- User guides for choosing and tuning algorithms
+- Examples gallery and Jupyter notebooks
+
 ## Installation
 
 Chronopt targets Python >= 3.11. Windows builds are currently marked experimental. 

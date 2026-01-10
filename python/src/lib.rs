@@ -93,6 +93,15 @@ impl DynProblem {
         }
     }
 
+    fn initial_values(&self) -> Vec<f64> {
+        match self {
+            Self::Scalar(p) => p.initial_values(),
+            Self::ScalarWithGradient(p) => p.initial_values(),
+            Self::Vector(p) => p.initial_values(),
+            Self::Diffsol(p) => p.initial_values(),
+        }
+    }
+
     fn optimise(
         &self,
         initial: Option<Vec<f64>>,
@@ -310,6 +319,10 @@ impl PyProblem {
 
     fn parameters(&self) -> Vec<ParameterSpecEntry> {
         self.parameter_specs.clone()
+    }
+
+    fn initial_values(&self) -> Vec<f64> {
+        self.inner.initial_values()
     }
 
     /// Return the default parameter vector implied by the builder.

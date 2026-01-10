@@ -139,6 +139,13 @@ impl ParameterSet {
                 .collect(),
         }
     }
+
+    pub fn initial_values(&self) -> Vec<f64> {
+        if self.0.is_empty() {
+            return vec![];
+        }
+        self.0.iter().map(|spec| spec.initial_value).collect()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -361,6 +368,10 @@ impl<O: Objective> Problem<O> {
 
     pub fn bounds(&self) -> Bounds {
         self.parameters.bounds()
+    }
+
+    pub fn initial_values(&self) -> Vec<f64> {
+        self.parameters.initial_values()
     }
 
     /// A convenience function for optimisation of the problem

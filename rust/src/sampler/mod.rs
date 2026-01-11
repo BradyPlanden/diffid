@@ -239,20 +239,32 @@ pub struct Samples {
     mean_x: Vec<f64>,
     draws: usize,
     time: Duration,
+    acceptance_data: Vec<Vec<bool>>, // Per-chain acceptance history
 }
 
 impl Samples {
-    pub fn new(chains: Vec<Vec<Vec<f64>>>, mean_x: Vec<f64>, draws: usize, time: Duration) -> Self {
+    pub fn new(
+        chains: Vec<Vec<Vec<f64>>>,
+        mean_x: Vec<f64>,
+        draws: usize,
+        time: Duration,
+        acceptance_data: Vec<Vec<bool>>,
+    ) -> Self {
         Self {
             chains,
             mean_x,
             draws,
             time,
+            acceptance_data,
         }
     }
 
     pub fn chains(&self) -> &[Vec<Vec<f64>>] {
         &self.chains
+    }
+
+    pub fn samples(&self) -> Vec<Vec<f64>> {
+        self.chains.iter().flatten().cloned().collect()
     }
 
     pub fn mean_x(&self) -> &[f64] {
@@ -265,6 +277,23 @@ impl Samples {
 
     pub fn time(&self) -> Duration {
         self.time
+    }
+
+    /// Get the acceptance rate for each chain
+    ///
+    /// Returns a vector of acceptance rates (proportion of accepted proposals)
+    /// for each MCMC chain. Each value is between 0.0 and 1.0.
+    pub fn acceptance_rates(&self) -> Vec<f64> {
+        self.acceptance_data
+            .iter()
+            .map(|chain_accepts| {
+                if chain_accepts.is_empty() {
+                    0.0
+                } else {
+                    chain_accepts.iter().filter(|&&a| a).count() as f64 / chain_accepts.len() as f64
+                }
+            })
+            .collect()
     }
 }
 

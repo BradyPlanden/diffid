@@ -1,4 +1,4 @@
-use numpy::{PyArray1, ToPyArray};
+use numpy::{PyArray1, PyArray2, PyArray3, ToPyArray};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use std::time::Duration;
@@ -79,13 +79,47 @@ pub struct PySamples {
 #[pymethods]
 impl PySamples {
     #[getter]
-    fn chains(&self) -> Vec<Vec<Vec<f64>>> {
-        self.inner.chains().to_vec()
+    fn chains<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray3<f64>> {
+        use numpy::ndarray::Array3;
+
+        let rust_chains = self.inner.chains();
+
+        if rust_chains.is_empty() {
+            let empty_array = Array3::<f64>::zeros((0, 0, 0));
+            return empty_array.to_pyarray(py);
+        }
+
+        let n_chains = rust_chains.len();
+        let n_iterations = rust_chains[0].len();
+        let n_params = rust_chains[0][0].len();
+
+        // Create ndarray from nested vec
+        let mut array = Array3::<f64>::zeros((n_chains, n_iterations, n_params));
+        for (i, chain) in rust_chains.iter().enumerate() {
+            for (j, sample) in chain.iter().enumerate() {
+                for (k, &value) in sample.iter().enumerate() {
+                    array[[i, j, k]] = value;
+                }
+            }
+        }
+
+        array.to_pyarray(py)
+    }
+
+    #[getter]
+    fn samples<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+        PyArray2::from_vec2(py, &self.inner.samples()).expect("Valid Array2")
     }
 
     #[getter]
     fn mean_x<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
         self.inner.mean_x().to_pyarray(py)
+    }
+
+    #[getter]
+    fn acceptance_rate<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        let rates = self.inner.acceptance_rates();
+        rates.to_pyarray(py)
     }
 
     #[getter]
@@ -164,12 +198,14 @@ impl PySamples {
 }
 
 /// Iterator for Samples chains
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass]
 struct SamplesIterator {
     chains: Vec<Vec<Vec<f64>>>,
     index: usize,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SamplesIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
@@ -331,12 +367,14 @@ impl PyNestedSamples {
 }
 
 /// Iterator for NestedSamples posterior
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass]
 struct NestedSamplesIterator {
     samples: Vec<(Vec<f64>, f64, f64)>,
     index: usize,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl NestedSamplesIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {

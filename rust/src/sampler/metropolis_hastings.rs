@@ -104,6 +104,7 @@ struct ChainState {
     proposal: Vec<f64>,
     samples: Vec<Vec<f64>>,
     rng: StdRng,
+    acceptances: Vec<bool>, // Track accept/reject per iteration
 }
 
 /// Phase tracking for MCMC sampling
@@ -167,6 +168,7 @@ impl MetropolisHastings {
                     proposal,
                     samples: vec![initial_point.clone()],
                     rng,
+                    acceptances: Vec::new(),
                 }
             })
             .collect();
@@ -278,6 +280,8 @@ impl MetropolisHastingsState {
                 chain.current_log_likelihood = proposal_log_likelihood;
             }
 
+            // Track acceptance for diagnostics
+            chain.acceptances.push(accept);
             chain.samples.push(chain.current.clone());
 
             // Generate next proposal
@@ -341,6 +345,19 @@ impl MetropolisHastingsState {
             }
         }
 
-        Samples::new(chains, mean_x, total_samples, self.start_time.elapsed())
+        // Extract acceptance data from all chains
+        let acceptance_data: Vec<Vec<bool>> = self
+            .chains
+            .iter()
+            .map(|chain| chain.acceptances.clone())
+            .collect();
+
+        Samples::new(
+            chains,
+            mean_x,
+            total_samples,
+            self.start_time.elapsed(),
+            acceptance_data,
+        )
     }
 }

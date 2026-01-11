@@ -216,8 +216,17 @@ pub trait Objective: Send + Sync {
         Ok((self.evaluate(x)?, self.gradient(x)))
     }
 
+    /// Evaluates a batch of candidates provided as `xs`
+    /// Default is sequential evaluation, certain objectives
+    /// support parallel evaluation.
     fn evaluate_population(&self, xs: &[Vec<f64>]) -> Vec<Result<f64, ProblemError>> {
         xs.iter().map(|x| self.evaluate(x)).collect()
+    }
+
+    /// Boolean flag to denote whether the objective can support
+    /// parallel evaluations.
+    fn supports_parallel_evaluation(&self) -> bool {
+        false
     }
 }
 
@@ -392,8 +401,15 @@ impl<O: Objective> Problem<O> {
 
         match opt {
             Optimiser::Scalar(scalar_opt) => {
-                // Only need objective values
-                scalar_opt.run(|x| self.evaluate(x), x0, self.parameters.bounds())
+                if self.objective.supports_parallel_evaluation() {
+                    scalar_opt.run_batch(
+                        |xs| self.evaluate_population(xs),
+                        x0,
+                        self.parameters.bounds(),
+                    )
+                } else {
+                    scalar_opt.run(|x| self.evaluate(x), x0, self.parameters.bounds())
+                }
             }
             Optimiser::Gradient(grad_opt) => {
                 // Needs objective + gradient values
@@ -433,7 +449,15 @@ impl<O: Objective> Problem<O> {
 
         match sampler {
             Sampler::Scalar(scalar_sampler) => {
-                scalar_sampler.run(|x| self.evaluate(x), x0, self.parameters.bounds())
+                if self.objective.supports_parallel_evaluation() {
+                    scalar_sampler.run_batch(
+                        |xs| self.evaluate_population(xs),
+                        x0,
+                        self.parameters.bounds(),
+                    )
+                } else {
+                    scalar_sampler.run(|x| self.evaluate(x), x0, self.parameters.bounds())
+                }
             }
             Sampler::Gradient(_grad_sampler) => {
                 unimplemented!("Gradient samplers not yet implemented")

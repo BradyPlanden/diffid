@@ -270,12 +270,20 @@ impl Objective for DiffsolObjective {
         })
     }
 
+    /// Population based evaluation supporting
+    /// both sequential and parallel configurations.
     fn evaluate_population(&self, params: &[Vec<f64>]) -> Vec<Result<f64, ProblemError>> {
         if self.config.parallel {
             params.par_iter().map(|x| self.evaluate(x)).collect()
         } else {
             params.iter().map(|x| self.evaluate(x)).collect()
         }
+    }
+
+    /// Support parallel evaluation if config.parallel
+    /// is set by user.
+    fn supports_parallel_evaluation(&self) -> bool {
+        self.config.parallel
     }
 
     fn has_gradient(&self) -> bool {

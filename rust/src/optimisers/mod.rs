@@ -73,6 +73,52 @@ impl ScalarOptimiser {
             ScalarOptimiser::CMAES(cm) => cm.run(objective, initial, bounds),
         }
     }
+
+    /// Run the optimiser with batched candidates
+    ///
+    /// # Arguments
+    /// * `objective` - Function that batch evaluates the objective
+    /// * `initial` - Initial point (will be auto-expanded if needed)
+    /// * `bounds` - Optional parameter bounds
+    ///
+    /// # Returns
+    /// Optimization results including best point, value, and diagnostics
+    ///
+    /// # Example
+    /// ```
+    /// use chronopt::common::Bounds;
+    /// use chronopt::optimisers::{ScalarOptimiser, NelderMead};
+    ///
+    /// let optimiser = ScalarOptimiser::from(NelderMead::new());
+    /// let result = optimiser.run_batch(
+    ///     |xs| xs.iter().map(|x| x[0].powi(2) + x[1].powi(2)).collect(),
+    ///     vec![1.0, 2.0],
+    ///     Bounds::unbounded(2)
+    /// );
+    /// ```
+    pub fn run_batch<F, R, E>(
+        &self,
+        objective: F,
+        initial: Point,
+        bounds: Bounds,
+    ) -> OptimisationResults
+    where
+        F: Fn(&[Vec<f64>]) -> Vec<R>,
+        R: TryInto<ScalarEvaluation, Error = E>,
+        E: Into<EvaluationError>,
+    {
+        match self {
+            ScalarOptimiser::CMAES(cm) => cm.run_batch(objective, initial, bounds),
+            ScalarOptimiser::NelderMead(nm) => nm.run(
+                |x| {
+                    let result = objective(&vec![x.to_vec()]);
+                    result.into_iter().next().unwrap() // ToDO: This needs proper error integration
+                },
+                initial,
+                bounds,
+            ),
+        }
+    }
 }
 
 impl GradientOptimiser {

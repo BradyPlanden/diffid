@@ -84,6 +84,48 @@ impl MetropolisHastings {
             }
         }
     }
+
+    /// Run Metropolis-Hastings MCMC with batch sampling
+    ///
+    /// This method evaluates the problem's objective function to sample
+    /// from the posterior distribution using a random walk Metropolis algorithm.
+    ///
+    /// Internally uses the ask/tell interface for consistency. For external
+    /// control of the evaluation loop, use `init()`, `ask()`, and `tell()` directly.
+    pub fn run_batch<F, R, E>(&self, objective: F, initial: Point, bounds: Bounds) -> Samples
+    where
+        F: Fn(&[Vec<f64>]) -> Vec<R>,
+        R: TryInto<ScalarEvaluation, Error = E>,
+        E: Into<EvaluationError>,
+    {
+        let initial_point = initial;
+        let mut state = self.init(initial_point.clone(), bounds); // ToDo: performance improvement, remove clone
+
+        let mut results = objective(&vec![initial_point]);
+
+        loop {
+            // Call ask and break if an error is encountered
+            if state.tell(results).is_err() {
+                break;
+            }
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    results = objective(&points);
+                }
+                AskResult::Done(SamplingResults::MCMC(samples)) => {
+                    return samples;
+                }
+                _ => unreachable!("MetropolisHastings always returns MCMC results"),
+            }
+        }
+
+        // Final ask call for if tell returned an error
+        match state.ask() {
+            AskResult::Done(SamplingResults::MCMC(samples)) => samples,
+            _ => panic!("Unexpected state after tell error"),
+        }
+    }
 }
 
 /// State for ask/tell interface of Metropolis-Hastings sampler

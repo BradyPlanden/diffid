@@ -311,6 +311,8 @@ impl CMAESState {
             .collect();
 
         // Take ownership of current phase
+        // Placeholder MaxIters is set, will be replaced
+        // in handle methods below
         let phase = std::mem::replace(
             &mut self.phase,
             CMAESPhase::Terminated(TerminationReason::MaxIterationsReached),
@@ -700,23 +702,20 @@ impl CMAES {
         }
     }
 
-    /// Run optimization with parallel evaluation
-    #[allow(dead_code)]
-    #[cfg(feature = "rayon")]
-    pub fn run_parallel<F>(
+    pub fn run_batch<F, R, E>(
         &self,
+        objective: F,
         initial: Point,
         bounds: Bounds,
-        objective: F,
     ) -> OptimisationResults
     where
-        F: Fn(&[f64]) -> Result<f64, String> + Sync,
+        F: Fn(&[Vec<f64>]) -> Vec<R>,
+        R: TryInto<ScalarEvaluation, Error = E>,
+        E: Into<EvaluationError>,
     {
-        use rayon::prelude::*;
-
         let (mut state, first_point) = self.init(initial, bounds);
 
-        let mut results = vec![objective(&first_point)];
+        let mut results = objective(&vec![first_point]);
 
         loop {
             if state.tell(results).is_err() {
@@ -725,7 +724,7 @@ impl CMAES {
 
             match state.ask() {
                 AskResult::Evaluate(points) => {
-                    results = points.par_iter().map(|p| objective(p)).collect();
+                    results = objective(&points);
                 }
                 AskResult::Done(opt_results) => {
                     return opt_results;

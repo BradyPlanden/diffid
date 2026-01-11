@@ -42,12 +42,12 @@ impl ScalarSampler {
     /// Run the sampler with a scalar objective function
     ///
     /// # Arguments
-    /// * `problem` - Problem defining objective and parameter specs
+    /// * `objective` - Function that evaluates the objective at a single point
     /// * `initial` - Initial point for sampling
     /// * `bounds` - Parameter bounds
     ///
     /// # Returns
-    /// Sampling results (type depends on sampler algorithm)
+    /// Sampling results
     pub fn run<F, R, E>(&self, objective: F, initial: Point, bounds: Bounds) -> SamplingResults
     where
         F: FnMut(&[f64]) -> R,
@@ -62,6 +62,38 @@ impl ScalarSampler {
             ScalarSampler::DynamicNested(dns) => {
                 // Delegates to individual sampler's run() method
                 SamplingResults::Nested(dns.run(objective, initial, bounds))
+            }
+        }
+    }
+
+    /// Run the sampler with a batched scalar objective function
+    ///
+    /// # Arguments
+    /// * `objective` - Function that evaluates the objective with a batch of parameter candidates
+    /// * `initial` - Initial point for sampling
+    /// * `bounds` - Parameter bounds
+    ///
+    /// # Returns
+    /// Sampling results
+    pub fn run_batch<F, R, E>(
+        &self,
+        objective: F,
+        initial: Point,
+        bounds: Bounds,
+    ) -> SamplingResults
+    where
+        F: Fn(&[Vec<f64>]) -> Vec<R>,
+        R: TryInto<ScalarEvaluation, Error = E>,
+        E: Into<EvaluationError>,
+    {
+        match self {
+            ScalarSampler::MetropolisHastings(mh) => {
+                // Delegates to individual sampler's run() method
+                SamplingResults::MCMC(mh.run_batch(objective, initial, bounds))
+            }
+            ScalarSampler::DynamicNested(dns) => {
+                // Delegates to individual sampler's run() method
+                SamplingResults::Nested(dns.run_batch(objective, initial, bounds))
             }
         }
     }

@@ -69,7 +69,7 @@ def test_dynamic_nested_sampler_parallel_fallback_for_non_parallel_problems():
     # Scalar problem does not support parallel evaluation; sampler should still work
     problem = (
         chron.ScalarBuilder()
-        .with_callable(lambda x: 0.5 * (x[0] - 0.5) ** 2)
+        .with_objective(lambda x: 0.5 * (x[0] - 0.5) ** 2)
         .with_parameter("x", 0.5, bounds=(-5.0, 5.0))
         .build()
     )

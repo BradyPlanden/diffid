@@ -49,7 +49,7 @@ fn rosenbrock(x: &[f64]) -> f64 {
 fn main() {
     // Build problem
     let builder = ScalarBuilder::new()
-        .with_callable(rosenbrock)
+        .with_objective(rosenbrock)
         .with_parameter("x", 1.5)
         .with_parameter("y", -1.5);
 
@@ -100,7 +100,7 @@ Strong typing catches errors at compile time:
 ```rust
 // Compiler ensures correct types
 let builder: ScalarBuilder = ScalarBuilder::new()
-    .with_callable(objective)
+    .with_objective(objective)
     .with_parameter("x", 1.0);
 
 let problem: Problem = builder.build();
@@ -206,14 +206,6 @@ cargo run --example ode_fitting
 ```
 
 Browse examples on GitHub: [rust/examples/](https://github.com/bradyplanden/chronopt/tree/main/rust/examples)
-
-## FFI and Bindings
-
-Chronopt's Python bindings use PyO3. For other languages:
-
-- **C/C++**: Use `extern "C"` FFI (planned)
-- **Julia**: Use CxxWrap.jl (planned)
-- **JavaScript**: Use wasm-bindgen for WASM (experimental)
 
 ## See Also
 

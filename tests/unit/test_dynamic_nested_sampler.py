@@ -37,7 +37,7 @@ def test_gaussian_evidence_accuracy():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(gaussian_nll)
+        .with_objective(gaussian_nll)
         .with_parameter("x", mu, bounds=(prior_lower, prior_upper))
         .build()
     )
@@ -85,7 +85,7 @@ def test_exponential_distribution_evidence():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(exponential_nll)
+        .with_objective(exponential_nll)
         .with_parameter("x", 1.0, bounds=(0.0, x_max))
         .build()
     )
@@ -124,7 +124,7 @@ def test_bimodal_gaussian_mixture():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(bimodal_nll)
+        .with_objective(bimodal_nll)
         .with_parameter("x", 0.0, bounds=(-10.0, 10.0))
         .build()
     )
@@ -164,7 +164,7 @@ def test_handles_infinite_likelihood_gracefully():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(pathological_nll)
+        .with_objective(pathological_nll)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
@@ -195,7 +195,7 @@ def test_very_high_dimensional_problem():
         """Simple quadratic in high dimensions."""
         return 0.5 * sum(xi**2 for xi in x)
 
-    problem = chron.ScalarBuilder().with_callable(high_dim_quadratic)
+    problem = chron.ScalarBuilder().with_objective(high_dim_quadratic)
 
     for i in range(dimension):
         problem = problem.with_parameter(f"x{i}", 0.0, bounds=(-3.0, 3.0))
@@ -228,7 +228,7 @@ def test_degenerate_posterior_delta_function():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(sharp_peak)
+        .with_objective(sharp_peak)
         .with_parameter("x", 0.0, bounds=(-1.0, 1.0))
         .build()
     )
@@ -258,7 +258,7 @@ def test_very_small_evidence():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(large_offset)
+        .with_objective(large_offset)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
@@ -286,7 +286,7 @@ def test_posterior_weights_normalize():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(simple_quadratic)
+        .with_objective(simple_quadratic)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
@@ -321,7 +321,7 @@ def test_mean_matches_weighted_average():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(quadratic)
+        .with_objective(quadratic)
         .with_parameter("x", 1.0, bounds=(-3.0, 5.0))
         .build()
     )
@@ -360,7 +360,7 @@ def test_termination_with_high_information():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(narrow_gaussian)
+        .with_objective(narrow_gaussian)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
@@ -389,7 +389,7 @@ def test_reproducibility_with_seed():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(simple_problem)
+        .with_objective(simple_problem)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
@@ -431,7 +431,7 @@ def test_live_points_adapt_with_information():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(multimodal)
+        .with_objective(multimodal)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
@@ -459,7 +459,7 @@ def test_respects_parameter_bounds():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(bounded_quadratic)
+        .with_objective(bounded_quadratic)
         .with_parameter("x", 0.0, bounds=(lower, upper))
         .build()
     )
@@ -487,7 +487,7 @@ def test_information_is_non_negative():
 
     problem = (
         chron.ScalarBuilder()
-        .with_callable(simple_problem)
+        .with_objective(simple_problem)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
@@ -514,7 +514,7 @@ def test_information_increases_with_constraint():
 
         return (
             chron.ScalarBuilder()
-            .with_callable(nll)
+            .with_objective(nll)
             .with_parameter("x", 0.0, bounds=(-10.0, 10.0))
             .build()
         )

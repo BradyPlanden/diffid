@@ -34,7 +34,7 @@ Gradient-free and gradient-based algorithms for finding optimal parameters.
 
 </div>
 
-## Samplers (Planned)
+## Samplers
 
 MCMC and nested sampling for uncertainty quantification and model comparison.
 
@@ -120,7 +120,7 @@ Each algorithm page includes references to original papers and implementation de
 
 ## See Also
 
-- [Choosing an Optimiser](../guides/choosing-optimizer.md)
+- [Choosing an Optimiser](../guides/choosing-optimiser.md)
 - [Tuning Optimisers](../guides/tuning-optimizers.md)
 - [API Reference](../api-reference/index.md)
 - [Tutorials](../tutorials/index.md)

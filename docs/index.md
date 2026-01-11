@@ -91,7 +91,7 @@ def rosenbrock(x):
 
 builder = (
     chron.ScalarBuilder()
-    .with_callable(rosenbrock)
+    .with_objective(rosenbrock)
     .with_parameter("x", 1.5)
     .with_parameter("y", -1.5)
 )

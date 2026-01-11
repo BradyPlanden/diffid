@@ -240,7 +240,7 @@ result = optimiser.run(problem, initial_guess)
 
 **Best for**: Smooth problems, fast convergence on well-behaved objectives
 
-For a detailed comparison, see [Choosing an Optimiser](../guides/choosing-optimizer.md).
+For a detailed comparison, see [Choosing an Optimiser](../guides/choosing-optimiser.md).
 
 ## Troubleshooting
 

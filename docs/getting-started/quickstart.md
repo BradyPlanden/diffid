@@ -26,7 +26,7 @@ def rosenbrock(x):
 # Build the problem
 builder = (
     chron.ScalarBuilder()
-    .with_callable(rosenbrock)
+    .with_objective(rosenbrock)
     .with_parameter("x", 1.5)   # Initial guess
     .with_parameter("y", -1.5)  # Initial guess
 )
@@ -125,7 +125,7 @@ plt.plot(1.0, 1.0, 'r*', markersize=20, label='Global minimum')
 # Run optimisation and plot path
 builder = (
     chron.ScalarBuilder()
-    .with_callable(rosenbrock)
+    .with_objective(rosenbrock)
     .with_parameter("x", -1.5)
     .with_parameter("y", -0.5)
 )
@@ -153,5 +153,5 @@ plt.show()
 
 - **[First ODE Fit](first-ode-fit.md)**: Learn how to fit differential equations to data
 - **[Core Concepts](concepts.md)**: Understand the builder pattern and problem types
-- **[Choosing an Optimiser](../guides/choosing-optimizer.md)**: Learn when to use each optimiser
+- **[Choosing an Optimiser](../guides/choosing-optimiser.md)**: Learn when to use each optimiser
 - **[Tutorials](../tutorials/index.md)**: Explore interactive Jupyter notebooks

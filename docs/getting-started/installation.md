@@ -54,7 +54,7 @@ import numpy as np
 def test_func(x):
     return np.asarray([(x[0] - 1.0) ** 2])
 
-builder = chron.ScalarBuilder().with_callable(test_func).with_parameter("x", 0.0)
+builder = chron.ScalarBuilder().with_objective(test_func).with_parameter("x", 0.0)
 problem = builder.build()
 result = problem.optimise()
 

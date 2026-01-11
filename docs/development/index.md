@@ -152,7 +152,7 @@ Python integration tests in `tests/`:
 
 ```python
 def test_optimisation():
-    builder = chron.ScalarBuilder().with_callable(func)
+    builder = chron.ScalarBuilder().with_objective(func)
     # ...
     assert result.success
 ```

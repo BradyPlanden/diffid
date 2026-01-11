@@ -27,7 +27,7 @@ def quadratic_problem():
     """Creates a 3D quadratic optimization problem using ScalarBuilder"""
     return (
         chron.ScalarBuilder()
-        .with_callable(_quadratic_objective)
+        .with_objective(_quadratic_objective)
         .with_gradient(_quadratic_gradient)
         .with_parameter("x1", 1.0)
         .with_parameter("x2", 2.0)

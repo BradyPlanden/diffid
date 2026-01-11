@@ -5,7 +5,7 @@ import numpy as np
 def test_builder_exposes_config_and_parameters():
     builder = (
         chron.ScalarBuilder()
-        .with_callable(lambda x: np.asarray([float(x[0]) ** 2]))
+        .with_objective(lambda x: np.asarray([float(x[0]) ** 2]))
         .with_parameter("x", 3.5, bounds=(0.0, 10.0))
     )
 
@@ -31,7 +31,7 @@ def bounded_quadratic(x):
 def test_python_builder_rosenbrock():
     builder = (
         chron.ScalarBuilder()
-        .with_callable(rosenbrock)
+        .with_objective(rosenbrock)
         .with_parameter("x", 1.2, None)
         .with_parameter("y", -1.2, None)
     )
@@ -52,7 +52,7 @@ def test_python_builder_rosenbrock():
 def test_python_builder_bounds_respected():
     builder = (
         chron.ScalarBuilder()
-        .with_callable(bounded_quadratic)
+        .with_objective(bounded_quadratic)
         .with_parameter("x", 0.0, bounds=(0.0, 1.0))
         .with_parameter("y", 0.0, bounds=(0.0, 2.0))
     )

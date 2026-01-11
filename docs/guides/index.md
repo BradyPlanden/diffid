@@ -12,7 +12,7 @@ In-depth guides for making the most of Chronopt's optimisation and sampling capa
 
     Decision trees and guidelines for selecting the right optimisation algorithm.
 
-    [:octicons-arrow-right-24: Choosing an Optimiser](choosing-optimizer.md)
+    [:octicons-arrow-right-24: Choosing an Optimiser](choosing-optimiser.md)
 
 -   :material-speedometer:{ .lg .middle } __Tuning Optimisers__
 

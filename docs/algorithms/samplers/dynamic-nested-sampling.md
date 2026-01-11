@@ -1,7 +1,7 @@
 # Dynamic Nested Sampling Algorithm
 
 !!! info "Coming Soon"
-    Sampler documentation is being written. Python bindings are also in development.
+    Sampler documentation is being written.
 
 ## Overview
 

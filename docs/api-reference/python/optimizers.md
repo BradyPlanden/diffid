@@ -280,7 +280,7 @@ graph TD
 ```
 
 For detailed guidance, see:
-- [Choosing an Optimiser Guide](../../guides/choosing-optimizer.md)
+- [Choosing an Optimiser Guide](../../guides/choosing-optimiser.md)
 - [Tuning Optimisers Guide](../../guides/tuning-optimizers.md)
 
 ## See Also

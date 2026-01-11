@@ -18,7 +18,7 @@ Builders provide a fluent API for constructing optimisation problems. Choose the
       show_source: false
       members:
         - __new__
-        - with_callable
+        - with_objective
         - with_parameter
         - with_cost_metric
         - build
@@ -34,7 +34,7 @@ def rosenbrock(x):
 
 builder = (
     chron.ScalarBuilder()
-    .with_callable(rosenbrock)
+    .with_objective(rosenbrock)
     .with_parameter("x", 1.5)
     .with_parameter("y", -1.5)
 )
@@ -129,7 +129,7 @@ out_i { state1, state2 }        # Optional: output variables
       show_source: false
       members:
         - __new__
-        - with_callable
+        - with_objective
         - with_data
         - with_parameter
         - with_cost_metric
@@ -154,7 +154,7 @@ data = np.column_stack((t, observations))
 
 builder = (
     chron.VectorBuilder()
-    .with_callable(custom_solver)
+    .with_objective(custom_solver)
     .with_data(data)
     .with_parameter("alpha", 1.0)
     .with_parameter("beta", 0.5)
@@ -212,7 +212,7 @@ Builders use a fluent interface - chain methods in any order:
 ```python
 builder = (
     chron.ScalarBuilder()
-    .with_callable(func)
+    .with_objective(func)
     .with_parameter("x", 1.0)
     .with_parameter("y", 2.0)
     .with_cost_metric(chron.RMSE())
@@ -224,7 +224,7 @@ builder = (
 Builders are immutable - each method returns a new builder:
 
 ```python
-base = chron.ScalarBuilder().with_callable(func)
+base = chron.ScalarBuilder().with_objective(func)
 
 problem1 = base.with_parameter("x", 1.0).build()
 problem2 = base.with_parameter("x", 2.0).build()  # Different initial guess

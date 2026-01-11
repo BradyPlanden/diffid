@@ -71,8 +71,8 @@ chronopt/
 │   ├── CMAES            # Covariance matrix adaptation
 │   └── Adam             # Adaptive moment estimation
 ├── Samplers
-│   ├── MetropolisHastings  # MCMC sampling (planned)
-│   └── DynamicNestedSampling  # Evidence calculation (planned)
+│   ├── MetropolisHastings  # MCMC sampling
+│   └── DynamicNestedSampling  # Evidence calculation
 ├── CostMetric           # Cost/likelihood metrics
 └── OptimisationResults  # Result container
 ```
@@ -89,7 +89,7 @@ def optimize_function(
     func: Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]],
     initial_params: dict[str, float]
 ) -> OptimisationResults:
-    builder = ScalarBuilder().with_callable(func)
+    builder = ScalarBuilder().with_objective(func)
     for name, value in initial_params.items():
         builder = builder.with_parameter(name, value)
 

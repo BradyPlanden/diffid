@@ -12,7 +12,7 @@ def rosenbrock(x: list[float]) -> float:
 
 builder = (
     chron.ScalarBuilder()
-    .with_callable(rosenbrock)
+    .with_objective(rosenbrock)
     .with_parameter("x", initial_value=1.2)
     .with_parameter("y", initial_value=1.4)
     .with_optimiser(chron.NelderMead().with_max_iter(2000))

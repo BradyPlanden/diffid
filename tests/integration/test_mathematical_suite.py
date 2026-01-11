@@ -161,7 +161,7 @@ def test_python_objectives_converge(
 ):
     """Ensure optimisation reaches known minima for several analytic functions."""
 
-    builder = chron.ScalarBuilder().with_callable(objective)
+    builder = chron.ScalarBuilder().with_objective(objective)
     for idx in range(dimension):
         builder = builder.with_parameter(f"x{idx}", 1.0)
 

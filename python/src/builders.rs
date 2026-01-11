@@ -245,7 +245,7 @@ impl PyScalarBuilder {
     }
 
     /// Attach the objective function callable executed during optimisation.
-    fn with_callable(mut slf: PyRefMut<'_, Self>, obj: Py<PyAny>) -> PyResult<PyRefMut<'_, Self>> {
+    fn with_objective(mut slf: PyRefMut<'_, Self>, obj: Py<PyAny>) -> PyResult<PyRefMut<'_, Self>> {
         Python::attach(|py| {
             if !obj.bind(py).is_callable() {
                 return Err(PyTypeError::new_err("Object must be callable"));

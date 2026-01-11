@@ -169,7 +169,7 @@ Results don't store parameter names. Track them manually if needed:
 ```python
 param_names = ["alpha", "beta", "gamma"]
 
-builder = chron.ScalarBuilder().with_callable(func)
+builder = chron.ScalarBuilder().with_objective(func)
 for name in param_names:
     builder = builder.with_parameter(name, 1.0)
 
@@ -306,5 +306,5 @@ print(f"Time per evaluation: {elapsed/result.evaluations*1000:.2f}ms")
 
 - [Optimisers](optimizers.md)
 - [Samplers](samplers.md)
-- [Choosing an Optimiser](../../guides/choosing-optimizer.md)
+- [Choosing an Optimiser](../../guides/choosing-optimiser.md)
 - [Troubleshooting](../../guides/troubleshooting.md)

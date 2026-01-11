@@ -20,7 +20,7 @@ def custom_solver(params):
 
 builder = (
     chron.VectorBuilder()
-    .with_callable(custom_solver)
+    .with_objective(custom_solver)
     .with_data(data)
     .with_parameter("alpha", 1.0)
 )

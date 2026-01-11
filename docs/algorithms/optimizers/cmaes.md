@@ -26,6 +26,6 @@ See [CMAES API](../../api-reference/python/optimizers.md#cma-es) for usage detai
 
 ## See Also
 
-- [Choosing an Optimiser](../../guides/choosing-optimizer.md)
+- [Choosing an Optimiser](../../guides/choosing-optimiser.md)
 - [Tuning Optimisers](../../guides/tuning-optimizers.md)
 - [Parallel Execution](../../guides/parallel-execution.md)

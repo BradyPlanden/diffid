@@ -25,5 +25,5 @@
 ## See Also
 
 - [Optimisers API](../api-reference/python/optimizers.md)
-- [Choosing an Optimiser](choosing-optimizer.md)
+- [Choosing an Optimiser](choosing-optimiser.md)
 - [Troubleshooting](troubleshooting.md)

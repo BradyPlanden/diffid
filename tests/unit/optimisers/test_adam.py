@@ -17,7 +17,7 @@ def quadratic_grad(x):
 def build_quadratic_problem_with_gradient():
     return (
         chron.ScalarBuilder()
-        .with_callable(quadratic)
+        .with_objective(quadratic)
         .with_gradient(quadratic_grad)
         .with_parameter("x", 1.0)
         .with_parameter("y", 1.0)
@@ -40,7 +40,7 @@ def test_adam_direct_run_minimises_quadratic():
 def test_python_builder_optimise_with_adam_default():
     builder = (
         chron.ScalarBuilder()
-        .with_callable(quadratic)
+        .with_objective(quadratic)
         .with_gradient(quadratic_grad)
         .with_parameter("x", 1.0)
         .with_parameter("y", 1.0)
@@ -61,7 +61,7 @@ def test_python_builder_optimise_with_adam_default():
 def test_adam_falls_back_with_numerical_grad():
     builder = (
         chron.ScalarBuilder()
-        .with_callable(quadratic)
+        .with_objective(quadratic)
         .with_parameter("x", 0.0)
         .with_parameter("y", 0.0)
     )

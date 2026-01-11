@@ -25,5 +25,5 @@ See [Adam API](../../api-reference/python/optimizers.md#adam) for usage details.
 
 ## See Also
 
-- [Choosing an Optimiser](../../guides/choosing-optimizer.md)
+- [Choosing an Optimiser](../../guides/choosing-optimiser.md)
 - [Tuning Optimisers](../../guides/tuning-optimizers.md)

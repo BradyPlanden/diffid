@@ -102,7 +102,7 @@ class TestAPIDocumentation:
             pytest.skip("chronopt not installed")
 
         # Get public APIs from chronopt
-        public_apis = self._get_public_apis(chron)
+        self._get_public_apis(chron)
 
         # Find documentation files
         api_docs = list((DOCS_DIR / "api-reference" / "python").rglob("*.md"))

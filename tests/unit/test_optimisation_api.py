@@ -73,7 +73,7 @@ def test_scalar_builder_allows_multiple_builds():
 
     builder = (
         chron.ScalarBuilder()
-        .with_callable(rosenbrock)
+        .with_objective(rosenbrock)
         .with_parameter("x", 1.0)
         .with_parameter("y", 1.0)
     )
@@ -112,7 +112,7 @@ def test_all_builders_support_copy():
     import copy
 
     # ScalarBuilder
-    scalar_builder = chron.ScalarBuilder().with_callable(lambda x: x[0] ** 2)
+    scalar_builder = chron.ScalarBuilder().with_objective(lambda x: x[0] ** 2)
     scalar_copy = copy.copy(scalar_builder)
     copy.deepcopy(scalar_builder)  # Test deepcopy
 

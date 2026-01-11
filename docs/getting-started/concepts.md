@@ -9,7 +9,7 @@ Chronopt uses the **builder pattern** for constructing problems. This provides a
 ```python
 builder = (
     chron.ScalarBuilder()
-    .with_callable(my_function)
+    .with_objective(my_function)
     .with_parameter("x", 1.0)
     .with_parameter("y", 2.0)
 )
@@ -37,7 +37,7 @@ def objective(x):
 
 problem = (
     chron.ScalarBuilder()
-    .with_callable(objective)
+    .with_objective(objective)
     .with_parameter("x", 0.0)
     .with_parameter("y", 0.0)
     .build()
@@ -88,7 +88,7 @@ def solve_ode(params):
 
 problem = (
     chron.VectorBuilder()
-    .with_callable(solve_ode)
+    .with_objective(solve_ode)
     .with_data(data)
     .with_parameter("alpha", 1.0)
     .with_parameter("beta", 0.5)
@@ -178,7 +178,7 @@ print(result.samples.shape)  # (n_samples, n_parameters)
 | Computation budget is limited | You need full posterior distributions |
 | | Comparing multiple models (Bayes factors) |
 
-See [Choosing an Optimiser](../guides/choosing-optimizer.md) and [Choosing a Sampler](../guides/choosing-sampler.md) for detailed guidance.
+See [Choosing an Optimiser](../guides/choosing-optimiser.md) and [Choosing a Sampler](../guides/choosing-sampler.md) for detailed guidance.
 
 ## The Ask/Tell Pattern
 
@@ -306,6 +306,6 @@ See the [Parallel Execution Guide](../guides/parallel-execution.md) for details.
 ## Next Steps
 
 - **[Tutorials](../tutorials/index.md)**: Interactive Jupyter notebooks
-- **[Choosing an Optimiser](../guides/choosing-optimizer.md)**: Learn when to use each algorithm
+- **[Choosing an Optimiser](../guides/choosing-optimiser.md)**: Learn when to use each algorithm
 - **[API Reference](../api-reference/index.md)**: Browse complete API documentation
 - **[Examples Gallery](../examples/gallery.md)**: Visual gallery of applications

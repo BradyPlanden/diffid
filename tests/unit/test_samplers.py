@@ -13,7 +13,7 @@ def quadratic_potential(x: np.ndarray) -> np.ndarray:
 def test_metropolis_hastings_runs_and_returns_samples():
     problem = (
         chron.ScalarBuilder()
-        .with_callable(quadratic_potential)
+        .with_objective(quadratic_potential)
         .with_parameter("x", 1.0)
         .build()
     )
@@ -45,7 +45,7 @@ def test_metropolis_hastings_runs_and_returns_samples():
 def test_dynamic_nested_sampler_runs_on_scalar_problem():
     problem = (
         chron.ScalarBuilder()
-        .with_callable(quadratic_potential)
+        .with_objective(quadratic_potential)
         .with_parameter("x", 0.5)
         .build()
     )
@@ -68,7 +68,7 @@ def test_dynamic_nested_sampler_runs_on_scalar_problem():
 def test_dynamic_nested_invalid_live_points_are_clamped():
     problem = (
         chron.ScalarBuilder()
-        .with_callable(quadratic_potential)
+        .with_objective(quadratic_potential)
         .with_parameter("x", 1.0)
         .build()
     )

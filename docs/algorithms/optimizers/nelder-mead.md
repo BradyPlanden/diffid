@@ -26,5 +26,5 @@ See [NelderMead API](../../api-reference/python/optimizers.md#nelder-mead) for u
 
 ## See Also
 
-- [Choosing an Optimiser](../../guides/choosing-optimizer.md)
+- [Choosing an Optimiser](../../guides/choosing-optimiser.md)
 - [Tuning Optimisers](../../guides/tuning-optimizers.md)

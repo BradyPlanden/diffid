@@ -7,8 +7,7 @@ import numpy as np
 
 # Example diffsol ODE (logistic growth)
 ds = """
-in = [r, k]
-r { 1 } k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """

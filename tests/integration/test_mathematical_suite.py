@@ -176,8 +176,7 @@ def test_python_objectives_converge(
 
 
 _LOGISTIC_DSL = """
-in = [r, k]
-r { 1 } k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """

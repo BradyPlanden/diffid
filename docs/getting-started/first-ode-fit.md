@@ -21,8 +21,7 @@ import chronopt as chron
 
 # Define the ODE model in DiffSL syntax
 dsl = """
-in = [r, k]
-r { 1 } k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
@@ -59,16 +58,14 @@ print(f"Success: {result.success}")
 DiffSL is a domain-specific language for defining differential equations. Let's break down the syntax:
 
 ```
-in = [r, k]              # Input parameters to fit
-r { 1 } k { 1 }          # Default values for parameters
+in_i { r = 1, k = 1 }              # Input parameters to fit with default values
 u_i { y = 0.1 }          # Initial conditions
 F_i { (r * y) * (1 - (y / k)) }  # Right-hand side of dy/dt = ...
 ```
 
 Key components:
 
-- `in = [...]`: Parameters to optimise
-- `parameter { default_value }`: Default parameter values
+- `in_i = {...}`: Parameters to optimise with default values
 - `u_i { var = initial_value }`: Initial conditions for state variables
 - `F_i { expression }`: The derivative expression ($dy/dt$)
 
@@ -147,8 +144,7 @@ plt.show()
 
 ```python
 dsl = """
-in = [alpha, beta]
-alpha { 1 } beta { 1 }
+in_i { alpha = 1, beta = 1 }
 u_i {
     x = 1.0
     y = 0.5
@@ -165,8 +161,7 @@ out_i { x, y }
 
 ```python
 dsl = """
-in = [k1, k2]
-k1 { 1 } k2 { 1 }
+in_i {k1 = 1, k2 = 1 }
 u_i { A = 1.0 }
 dudt_i { -k1 * A }
 F_i {
@@ -181,8 +176,7 @@ out_i { A, B }
 
 ```python
 dsl = """
-in = [k]
-k { 1 }
+in_i { k = 1 }
 u_i { y = 0.0 }
 F_i { k * sin(t) - y }
 """

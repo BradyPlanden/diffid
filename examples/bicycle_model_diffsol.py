@@ -8,8 +8,8 @@ V = 5.0  # velocity
 DELTA = 0.05  # steer angle
 
 dsl = """
-in = [L]
-L { 2.5 } v { 5.0 } delta { 0.05 }
+in_i { L = 2.5 }
+v { 5.0 } delta { 0.05 }
 u_i {
     x = 0.0,
     y = 0.0,

@@ -9,8 +9,7 @@ def test_diffsol_builder():
     """Test basic Diffsol builder functionality"""
     # Example diffsol ODE (logistic growth)
     ds = """
-in = [r, k]
-r { 1 } k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
@@ -54,8 +53,7 @@ F_i { (r * y) * (1 - (y / k)) }
 
 def test_diffsol_builder_remove_methods():
     ds = """
-in = [a]
-a { 1 }
+in_i { a = 1 }
 u_i { y = 0.0 }
 F_i { a * y }
 """
@@ -111,8 +109,7 @@ F_i { a * y }
 
 def test_problem_optimise_defaults_to_builder_params():
     ds = """
-in = [a]
-a { 1 }
+in_i { a = 1 }
 u_i { y = 0.1 }
 F_i { a * y }
 """
@@ -146,8 +143,7 @@ def test_diffsol_cost_metrics(variance: float) -> None:
     """Ensure selectable cost metrics produce consistent values."""
 
     ds = """
-in = [r, k]
-r { 1 } k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
@@ -198,8 +194,8 @@ F_i { (r * y) * (1 - (y / k)) }
 
 def test_diffsol_bicycle_model_neldermead_recovers_wheelbase() -> None:
     ds = """
-in = [L]
-L { 2.5 } v { 5.0 } delta { 0.05 }
+in_i { L = 2.5 }
+v { 5.0 } delta { 0.05 }
 u_i {
     y = 0.0,
     psi = 0.0,

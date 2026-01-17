@@ -11,8 +11,7 @@ def ball_states(t: np.ndarray, g: float, h: float) -> tuple[np.ndarray, np.ndarr
 
 # DiffSL program for a falling (bouncy) ball terminated when the height reaches zero.
 dsl = """
-in = [g, h]
-g { 1 } h { 1 }
+in_i { g = 2.5, h = 1 }
 u_i {x = h, v = 0}
 F_i {v, -g}
 stop {x}

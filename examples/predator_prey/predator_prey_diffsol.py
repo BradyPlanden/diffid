@@ -6,8 +6,8 @@ import numpy as np
 
 # Example diffsol ODE (logistic growth)
 ode = """
-in = [a, b, c, d ]
-a { 2.0/3.0 } b { 4.0/3.0 } c { 1.0 } d { 1.0 } x0 { 10.0 } y0 { 5.0 }
+in_i { a = 2.0/3.0, b = 4.0/3.0, c = 1.0, d = 1.0 }
+x0 { 10.0 } y0 { 5.0 }
 u_i {
     y1 = x0,
     y2 = y0,

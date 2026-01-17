@@ -4,8 +4,7 @@ use nalgebra::DMatrix;
 #[test]
 fn diffsol_builder_supports_end_to_end_optimisation() {
     let dsl = r#"
-in = [a]
-a { 1 }
+in_i { a = 1 }
 u_i { y = 0.1 }
 F_i { a * y }
 "#;

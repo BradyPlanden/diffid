@@ -73,8 +73,7 @@ import numpy as np
 import chronopt as chron
 
 dsl = """
-in = [r, k]
-r { 1 } k { 1 }
+in { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
@@ -105,9 +104,7 @@ result = optimiser.run(problem, [0.5, 0.5])
 DiffSL is a domain-specific language for ODEs:
 
 ```
-in = [param1, param2]           # Parameters to fit
-param1 { default1 }             # Default values
-param2 { default2 }
+in_i { param1 = default1, param2 = default 2 }           # Parameters to fit with defaults
 u_i { state1 = init1 }          # Initial conditions
 F_i { derivative_expr }         # dy/dt expressions
 out_i { state1, state2 }        # Optional: output variables

@@ -13,6 +13,7 @@ Visual gallery of Chronopt applications and use cases.
 Classic 2D optimisation test problem.
 
 **Files:**
+
 - [python_problem.py](https://github.com/bradyplanden/chronopt/blob/main/examples/python_problem.py)
 - [python_contour.py](https://github.com/bradyplanden/chronopt/blob/main/examples/python_contour.py)
 
@@ -35,6 +36,7 @@ Single-variable ODE with DiffSL.
 Physics-based model with event handling.
 
 **Files:**
+
 - [bouncy_ball.py](https://github.com/bradyplanden/chronopt/blob/main/examples/bouncy_ball.py)
 - [bouncy_ball_sampling.py](https://github.com/bradyplanden/chronopt/blob/main/examples/bouncy_ball_sampling.py)
 
@@ -48,6 +50,7 @@ Physics-based model with event handling.
 Comparing different bicycle dynamics formulations.
 
 **Files:**
+
 - [bicycle_model_diffsol.py](https://github.com/bradyplanden/chronopt/blob/main/examples/bicycle_model_diffsol.py)
 - [bicycle_model_evidence.py](https://github.com/bradyplanden/chronopt/blob/main/examples/bicycle_model_evidence.py)
 
@@ -61,6 +64,7 @@ Comparing different bicycle dynamics formulations.
 Lotka-Volterra equations with multiple solver backends.
 
 **Files:**
+
 - [predator_prey_diffsol.py](https://github.com/bradyplanden/chronopt/blob/main/examples/predator_prey/predator_prey_diffsol.py)
 - [predator_prey_diffrax.py](https://github.com/bradyplanden/chronopt/blob/main/examples/predator_prey/predator_prey_diffrax.py)
 - [predator_prey_diffeqpy.py](https://github.com/bradyplanden/chronopt/blob/main/examples/predator_prey/predator_prey_diffeqpy.py)
@@ -132,25 +136,23 @@ python examples/predator_prey/predator_prey_diffrax.py
 ### By Difficulty
 
 **Beginner:**
+
 - python_problem.py
 - python_contour.py
 - logistic_growth.py
 
 **Intermediate:**
+
 - bouncy_ball.py
 - bicycle_model_diffsol.py
 - predator_prey_diffsol.py
 
 **Advanced:**
+
 - bouncy_ball_sampling.py
 - bicycle_model_evidence.py
 - predator_prey_diffrax.py
 - predator_prey_diffeqpy.py
-
-## Visual Gallery
-
-!!! info "Coming Soon"
-    Visual thumbnails and interactive demos will be added here.
 
 ## Contributing Examples
 

@@ -43,16 +43,19 @@ builder = (
 ### When to Use
 
 **Advantages:**
+
 - Standard least squares approach
 - Well-understood statistical properties
 - Efficient to compute
 
 **Limitations:**
+
 - Not normalised (sensitive to number of data points)
 - Sensitive to outliers (squared errors magnify them)
 - Assumes Gaussian errors with constant variance
 
 **Typical Use Cases:**
+
 - Standard parameter fitting
 - When absolute error scale matters
 - Comparing models with same number of points
@@ -82,15 +85,18 @@ builder = (
 ### When to Use
 
 **Advantages:**
+
 - Normalised (independent of data size)
 - Same units as observations
 - Better for comparing models with different data sizes
 
 **Limitations:**
+
 - Still sensitive to outliers
 - Assumes Gaussian errors
 
 **Typical Use Cases:**
+
 - Comparing models with different numbers of observations
 - Reporting error in interpretable units
 - Cross-validation and model selection
@@ -126,17 +132,20 @@ result = sampler.run(problem, initial_guess)
 ### When to Use
 
 **Advantages:**
+
 - Proper probabilistic interpretation
 - Required for Bayesian inference (MCMC, nested sampling)
 - Automatically accounts for noise level
 - Enables uncertainty quantification
 
 **Limitations:**
+
 - Assumes Gaussian observation noise
 - More computationally expensive than SSE
 - Requires understanding of likelihood
 
 **Typical Use Cases:**
+
 - MCMC sampling for uncertainty quantification
 - Model comparison with Bayes factors
 - When probabilistic interpretation is needed
@@ -159,16 +168,19 @@ graph TD
 ### Decision Guide
 
 **Use SSE when:**
+
 - Standard least squares fitting
 - Single model, fixed data
 - Speed is critical
 
 **Use RMSE when:**
+
 - Comparing models with different data sizes
 - Want interpretable error in original units
 - Cross-validation or model selection
 
 **Use GaussianNLL when:**
+
 - MCMC sampling (Metropolis-Hastings)
 - Nested sampling (model evidence)
 - Need confidence intervals

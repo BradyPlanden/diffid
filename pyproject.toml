@@ -49,6 +49,8 @@ docs = [
     "mkdocs-minify-plugin>=0.8.0",
     "mkdocs-jupyter>=0.24.0",
     "pymdown-extensions>=10.7",
+    "matplotlib>=3.8",
+    "nbconvert>=7.0",
 ]
 examples = [
     # macOS x86_64 + Python < 3.14: diffrax with pinned jax/jaxlib

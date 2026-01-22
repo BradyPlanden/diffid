@@ -119,17 +119,6 @@ let results: Vec<_> = initial_guesses
     .collect();
 ```
 
-## Building from Source
-
-See the [Building from Source](../../development/building.md) guide for detailed instructions.
-
-```bash
-git clone https://github.com/bradyplanden/chronopt.git
-cd chronopt/rust
-cargo build --release
-cargo test
-```
-
 ## Documentation Generation
 
 Generate local documentation:
@@ -210,6 +199,5 @@ Browse examples on GitHub: [rust/examples/](https://github.com/bradyplanden/chro
 ## See Also
 
 - [Python API Reference](../index.md)
-- [Building from Source](../../development/building.md)
 - [Architecture](../../development/architecture.md)
 - [Contributing](../../development/contributing.md)

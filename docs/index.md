@@ -4,13 +4,16 @@
 
 ## Why Chronopt?
 
-Optimisation-based workflows run the forward simulation thousands of times. A performance improvement on the process can produce results hours or days earlier. The Rust core provides a high-performance inference loop with fewer runtime errors, whilst quickly integrating into Python workflows.
+Chronopt offers a different paradigm for a parameter inference library. Conventionally, Python-based inference libraries are constructed via python bindings to a high-performance forward model with the inference algorithms implemented in Python. This package instead introduces an alternative, where the Python layer acts purely as a declarative configuration interface,
+while all computationally intensive work (the optimisation / sampling loop, gradient calculations, etc.) happens entirely within the Rust runtime without crossing the FFI boundary repeatedly. This is architecture is presented visually below,
 
-## Project Goals
+<br>
 
-- **Speed and numerical accuracy** through a Rust core
-- **Modular components** with informative diagnostics
-- **Batteries-included experience** spanning optimisation, sampling, and plotting
+<figure markdown="span">
+  ![Paradigm Comparison](chronopt.drawio.svg){ width="100%" }
+  <figcaption>Conventional approach vs Chronopt: the optimisation loop moves from Python to Rust</figcaption>
+</figure>
+
 
 ## Core Capabilities
 

@@ -10,11 +10,13 @@ Metropolis-Hastings is an MCMC algorithm for sampling from posterior distributio
 ## When to Use
 
 **Best for:**
+
 - Uncertainty quantification
 - Confidence intervals
 - Posterior exploration
 
 **Avoid when:**
+
 - Only need point estimate
 - Limited computational budget
 - Need model comparison (use nested sampling)

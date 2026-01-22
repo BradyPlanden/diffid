@@ -44,17 +44,20 @@ print(result.acceptance_rate)  # Target: 0.2-0.4
 ### When to Use
 
 **Advantages:**
+
 - Provides full posterior distribution
 - Quantifies parameter uncertainty
 - Captures correlations between parameters
 - Enables credible intervals
 
 **Limitations:**
+
 - Requires many function evaluations
 - Need to assess convergence
 - Requires likelihood (GaussianNLL cost metric)
 
 **Typical Use Cases:**
+
 - Uncertainty quantification
 - Confidence intervals
 - Posterior predictive distributions
@@ -92,17 +95,20 @@ print(result.samples.shape)
 ### When to Use
 
 **Advantages:**
+
 - Calculates marginal likelihood (evidence)
 - Enables model comparison via Bayes factors
 - Provides posterior samples as byproduct
 - Efficient for multi-modal posteriors
 
 **Limitations:**
+
 - More expensive than MCMC
 - Requires careful tuning of live points
 - Needs likelihood (GaussianNLL cost metric)
 
 **Typical Use Cases:**
+
 - Model comparison
 - Bayes factors
 - Evidence calculation

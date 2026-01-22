@@ -10,12 +10,14 @@ The Nelder-Mead algorithm (also known as the downhill simplex method) is a gradi
 ## When to Use
 
 **Best for:**
+
 - Problems with < 10 parameters
 - Noisy objective functions
 - No gradient information available
 - Quick exploration
 
 **Avoid when:**
+
 - More than 10 parameters
 - Need global optimum
 - Very tight convergence required

@@ -10,12 +10,14 @@ Covariance Matrix Adaptation Evolution Strategy (CMA-ES) is a stochastic, deriva
 ## When to Use
 
 **Best for:**
+
 - High-dimensional problems (10-100+ parameters)
 - Global optimisation
 - Parallel hardware
 - Multi-modal landscapes
 
 **Avoid when:**
+
 - Very low-dimensional (< 5 parameters)
 - Limited computational budget
 - Need deterministic results

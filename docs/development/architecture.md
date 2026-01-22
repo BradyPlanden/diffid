@@ -1,28 +1,10 @@
 # Architecture
 
-!!! info "Coming Soon"
-    Detailed architecture documentation is being written.
-
 ## High-Level Overview
 
-```
-┌─────────────────────────────────────┐
-│         Python API Layer            │
-│   (PyO3 bindings, type stubs)       │
-└─────────────────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────┐
-│          Rust Core                  │
-│  (Optimisers, Samplers, Builders)   │
-└─────────────────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────┐
-│      External Libraries             │
-│  (Diffsol, ndarray, rayon)          │
-└─────────────────────────────────────┘
-```
+<figure markdown="span">
+  ![Paradigm Comparison](../chronopt.drawio.svg){ width="100%" }
+</figure>
 
 ## Key Design Patterns
 
@@ -32,6 +14,5 @@
 
 ## See Also
 
-- [Building from Source](building.md)
 - [Contributing](contributing.md)
 - [Rust API](../api-reference/rust/index.md)

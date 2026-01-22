@@ -45,6 +45,7 @@ problem = (
 ```
 
 **Use when:**
+
 - You have a direct Python function to minimise
 - No differential equations involved
 - Simple parameter optimisation
@@ -71,6 +72,7 @@ problem = (
 ```
 
 **Use when:**
+
 - Fitting ODE parameters to time-series data
 - Using DiffSL for model definition
 - Need high-performance multi-threaded solving
@@ -96,6 +98,7 @@ problem = (
 ```
 
 **Use when:**
+
 - Need a specific solver (JAX/Diffrax, Julia/DifferentialEquations.jl)
 - Complex ODEs not supported by DiffSL
 - Custom forward models beyond ODEs
@@ -292,15 +295,6 @@ optimiser = chron.CMAES().with_population_size(20)
 ```
 
 See the [Parallel Execution Guide](../guides/parallel-execution.md) for details.
-
-## Key Takeaways
-
-- **Builders** provide a fluent API for problem construction
-- **ScalarBuilder** for direct functions, **DiffsolBuilder** for ODEs, **VectorBuilder** for custom solvers
-- **Parameters** are decision variables with names and initial values
-- **Optimisers** find the best solution; **samplers** explore uncertainty
-- **Cost metrics** define how predictions are compared to observations
-- **Ask/tell pattern** enables advanced control and distributed computation
 
 ## Next Steps
 

@@ -31,6 +31,5 @@ cargo test
 
 ## See Also
 
-- [Building from Source](building.md)
 - [Architecture](architecture.md)
 - [GitHub Issues](https://github.com/bradyplanden/chronopt/issues)

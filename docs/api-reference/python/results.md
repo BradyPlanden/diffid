@@ -82,11 +82,13 @@ else:
 ```
 
 **`True`** when:
+
 - Convergence criteria met
 - Threshold reached
 - Normal termination
 
 **`False`** when:
+
 - Maximum iterations exceeded without convergence
 - Numerical errors occurred
 - User-requested termination
@@ -120,6 +122,7 @@ result.evaluations  # e.g., 314
 ```
 
 Note that `evaluations` can be much larger than `iterations`:
+
 - **CMA-ES**: `evaluations ≈ iterations × population_size`
 - **Nelder-Mead**: `evaluations ≈ iterations × (n_params + 1)`
 - **Adam**: `evaluations ≈ iterations` (one per step)

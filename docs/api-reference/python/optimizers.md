@@ -37,17 +37,20 @@ result = optimiser.run(problem, initial_guess=[1.0, 2.0])
 ### When to Use
 
 **Advantages:**
+
 - No gradient computation required
 - Robust to noisy objectives
 - Simple and reliable for small problems
 - Default choice for quick exploration
 
 **Limitations:**
+
 - Slow convergence for > 10 parameters
 - Can get stuck in local minima
 - Performance degrades with dimensionality
 
 **Typical Use Cases:**
+
 - Initial parameter exploration
 - Noisy experimental data
 - Small-scale problems (< 10 parameters)
@@ -97,17 +100,20 @@ result = optimiser.run(problem, initial_guess=[0.5, 0.5])
 ### When to Use
 
 **Advantages:**
+
 - Global optimisation (avoids local minima)
 - Scales to high dimensions (10-100+ parameters)
 - Parallelisable (evaluates population in parallel)
 - Self-adapting (no gradient tuning needed)
 
 **Limitations:**
+
 - More function evaluations than gradient methods
 - Requires population-sized memory
 - Stochastic (results vary between runs)
 
 **Typical Use Cases:**
+
 - Global parameter search
 - High-dimensional problems (> 10 parameters)
 - Multi-modal landscapes
@@ -167,17 +173,20 @@ result = optimiser.run(problem, initial_guess=[1.0, 2.0])
 ### When to Use
 
 **Advantages:**
+
 - Fast convergence on smooth objectives
 - Adaptive learning rate
 - Well-suited for large-scale problems
 - Efficient (uses gradients)
 
 **Limitations:**
+
 - Requires automatic differentiation
 - Can get stuck in local minima
 - Sensitive to learning rate tuning
 
 **Typical Use Cases:**
+
 - Smooth, differentiable objectives
 - Large-scale problems
 - When gradients are available or cheap to compute

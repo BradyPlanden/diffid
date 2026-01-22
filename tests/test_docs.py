@@ -178,8 +178,8 @@ class TestNotebookQuality:
             )
             assert has_markdown, f"{notebook_path.name} has no markdown cells"
 
-    def test_notebooks_have_learning_objectives(self):
-        """Check that notebooks start with learning objectives."""
+    def test_notebooks_have_objectives(self):
+        """Check that notebooks start with objectives."""
         import json
 
         notebooks = list((DOCS_DIR / "tutorials" / "notebooks").glob("[0-9]*.ipynb"))
@@ -188,19 +188,17 @@ class TestNotebookQuality:
             with open(notebook_path) as f:
                 nb_data = json.load(f)
 
-            # First cell should be markdown with learning objectives
+            # First cell should be markdown with  objectives
             first_cell = nb_data["cells"][0]
             assert first_cell["cell_type"] == "markdown", (
                 f"{notebook_path.name} first cell is not markdown"
             )
 
-            # Check for learning objectives
+            # Check for objectives
             content = "".join(first_cell["source"])
-            has_objectives = (
-                "Learning Objectives" in content or "learning objectives" in content
-            )
+            has_objectives = "Objectives" in content or "objectives" in content
             assert has_objectives, (
-                f"{notebook_path.name} missing learning objectives in first cell"
+                f"{notebook_path.name} missing objectives in first cell"
             )
 
 

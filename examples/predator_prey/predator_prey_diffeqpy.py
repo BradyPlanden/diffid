@@ -89,3 +89,6 @@ print(f"Final SSE:            {result.value:.6f}")
 print(
     f"Relative error:       {np.linalg.norm(result.x - TRUE_PARAMS) / np.linalg.norm(TRUE_PARAMS):.2%}"
 )
+print(f"Success:              {result.success}")
+print(f"Iterations:           {result.iterations}")
+print(f"Time:                 {result.time}s")

@@ -1,6 +1,6 @@
 # 5-Minute Quickstart
 
-This quickstart guide demonstrates scalar optimisation using the Rosenbrock function, a classic test problem in optimisation.
+This quickstart guide demonstrates scalar optimisation using the classic Rosenbrock function.
 
 ## The Problem
 
@@ -52,7 +52,7 @@ Iterations: 157
 
 ## Understanding the Code
 
-1. **Define the objective function**: The function must accept a NumPy array and return a NumPy array (even for scalar values)
+1. **Define the objective function**: The function must accept a NumPy array and return a NumPy array
 
 2. **Create a builder**: `ScalarBuilder()` is used for scalar optimisation problems where you directly evaluate a function
 
@@ -141,13 +141,7 @@ plt.grid(True, alpha=0.3)
 plt.show()
 ```
 
-## Key Takeaways
-
-- **ScalarBuilder** is used for direct function optimisation
-- Parameters are defined with `with_parameter(name, initial_value)`
-- The default optimiser is Nelder-Mead
-- You can specify custom optimisers with different algorithms and parameters
-- Results include optimal parameters, objective value, success status, and iteration count
+![Rosenbrock contour plot](rosenbrock_contour.png)
 
 ## Next Steps
 

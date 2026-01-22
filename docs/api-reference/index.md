@@ -56,8 +56,6 @@ The Rust core provides high-performance implementations of all algorithms.
 
 [:octicons-arrow-right-24: Rust Documentation on docs.rs](https://docs.rs/chronopt/latest/chronopt/)
 
-For developers building with the Rust crate directly, see the [Building from Source](../development/building.md) guide.
-
 ## Module Structure
 
 ```

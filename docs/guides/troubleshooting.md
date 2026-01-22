@@ -1,10 +1,5 @@
 # Troubleshooting Guide
 
-!!! info "Coming Soon"
-    This guide is being written. Check back soon for common issues and solutions.
-
-## Quick Fixes
-
 ### Import Error
 
 ```python
@@ -16,18 +11,19 @@ ImportError: No module named 'chronopt'
 ### Poor Fit Quality
 
 **Solutions:**
-1. Try different optimisers (CMA-ES is often more robust)
-2. Increase iterations: `.with_max_iter(10000)`
-3. Check initial conditions
+
+1. Try different optimisers
+2. Increase iterations, i.e. `.with_max_iter(10000)`
+3. Try different initial conditions
 4. Normalise data if scales vary widely
 
 ### Slow Performance
 
 **Solutions:**
+
 1. Use CMA-ES for parallelisation
-2. Reduce data points if possible
+2. Reduce the number of data points
 3. Use sparse backend for large ODE systems
-4. Profile with `py-spy` to find bottlenecks
 
 ## See Also
 

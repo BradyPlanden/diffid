@@ -4,14 +4,11 @@ This tutorial demonstrates how to fit ordinary differential equations (ODEs) to 
 
 ## The Problem: Logistic Growth
 
-We'll fit a logistic growth model to exponentially decaying data. The logistic growth equation is:
+We'll fit a logistic growth model to synthetic population data. The logistic growth equation is:
 
 $$\frac{dy}{dt} = r \cdot y \cdot \left(1 - \frac{y}{k}\right)$$
 
-where:
-- $r$ is the growth rate
-- $k$ is the carrying capacity
-- $y$ is the population
+where: $r$ is the growth rate, $k$ is the carrying capacity, and $y$ is the population.
 
 ## Complete Example
 
@@ -26,9 +23,16 @@ u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
 
-# Generate synthetic data
-t = np.linspace(0.0, 5.0, 51)
-observations = np.exp(-1.3 * t)
+# Generate synthetic data from the logistic model with noise
+from scipy.integrate import odeint
+
+def logistic(y, t, r, k):
+    return r * y * (1 - y / k)
+
+t = np.linspace(0.0, 10.0, 51)
+y_true = odeint(logistic, 0.1, t, args=(0.8, 2.0)).flatten()  # True: r=0.8, k=2.0
+np.random.seed(42)
+observations = y_true + 0.05 * np.random.randn(len(t))
 data = np.column_stack((t, observations))
 
 # Build the problem
@@ -36,14 +40,15 @@ builder = (
     chron.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
-    .with_parameter("k", 1.0)
+    .with_parameter("r", 0.5)  # Initial guess for growth rate
+    .with_parameter("k", 1.0)  # Initial guess for carrying capacity
     .with_backend("dense")
 )
 problem = builder.build()
 
 # Run optimisation with CMA-ES
 optimiser = chron.CMAES().with_max_iter(1000)
-result = optimiser.run(problem, [0.5, 0.5])
+result = optimiser.run(problem, [0.5, 1.0])
 
 # Display results
 print(f"Fitted parameters:")
@@ -58,28 +63,22 @@ print(f"Success: {result.success}")
 DiffSL is a domain-specific language for defining differential equations. Let's break down the syntax:
 
 ```
-in_i { r = 1, k = 1 }              # Input parameters to fit with default values
-u_i { y = 0.1 }          # Initial conditions
+in_i { r = 1, k = 1 }            # Input parameter tensor with defaults
+u_i { y = 0.1 }                  # Initial conditions
 F_i { (r * y) * (1 - (y / k)) }  # Right-hand side of dy/dt = ...
 ```
-
-Key components:
-
-- `in_i = {...}`: Parameters to optimise with default values
-- `u_i { var = initial_value }`: Initial conditions for state variables
-- `F_i { expression }`: The derivative expression ($dy/dt$)
 
 ## Data Format
 
 Chronopt expects data as a 2D NumPy array where:
 
 - **First column**: Time points
-- **Remaining columns**: Observed values for each state variable
+- **Remaining columns**: Observed values for each variable
 
 ```python
 # Example: 51 time points, 1 state variable
-t = np.linspace(0.0, 5.0, 51)
-observations = np.exp(-1.3 * t)
+t = np.linspace(0.0, 10.0, 51)
+observations = ...  # Your observed data
 data = np.column_stack((t, observations))  # Shape: (51, 2)
 ```
 
@@ -90,46 +89,19 @@ For multi-variable systems:
 data = np.column_stack((t, obs_var1, obs_var2))  # Shape: (n, 3)
 ```
 
-## Choosing the Backend
-
-Diffsol supports two backends:
-
-### Dense Backend (Default)
-
-```python
-.with_backend("dense")
-```
-
-**Use when:**
-- System has few state variables (< 100)
-- The Jacobian matrix is mostly non-zero
-- Simplicity is preferred
-
-### Sparse Backend
-
-```python
-.with_backend("sparse")
-```
-
-**Use when:**
-- System has many state variables (> 100)
-- The Jacobian matrix is mostly zero
-- Maximum performance is critical
-
-For more details, see the [DiffSL Backend Guide](../guides/diffsol-backend.md).
-
 ## Visualising Results
 
 ```python
 import matplotlib.pyplot as plt
 
-# Get the optimised model predictions
-predictions = problem.evaluate(result.x)  # Returns predicted values at data time points
+# Generate fitted curve using optimised parameters
+t_dense = np.linspace(0.0, 10.0, 200)
+y_fitted = odeint(logistic, 0.1, t_dense, args=(result.x[0], result.x[1])).flatten()
 
 # Plot
 plt.figure(figsize=(10, 6))
 plt.plot(data[:, 0], data[:, 1], 'o', label='Observed data', alpha=0.6)
-plt.plot(data[:, 0], predictions, '-', label='Fitted model', linewidth=2)
+plt.plot(t_dense, y_fitted, '-', label='Fitted model', linewidth=2)
 plt.xlabel('Time')
 plt.ylabel('y')
 plt.title('Logistic Growth Model Fit')
@@ -137,6 +109,8 @@ plt.legend()
 plt.grid(True, alpha=0.3)
 plt.show()
 ```
+
+![Logistic growth model fit](logistic_fit.png)
 
 ## Common ODE Patterns
 
@@ -184,7 +158,7 @@ F_i { k * sin(t) - y }
 
 ## Cost Metrics
 
-By default, Chronopt uses sum of squared errors (SSE). You can specify different cost metrics:
+By default, Chronopt uses sum of squared errors (SSE). You can specify different cost metrics as shown below. See the [Cost Metrics Guide](../guides/cost-metrics.md) for more details.
 
 ```python
 from chronopt import GaussianNLL, RMSE
@@ -202,11 +176,9 @@ builder = (
 builder = builder.with_cost_metric(RMSE())  # Normalised by number of points
 ```
 
-See the [Cost Metrics Guide](../guides/cost-metrics.md) for more details.
-
 ## Optimiser Selection
 
-Different optimisers work better for different problems:
+Different optimisers work better for different problems. For a detailed comparison, see [Choosing an Optimiser](../guides/choosing-optimiser.md).
 
 ### Nelder-Mead (Default)
 
@@ -234,8 +206,6 @@ result = optimiser.run(problem, initial_guess)
 
 **Best for**: Smooth problems, fast convergence on well-behaved objectives
 
-For a detailed comparison, see [Choosing an Optimiser](../guides/choosing-optimiser.md).
-
 ## Troubleshooting
 
 ### Poor Fit Quality
@@ -252,14 +222,6 @@ For a detailed comparison, see [Choosing an Optimiser](../guides/choosing-optimi
 3. **Backend mismatch**: Try switching between `dense` and `sparse`
 
 For more help, see the [Troubleshooting Guide](../guides/troubleshooting.md).
-
-## Key Takeaways
-
-- **DiffsolBuilder** is used for ODE fitting problems
-- **DiffSL** provides a concise syntax for defining ODEs
-- Data format is `[time, obs1, obs2, ...]`
-- Choose between `dense` (default) and `sparse` backends
-- CMA-ES often works well for ODE parameter fitting
 
 ## Next Steps
 

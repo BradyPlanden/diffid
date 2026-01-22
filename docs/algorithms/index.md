@@ -88,6 +88,7 @@ graph TD
 ### Convergence Speed
 
 Fast → Slow:
+
 1. **Adam** (with gradients)
 2. **Nelder-Mead** (small problems)
 3. **CMA-ES** (large problems)
@@ -97,6 +98,7 @@ Fast → Slow:
 ### Robustness to Local Minima
 
 Least → Most robust:
+
 1. **Adam** (gradient descent)
 2. **Nelder-Mead** (local search)
 3. **CMA-ES** (global search)

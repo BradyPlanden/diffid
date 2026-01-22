@@ -10,12 +10,14 @@ Dynamic Nested Sampling calculates model evidence (marginal likelihood) for Baye
 ## When to Use
 
 **Best for:**
+
 - Model comparison
 - Calculating Bayes factors
 - Evidence calculation
 - Multi-modal posteriors
 
 **Avoid when:**
+
 - Only need posterior samples (use MCMC)
 - Limited computational budget
 

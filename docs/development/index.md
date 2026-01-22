@@ -22,14 +22,6 @@ Resources for contributors and developers working with Chronopt.
 
     [:octicons-arrow-right-24: Architecture Overview](architecture.md)
 
--   :material-hammer-wrench:{ .lg .middle } __Building from Source__
-
-    ---
-
-    Setting up a development environment and building Chronopt.
-
-    [:octicons-arrow-right-24: Build Guide](building.md)
-
 </div>
 
 ## Quick Setup
@@ -236,19 +228,8 @@ uv pip install py-spy
 py-spy record --native -- python examples/your_example.py
 ```
 
-## Release Process
-
-See the [Contributing Guide](contributing.md) for the release workflow.
-
-## Getting Help
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/bradyplanden/chronopt/issues)
-- **Discussions**: [Ask questions](https://github.com/bradyplanden/chronopt/discussions)
-- **Documentation**: You're reading it!
-
 ## See Also
 
 - [Architecture](architecture.md) - System design
 - [Contributing](contributing.md) - Contribution guidelines
-- [Building](building.md) - Detailed build instructions
 - [API Reference](../api-reference/index.md) - API documentation

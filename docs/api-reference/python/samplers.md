@@ -188,8 +188,8 @@ print(f"MAP estimate: {opt_result.x}")
 
 The followings present sampler functionality:
 
-- [Parameter Uncertainty Tutorial](../../tutorials/notebooks/03_parameter_uncertainty.ipynb)
-- [Model Comparison Tutorial](../../tutorials/notebooks/04_model_comparison.ipynb)
+- [Parameter Uncertainty Tutorial](../../tutorials/notebooks/parameter_uncertainty.ipynb)
+- [Model Comparison Tutorial](../../tutorials/notebooks/model_comparison.ipynb)
 - [Choosing a Sampler Guide](../../guides/choosing-sampler.md)
 
 ---

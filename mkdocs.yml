@@ -147,14 +147,13 @@ nav:
   - Tutorials:
       - tutorials/index.md
       - Notebooks:
-          - 1. Optimisation Basics: tutorials/notebooks/01_optimisation_basics.ipynb
-          - 2. ODE Fitting with DiffSL: tutorials/notebooks/02_ode_fitting_diffsol.ipynb
-          - 3. Parameter Uncertainty: tutorials/notebooks/03_parameter_uncertainty.ipynb
-          - 4. Model Comparison: tutorials/notebooks/04_model_comparison.ipynb
-          - 5. Predator-Prey Models: tutorials/notebooks/05_advanced_predator_prey.ipynb
-          - 6. Custom Solver Integration: tutorials/notebooks/06_custom_solver_integration.ipynb
-          - 7. Parallel Optimisation: tutorials/notebooks/07_parallel_optimisation.ipynb
-          - 8. Advanced Cost Functions: tutorials/notebooks/08_advanced_cost_functions.ipynb
+          - Optimisation Basics: tutorials/notebooks/optimisation_basics.ipynb
+          - ODE Fitting with DiffSL: tutorials/notebooks/ode_fitting_diffsol.ipynb
+          - Parameter Uncertainty: tutorials/notebooks/parameter_uncertainty.ipynb
+          - Model Comparison: tutorials/notebooks/model_comparison.ipynb
+          - Predator-Prey Models: tutorials/notebooks/advanced_predator_prey.ipynb
+          - Parallel Optimisation: tutorials/notebooks/parallel_optimisation.ipynb
+          - Advanced Cost Functions: tutorials/notebooks/advanced_cost_functions.ipynb
   - User Guides:
       - guides/index.md
       - Choosing an Optimiser: guides/choosing-optimiser.md

@@ -223,4 +223,4 @@ For heteroscedastic data (varying noise), weighted metrics can be important. Con
 - [Cost Metrics Guide](../../guides/cost-metrics.md)
 - [Builders](builders.md)
 - [Samplers](samplers.md) (for Bayesian inference)
-- [Parameter Uncertainty Tutorial](../../tutorials/notebooks/03_parameter_uncertainty.ipynb)
+- [Parameter Uncertainty Tutorial](../../tutorials/notebooks/parameter_uncertainty.ipynb)

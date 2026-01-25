@@ -226,6 +226,6 @@ For more help, see the [Troubleshooting Guide](../guides/troubleshooting.md).
 ## Next Steps
 
 - **[Core Concepts](concepts.md)**: Understand builders, problems, and the ask/tell pattern
-- **[ODE Fitting Tutorial](../tutorials/notebooks/02_ode_fitting_diffsol.ipynb)**: Interactive notebook with more examples
+- **[ODE Fitting Tutorial](../tutorials/notebooks/ode_fitting_diffsol.ipynb)**: Interactive notebook with more examples
 - **[Custom Solvers](../guides/custom-solvers.md)**: Integrate Diffrax or DifferentialEquations.jl
-- **[Parameter Uncertainty](../tutorials/notebooks/03_parameter_uncertainty.ipynb)**: Use MCMC sampling to quantify uncertainty
+- **[Parameter Uncertainty](../tutorials/notebooks/parameter_uncertainty.ipynb)**: Use MCMC sampling to quantify uncertainty

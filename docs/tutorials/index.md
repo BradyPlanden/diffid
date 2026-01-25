@@ -6,13 +6,13 @@ Interactive Jupyter notebooks for hands-on learning with Diffid.
 
 Follow these progressive learning paths based on your experience level and goals.
 
-### 🎯 Beginner Track
+### Beginner Track
 
 Perfect for those new to Diffid or optimisation:
 
 <div class="grid cards" markdown>
 
--   **[1. Optimisation Basics](notebooks/01_optimisation_basics.ipynb)**
+-   **[Optimisation Basics](notebooks/optimisation_basics.ipynb)**
 
     ---
 
@@ -21,7 +21,7 @@ Perfect for those new to Diffid or optimisation:
     **Topics:** ScalarBuilder, contour plots, optimiser comparison
     **Runtime:** ~5 minutes
 
--   **[2. ODE Fitting with DiffSL](notebooks/02_ode_fitting_diffsol.ipynb)**
+-   **[ODE Fitting with DiffSL](notebooks/ode_fitting_diffsol.ipynb)**
 
     ---
 
@@ -32,13 +32,13 @@ Perfect for those new to Diffid or optimisation:
 
 </div>
 
-### 🚀 Intermediate Track
+### Intermediate Track
 
 Building on the basics with real-world applications:
 
 <div class="grid cards" markdown>
 
--   **[3. Parameter Uncertainty](notebooks/03_parameter_uncertainty.ipynb)**
+-   **[Parameter Uncertainty](notebooks/parameter_uncertainty.ipynb)**
 
     ---
 
@@ -47,7 +47,7 @@ Building on the basics with real-world applications:
     **Topics:** Metropolis-Hastings, posterior distributions, diagnostics
     **Runtime:** ~15 minutes
 
--   **[4. Model Comparison](notebooks/04_model_comparison.ipynb)** ⚠️ *Coming Soon*
+-   **[Model Comparison](notebooks/model_comparison.ipynb)** ⚠️ *Coming Soon*
 
     ---
 
@@ -58,13 +58,13 @@ Building on the basics with real-world applications:
 
 </div>
 
-### 🔬 Advanced Track
+## Advanced Track
 
 Complex problems and advanced techniques:
 
 <div class="grid cards" markdown>
 
--   **[5. Multi-Backend ODE Solving](notebooks/05_advanced_predator_prey.ipynb)**
+-   **[Multi-Backend ODE Solving](notebooks/advanced_predator_prey.ipynb)**
 
     ---
 
@@ -77,13 +77,13 @@ Complex problems and advanced techniques:
 
 ## Quick Reference
 
-| Tutorial | Difficulty | Key Concepts | Prerequisites |
-|----------|------------|--------------|---------------|
-| 1. optimisation Basics | ⭐ Beginner | ScalarBuilder, optimisers | None |
-| 2. ODE Fitting | ⭐ Beginner | DiffsolBuilder, DiffSL | Tutorial 1 |
-| 3. Parameter Uncertainty | ⭐⭐ Intermediate | MCMC, uncertainty | Tutorials 1-2 |
-| 4. Model Comparison | ⭐⭐ Intermediate | Nested sampling, evidence | Tutorials 1-3 |
-| 5. Multi-Backend | ⭐⭐⭐ Advanced | VectorBuilder, JAX, Julia | Tutorials 1-2 |
+| Tutorial                 | Difficulty | Key Concepts              | Prerequisites |
+|--------------------------|------------|---------------------------|---------------|
+| Optimisation Basics      | ⭐ Beginner | ScalarBuilder, Optimisers | None |
+| ODE Fitting              | ⭐ Beginner | DiffsolBuilder, DiffSL    | Optimisation Basics |
+| Parameter Uncertainty    | ⭐⭐ Intermediate | MCMC, uncertainty         | Optimisation Basics, ODE Fitting |
+| Model Comparison         | ⭐⭐ Intermediate | Nested sampling, evidence | Optimisation Basics, ODE Fitting, Parameter Uncertainty |
+| Multi-Backend            | ⭐⭐⭐ Advanced | VectorBuilder, JAX, Julia | Optimisation Basics, ODE Fitting |
 
 ## Prerequisites
 
@@ -94,8 +94,8 @@ Complex problems and advanced techniques:
 - Jupyter notebook environment
 
 ### Additional for Specific Tutorials
-- **Tutorials 3-4**: Basic Bayesian statistics
-- **Tutorial 5**: JAX or Julia knowledge (optional)
+- **Parameter Uncertainty & Model Comparison**: Basic Bayesian statistics
+- **Multi-Backend**: JAX or Julia knowledge (optional)
 
 ## Running the Notebooks
 
@@ -126,35 +126,6 @@ cd diffid/docs/tutorials/notebooks
 jupyter notebook
 ```
 
-### Google Colab
-
-You can also run these notebooks in Google Colab (coming soon with hosted versions).
-
-## Learning Outcomes
-
-By completing all tutorials, you will:
-
-- Understand Diffid's builder pattern and API
-- Optimize both scalar functions and ODE parameters
-- Compare and tune different optimisation algorithms
-- Quantify parameter uncertainty with MCMC
-- Compare models using Bayesian evidence
-- Integrate custom ODE solvers (JAX, Julia)
-- Make informed decisions about algorithm selection
-
-## Notebook Structure
-
-Each tutorial follows a consistent structure:
-
-1. **Learning Objectives** - What you'll learn
-2. **Prerequisites** - Required background
-3. **Introduction** - Problem context and motivation
-4. **Step-by-Step Code** - Fully explained examples
-5. **Visualizations** - Plots and diagnostics
-6. **Key Takeaways** - Summary of main points
-7. **Exercises** - Practice problems
-8. **Next Steps** - Links to related content
-
 ## Alternative: Python Scripts
 
 Prefer scripts to notebooks? Check out the [examples directory](https://github.com/bradyplanden/diffid/tree/main/examples):
@@ -164,65 +135,6 @@ Prefer scripts to notebooks? Check out the [examples directory](https://github.c
 - `bouncy_ball.py` / `bouncy_ball_sampling.py` - Optimisation and MCMC
 - `bicycle_model_evidence.py` - Model comparison
 - `predator_prey/` - Multi-backend comparisons
-
-## Utilities
-
-The notebooks use shared utilities in `utils.py`:
-
-- `plot_contour_2d()` - 2D function contours
-- `plot_ode_fit()` - ODE fits and data
-- `plot_convergence()` - Optimisation history
-- `plot_parameter_traces()` - MCMC traces
-- `plot_parameter_distributions()` - Posterior histograms
-- `compare_models()` - Multi-model plots
-
-Feel free to reuse these in your own projects!
-
-## Troubleshooting
-
-### Import Errors
-
-```python
-ModuleNotFoundError: No module named 'diffid'
-```
-
-**Solution**: Install Diffid: `pip install diffid`
-
-### Notebook Kernel Issues
-
-If the notebook doesn't recognize installed packages:
-
-1. Install packages in the correct environment
-2. Restart the Jupyter kernel: *Kernel → Restart*
-3. Check kernel selection: *Kernel → Change Kernel*
-
-### Missing Dependencies
-
-Some notebooks require optional dependencies:
-
-```bash
-# For plotting
-pip install matplotlib
-
-# For Tutorial 5 (optional backends)
-pip install jax diffrax        # JAX/Diffrax
-pip install diffeqpy           # Julia
-```
-
-### Performance Issues
-
-If MCMC sampling is slow:
-
-- Reduce number of chains or iterations
-- Enable parallel execution: `.with_parallel(True)`
-- Use fewer data points for testing
-
-## Getting Help
-
-- **Documentation**: Browse the [complete docs](../index.md)
-- **Examples**: See the [examples gallery](../examples/gallery.md)
-- **API Reference**: Check the [API docs](../api-reference/index.md)
-- **Issues**: Report problems on [GitHub](https://github.com/bradyplanden/diffid/issues)
 
 ## Contributing
 

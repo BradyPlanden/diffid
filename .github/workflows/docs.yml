@@ -45,14 +45,7 @@ jobs:
             ${{ runner.os }}-uv-docs-deploy-
 
       - name: Install dependencies
-        run: |
-          uv pip install --system mkdocs
-          uv pip install --system mkdocs-material
-          uv pip install --system mkdocstrings[python]
-          uv pip install --system mkdocs-git-revision-date-localized-plugin
-          uv pip install --system mkdocs-minify-plugin
-          uv pip install --system mkdocs-jupyter
-          uv pip install --system pymdown-extensions
+        run: uv pip install --system --group docs
 
       - name: Build documentation
         run: mkdocs build --strict

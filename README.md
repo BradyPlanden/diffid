@@ -10,7 +10,7 @@
 </div>
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/bradyplanden/diffid/main/docs/assets/diffid.svg" alt="Diffid architecture describing the two optimisation approaches." width="700" />
+    <img src="https://raw.githubusercontent.com/BradyPlanden/diffid/main/docs/assets/diffid.svg" alt="Diffid architecture describing the two optimisation approaches." width="700" />
 </p>
 
 ## Project goals

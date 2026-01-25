@@ -3,7 +3,7 @@
 Demonstrates parameter estimation for the Lotka-Volterra model by:
 1. Defining the predator-prey ODE in JAX
 2. Generating synthetic noisy observations
-3. Recovering parameters using diffid optimization
+3. Recovering parameters using diffid optimisation
 
 Prerequisites:
     pip install diffid diffrax jax numpy

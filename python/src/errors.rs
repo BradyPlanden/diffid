@@ -71,11 +71,11 @@ pub fn tell_error_to_py(err: CoreTellError) -> PyErr {
                     Ok(exc_class) => match exc_class.call0() {
                         Ok(exc_instance) => PyErr::from_value(exc_instance.into()),
                         Err(_) => PyValueError::new_err(
-                            "Cannot provide results to an already terminated optimization",
+                            "Cannot provide results to an already terminated optimisation",
                         ),
                     },
                     Err(_) => PyValueError::new_err(
-                        "Cannot provide results to an already terminated optimization",
+                        "Cannot provide results to an already terminated optimisation",
                     ),
                 }
             }

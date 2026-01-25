@@ -246,5 +246,5 @@ print(result.x)  # [optimal_y, optimal_x]
 
 - [Getting Started: Core Concepts](../../getting-started/concepts.md)
 - [Cost Metrics](cost-metrics.md)
-- [Optimisers](optimizers.md)
+- [Optimisers](optimisers.md)
 - [Custom Solvers Guide](../../guides/custom-solvers.md)

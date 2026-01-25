@@ -22,4 +22,4 @@ optimiser = diffid.CMAES().with_population_size(20)
 ## See Also
 
 - [DiffsolBuilder API](../api-reference/python/builders.md#diffsolbuilder)
-- [CMA-ES API](../api-reference/python/optimizers.md#cma-es)
+- [CMA-ES API](../api-reference/python/optimisers.md#cma-es)

@@ -22,7 +22,7 @@ Diffid provides a comprehensive Python API with full type hints and automatic do
 
     Gradient-free (Nelder-Mead, CMA-ES) and gradient-based (Adam) optimisation algorithms.
 
-    [:octicons-arrow-right-24: Optimisers](python/optimizers.md)
+    [:octicons-arrow-right-24: Optimisers](python/optimisers.md)
 
 -   :material-chart-bell-curve:{ .lg .middle } __Samplers__
 
@@ -130,6 +130,6 @@ print(result.x)  # [optimal_x, optimal_y]
 ## Next Steps
 
 - [Builders API](python/builders.md) - Start building problems
-- [Optimisers API](python/optimizers.md) - Configure optimisation algorithms
+- [Optimisers API](python/optimisers.md) - Configure optimisation algorithms
 - [User Guides](../guides/index.md) - Learn when to use each component
 - [Tutorials](../tutorials/index.md) - Interactive examples

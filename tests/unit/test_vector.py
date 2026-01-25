@@ -34,7 +34,7 @@ def test_vector_builder_basic():
     assert np.isfinite(cost), f"Cost should be finite, got {cost}"
     assert cost >= 0, f"Cost should be non-negative, got {cost}"
 
-    # Test optimization
+    # Test optimisation
     optimiser = diffid.NelderMead().with_max_iter(1000).with_threshold(1e-8)
     result = problem.optimise(x0, optimiser)
 
@@ -95,7 +95,7 @@ def test_vector_builder_sinusoidal():
     result = problem.optimise(x0, optimiser)
 
     # Note: Sinusoidal fitting can be challenging due to local minima
-    # We just verify the optimization runs and produces reasonable results
+    # We just verify the optimisation runs and produces reasonable results
     assert (
         result.success or result.iterations >= 1000
     )  # Either converged or tried hard enough

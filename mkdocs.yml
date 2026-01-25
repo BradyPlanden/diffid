@@ -147,18 +147,18 @@ nav:
   - Tutorials:
       - tutorials/index.md
       - Notebooks:
-          - 1. Optimisation Basics: tutorials/notebooks/01_optimization_basics.ipynb
+          - 1. Optimisation Basics: tutorials/notebooks/01_optimisation_basics.ipynb
           - 2. ODE Fitting with DiffSL: tutorials/notebooks/02_ode_fitting_diffsol.ipynb
           - 3. Parameter Uncertainty: tutorials/notebooks/03_parameter_uncertainty.ipynb
           - 4. Model Comparison: tutorials/notebooks/04_model_comparison.ipynb
           - 5. Predator-Prey Models: tutorials/notebooks/05_advanced_predator_prey.ipynb
           - 6. Custom Solver Integration: tutorials/notebooks/06_custom_solver_integration.ipynb
-          - 7. Parallel Optimisation: tutorials/notebooks/07_parallel_optimization.ipynb
+          - 7. Parallel Optimisation: tutorials/notebooks/07_parallel_optimisation.ipynb
           - 8. Advanced Cost Functions: tutorials/notebooks/08_advanced_cost_functions.ipynb
   - User Guides:
       - guides/index.md
       - Choosing an Optimiser: guides/choosing-optimiser.md
-      - Tuning Optimisers: guides/tuning-optimizers.md
+      - Tuning Optimisers: guides/tuning-optimisers.md
       - Choosing a Sampler: guides/choosing-sampler.md
       - Cost Metrics: guides/cost-metrics.md
       - DiffSL Backend: guides/diffsol-backend.md
@@ -168,9 +168,9 @@ nav:
   - Algorithms:
       - algorithms/index.md
       - Optimisers:
-          - Nelder-Mead: algorithms/optimizers/nelder-mead.md
-          - CMA-ES: algorithms/optimizers/cmaes.md
-          - Adam: algorithms/optimizers/adam.md
+          - Nelder-Mead: algorithms/optimisers/nelder-mead.md
+          - CMA-ES: algorithms/optimisers/cmaes.md
+          - Adam: algorithms/optimisers/adam.md
       - Samplers:
           - Metropolis-Hastings: algorithms/samplers/metropolis-hastings.md
           - Dynamic Nested Sampling: algorithms/samplers/dynamic-nested-sampling.md
@@ -178,7 +178,7 @@ nav:
       - api-reference/index.md
       - Python:
           - Builders: api-reference/python/builders.md
-          - Optimisers: api-reference/python/optimizers.md
+          - Optimisers: api-reference/python/optimisers.md
           - Samplers: api-reference/python/samplers.md
           - Cost Metrics: api-reference/python/cost-metrics.md
           - Results: api-reference/python/results.md

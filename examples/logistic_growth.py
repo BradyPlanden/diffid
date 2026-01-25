@@ -35,9 +35,9 @@ results = problem.optimise()
 
 print(f"result: {results}")
 
-# For now, just print the optimization result since Hamiltonian sampler is not implemented yet
+# For now, just print the optimisation result since Hamiltonian sampler is not implemented yet
 print(f"Optimal parameters: {results.x}")
 print(f"Optimal cost: {results.value}")
-print(f"Optimization success: {results.success}")
+print(f"Optimisation success: {results.success}")
 print(f"Iterations: {results.iterations}")
 print(f"Optimisation time: {results.time}")

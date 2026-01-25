@@ -28,5 +28,5 @@ ImportError: No module named 'diffid'
 ## See Also
 
 - [Installation](../getting-started/installation.md)
-- [Tuning Optimisers](tuning-optimizers.md)
+- [Tuning Optimisers](tuning-optimisers.md)
 - [GitHub Issues](https://github.com/bradyplanden/diffid/issues)

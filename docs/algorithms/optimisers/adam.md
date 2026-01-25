@@ -137,6 +137,6 @@ result = optimiser.run(problem, initial_guess=[1.0, 2.0])
 
 ## See Also
 
-- [API Reference](../../api-reference/python/optimizers.md#adam)
+- [API Reference](../../api-reference/python/optimisers.md#adam)
 - [Choosing an Optimiser](../../guides/choosing-optimiser.md)
-- [Tuning Optimisers](../../guides/tuning-optimizers.md)
+- [Tuning Optimisers](../../guides/tuning-optimisers.md)

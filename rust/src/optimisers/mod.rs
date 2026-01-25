@@ -48,7 +48,7 @@ impl ScalarOptimiser {
     /// * `bounds` - Optional parameter bounds
     ///
     /// # Returns
-    /// Optimization results including best point, value, and diagnostics
+    /// Optimisation results including best point, value, and diagnostics
     ///
     /// # Example
     /// ```
@@ -82,7 +82,7 @@ impl ScalarOptimiser {
     /// * `bounds` - Optional parameter bounds
     ///
     /// # Returns
-    /// Optimization results including best point, value, and diagnostics
+    /// Optimisation results including best point, value, and diagnostics
     ///
     /// # Example
     /// ```
@@ -133,7 +133,7 @@ impl GradientOptimiser {
     /// * `bounds` - Optional parameter bounds
     ///
     /// # Returns
-    /// Optimization results including best point, value, and diagnostics
+    /// Optimisation results including best point, value, and diagnostics
     ///
     /// # Example
     /// ```

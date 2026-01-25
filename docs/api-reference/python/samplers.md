@@ -196,7 +196,7 @@ The followings present sampler functionality:
 
 ## See Also
 
-- [Optimisers](optimizers.md) - For point estimates
+- [Optimisers](optimisers.md) - For point estimates
 - [Cost Metrics](cost-metrics.md) - GaussianNLL required
 - [Choosing a Sampler Guide](../../guides/choosing-sampler.md) (future)
 - [Algorithm Guides](../../algorithms/index.md)

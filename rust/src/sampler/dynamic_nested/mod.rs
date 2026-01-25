@@ -5,7 +5,7 @@
 //! **IMPORTANT**: The objective function must return **negative log-likelihood** (-log L).
 //! Internally, values are negated to obtain log-likelihood for nested sampling calculations.
 //!
-//! This convention aligns with optimization where lower values are better, while nested
+//! This convention aligns with optimisation where lower values are better, while nested
 //! sampling requires higher log-likelihood values.
 
 use rand::prelude::StdRng;

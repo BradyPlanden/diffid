@@ -12,7 +12,7 @@ Perfect for those new to Diffid or optimisation:
 
 <div class="grid cards" markdown>
 
--   **[1. Optimisation Basics](notebooks/01_optimization_basics.ipynb)**
+-   **[1. Optimisation Basics](notebooks/01_optimisation_basics.ipynb)**
 
     ---
 
@@ -79,7 +79,7 @@ Complex problems and advanced techniques:
 
 | Tutorial | Difficulty | Key Concepts | Prerequisites |
 |----------|------------|--------------|---------------|
-| 1. Optimization Basics | ⭐ Beginner | ScalarBuilder, optimizers | None |
+| 1. optimisation Basics | ⭐ Beginner | ScalarBuilder, optimisers | None |
 | 2. ODE Fitting | ⭐ Beginner | DiffsolBuilder, DiffSL | Tutorial 1 |
 | 3. Parameter Uncertainty | ⭐⭐ Intermediate | MCMC, uncertainty | Tutorials 1-2 |
 | 4. Model Comparison | ⭐⭐ Intermediate | Nested sampling, evidence | Tutorials 1-3 |

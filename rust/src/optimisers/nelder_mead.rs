@@ -75,7 +75,7 @@ impl NelderMead {
         self
     }
 
-    /// Initialize the optimization state
+    /// Initialize the optimisation state
     ///
     /// Returns the state and the first point to evaluate
     pub fn init(&self, initial: Point, bounds: Bounds) -> (NelderMeadState, Vec<Point>) {
@@ -98,7 +98,7 @@ impl NelderMead {
         (state, vec![initial_point])
     }
 
-    /// Run optimization using a closure for evaluation
+    /// Run optimisation using a closure for evaluation
     ///
     /// This is a convenience wrapper around the ask/tell interface
     pub fn run<F, R, E>(
@@ -202,7 +202,7 @@ pub struct NelderMeadState {
 }
 
 impl NelderMeadState {
-    /// Get the next point to evaluate, or the final result if optimization is complete
+    /// Get the next point to evaluate, or the final result if optimisation is complete
     pub fn ask(&self) -> AskResult<OptimisationResults> {
         match &self.phase {
             NelderMeadPhase::Terminated(reason) => {
@@ -721,7 +721,7 @@ mod tests {
                     current_value = rosenbrock(&point[0]);
                 }
                 AskResult::Done(results) => {
-                    println!("Optimization complete!");
+                    println!("optimisation complete!");
                     println!("Best value: {}", results.value);
                     println!("Iterations: {}", results.iterations);
                     println!("Evaluations: {}", results.evaluations);

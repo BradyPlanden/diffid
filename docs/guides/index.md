@@ -20,7 +20,7 @@ In-depth guides for making the most of Diffid's optimisation and sampling capabi
 
     Parameter tuning strategies and troubleshooting for each algorithm.
 
-    [:octicons-arrow-right-24: Tuning Guide](tuning-optimizers.md)
+    [:octicons-arrow-right-24: Tuning Guide](tuning-optimisers.md)
 
 -   :material-chart-bell-curve:{ .lg .middle } __Choosing a Sampler__
 

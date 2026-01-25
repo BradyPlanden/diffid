@@ -136,6 +136,6 @@ result = optimiser.run(problem, initial_guess=[0.5] * n_params)
 
 ## See Also
 
-- [API Reference](../../api-reference/python/optimizers.md#cma-es)
+- [API Reference](../../api-reference/python/optimisers.md#cma-es)
 - [Choosing an Optimiser](../../guides/choosing-optimiser.md)
 - [Parallel Execution](../../guides/parallel-execution.md)

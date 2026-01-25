@@ -46,7 +46,7 @@ impl PyEvaluate {
     }
 }
 
-/// Optimization/sampling is complete with final results.
+/// Optimisation/sampling is complete with final results.
 ///
 /// This is returned by `ask()` when the algorithm has terminated.
 /// Access the results via the `result` attribute.
@@ -56,7 +56,7 @@ impl PyEvaluate {
 /// >>> while True:
 /// ...     result = state.ask()
 /// ...     if isinstance(result, diffid.Done):
-/// ...         print(f"Optimization complete: {result.result}")
+/// ...         print(f"Optimisation complete: {result.result}")
 /// ...         break
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass(name = "Done")]
@@ -212,7 +212,7 @@ impl PyOptimisationResults {
         }
     }
 
-    /// Return truthiness based on optimization success.
+    /// Return truthiness based on optimisation success.
     ///
     /// Allows using `if result:` instead of `if result.success:`.
     fn __bool__(&self) -> bool {

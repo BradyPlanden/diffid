@@ -126,7 +126,7 @@ class AdamState:
         >>> if isinstance(result, diffid.Evaluate):
         ...     print(f"Need to evaluate {len(result.points)} points")
         >>> elif isinstance(result, diffid.Done):
-        ...     print(f"Optimization complete: {result.result}")
+        ...     print(f"Optimisation complete: {result.result}")
         """
     def tell(
         self, result: tuple[builtins.float, typing.Sequence[builtins.float]]
@@ -464,7 +464,7 @@ class DiffsolBuilder:
 @typing.final
 class Done:
     r"""
-    Optimization/sampling is complete with final results.
+    Optimisation/sampling is complete with final results.
 
     This is returned by `ask()` when the algorithm has terminated.
     Access the results via the `result` attribute.
@@ -474,7 +474,7 @@ class Done:
     >>> while True:
     ...     result = state.ask()
     ...     if isinstance(result, diffid.Done):
-    ...         print(f"Optimization complete: {result.result}")
+    ...         print(f"Optimisation complete: {result.result}")
     ...         break
     """
     @property

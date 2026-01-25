@@ -69,7 +69,7 @@ result = optimiser.run(problem, initial_guess=[1.0, 2.0])
 - **`max_iter`**: Maximum iterations (default: 1000)
     - Rule of thumb: `100 * n_parameters` minimum
 
-See the [Nelder-Mead Algorithm Guide](../../algorithms/optimizers/nelder-mead.md) for more details.
+See the [Nelder-Mead Algorithm Guide](../../algorithms/optimisers/nelder-mead.md) for more details.
 
 ---
 
@@ -142,7 +142,7 @@ result = optimiser.run(problem, initial_guess=[0.5, 0.5])
     - Omit for non-deterministic runs
     - Set for reproducible benchmarks
 
-See the [CMA-ES Algorithm Guide](../../algorithms/optimizers/cmaes.md) for more details.
+See the [CMA-ES Algorithm Guide](../../algorithms/optimisers/cmaes.md) for more details.
 
 ---
 
@@ -212,7 +212,7 @@ result = optimiser.run(problem, initial_guess=[1.0, 2.0])
     - Stop when gradient is small
     - Smaller for higher precision
 
-See the [Adam Algorithm Guide](../../algorithms/optimizers/adam.md) for more details.
+See the [Adam Algorithm Guide](../../algorithms/optimisers/adam.md) for more details.
 
 ---
 
@@ -290,7 +290,7 @@ graph TD
 
 For detailed guidance, see:
 - [Choosing an Optimiser Guide](../../guides/choosing-optimiser.md)
-- [Tuning Optimisers Guide](../../guides/tuning-optimizers.md)
+- [Tuning Optimisers Guide](../../guides/tuning-optimisers.md)
 
 ## See Also
 

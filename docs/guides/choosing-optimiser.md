@@ -27,6 +27,6 @@ graph TD
 
 ## See Also
 
-- [Optimisers API](../api-reference/python/optimizers.md)
-- [Tuning Optimisers](tuning-optimizers.md)
+- [Optimisers API](../api-reference/python/optimisers.md)
+- [Tuning Optimisers](tuning-optimisers.md)
 - [Algorithm Details](../algorithms/index.md)

@@ -24,7 +24,7 @@ def _quadratic_gradient(x):
 
 
 def quadratic_problem():
-    """Creates a 3D quadratic optimization problem using ScalarBuilder"""
+    """Creates a 3D quadratic optimisation problem using ScalarBuilder"""
     return (
         diffid.ScalarBuilder()
         .with_objective(_quadratic_objective)

@@ -77,7 +77,7 @@ impl CMAES {
         })
     }
 
-    /// Initialize the optimization state
+    /// Initialize the optimisation state
     ///
     /// Returns the state and the first point to evaluate
     pub fn init(&self, initial: Point, bounds: Bounds) -> (CMAESState, Point) {
@@ -274,7 +274,7 @@ impl CMAESState {
         }
     }
 
-    /// Get the next point(s) to evaluate, or the final result if optimization is complete
+    /// Get the next point(s) to evaluate, or the final result if optimisation is complete
     pub fn ask(&self) -> AskResult<OptimisationResults> {
         match &self.phase {
             CMAESPhase::Terminated(reason) => AskResult::Done(self.build_results(reason.clone())),
@@ -663,7 +663,7 @@ impl CMAESState {
 }
 
 impl CMAES {
-    /// Run optimization using a closure for evaluation
+    /// Run optimisation using a closure for evaluation
     ///
     /// This is a convenience wrapper around the ask/tell interface
     pub fn run<F, R, E>(
@@ -770,7 +770,7 @@ mod tests {
                     current_results = points.iter().map(|p| sphere(p)).collect();
                 }
                 AskResult::Done(results) => {
-                    println!("Optimization complete!");
+                    println!("optimisation complete!");
                     println!("Best value: {}", results.value);
                     println!("Iterations: {}", results.iterations);
                     println!("Evaluations: {}", results.evaluations);
@@ -889,7 +889,7 @@ mod tests {
 
     #[test]
     fn d_sigma_matches_hansen_2016_formula() {
-        // Test case 1: Standard parameters from 10-dimensional optimization
+        // Test case 1: Standard parameters from 10-dimensional optimisation
         let mu_eff = 4.5;
         let dim_f = 10.0;
         let c_sigma = 0.3;
@@ -1515,9 +1515,9 @@ mod tests {
             }
         };
 
-        let optimizer2 = CMAES::new().with_max_iter(50).with_seed(seed);
+        let optimiser2 = CMAES::new().with_max_iter(50).with_seed(seed);
 
-        let (mut state2, first_point2) = optimizer2.init(vec![2.0, -1.0], Bounds::unbounded(2));
+        let (mut state2, first_point2) = optimiser2.init(vec![2.0, -1.0], Bounds::unbounded(2));
         let mut results2 = vec![sphere_cmaes(&first_point2)];
 
         let result2 = loop {

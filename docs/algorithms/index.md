@@ -14,7 +14,7 @@ Gradient-free and gradient-based algorithms for finding optimal parameters.
 
     Simplex-based gradient-free optimiser for local search.
 
-    [:octicons-arrow-right-24: Details](optimizers/nelder-mead.md)
+    [:octicons-arrow-right-24: Details](optimisers/nelder-mead.md)
 
 -   :material-chart-scatter-plot:{ .lg .middle } __CMA-ES__
 
@@ -22,7 +22,7 @@ Gradient-free and gradient-based algorithms for finding optimal parameters.
 
     Covariance Matrix Adaptation Evolution Strategy for global optimisation.
 
-    [:octicons-arrow-right-24: Details](optimizers/cmaes.md)
+    [:octicons-arrow-right-24: Details](optimisers/cmaes.md)
 
 -   :material-alpha-a:{ .lg .middle } __Adam__
 
@@ -30,7 +30,7 @@ Gradient-free and gradient-based algorithms for finding optimal parameters.
 
     Adaptive Moment Estimation for gradient-based optimisation.
 
-    [:octicons-arrow-right-24: Details](optimizers/adam.md)
+    [:octicons-arrow-right-24: Details](optimisers/adam.md)
 
 </div>
 
@@ -123,6 +123,6 @@ Each algorithm page includes references to original papers and implementation de
 ## See Also
 
 - [Choosing an Optimiser](../guides/choosing-optimiser.md)
-- [Tuning Optimisers](../guides/tuning-optimizers.md)
+- [Tuning Optimisers](../guides/tuning-optimisers.md)
 - [API Reference](../api-reference/index.md)
 - [Tutorials](../tutorials/index.md)

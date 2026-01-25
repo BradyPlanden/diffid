@@ -80,7 +80,7 @@ impl Adam {
         self.gradient_threshold.unwrap_or(self.threshold)
     }
 
-    /// Initialize the optimization state
+    /// Initialize the optimisation state
     ///
     /// Returns the state and the first point to evaluate
     pub fn init(&self, initial: Point, bounds: Bounds) -> (AdamState, Point) {
@@ -211,7 +211,7 @@ impl AdamState {
         }
     }
 
-    /// Get the next point to evaluate, or the final result if optimization is complete
+    /// Get the next point to evaluate, or the final result if optimisation is complete
     pub fn ask(&self) -> AskResult<OptimisationResults> {
         match &self.phase {
             AdamPhase::Terminated(reason) => AskResult::Done(self.build_results(reason.clone())),
@@ -400,7 +400,7 @@ impl AdamState {
 
 // Convenience wrapper
 impl Adam {
-    /// Run optimization using a closure for evaluation
+    /// Run optimisation using a closure for evaluation
     ///
     /// The closure should return `(value, gradient)` for a given point
     pub fn run<F, R, E>(
@@ -438,7 +438,7 @@ impl Adam {
         }
     }
 
-    /// Run optimization with numerical gradient approximation
+    /// Run optimisation with numerical gradient approximation
     ///
     /// Uses central differences to approximate the gradient
     pub fn run_with_numerical_gradient<F, E>(
@@ -729,7 +729,7 @@ mod tests {
 
         let mut positions = vec![first_point[0]];
 
-        // Collect positions during optimization
+        // Collect positions during optimisation
         for _ in 0..5 {
             state.tell(result).expect("tell should succeed");
             match state.ask() {

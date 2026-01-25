@@ -107,6 +107,6 @@ result = optimiser.run(problem, initial_guess=[1.0, 2.0])
 
 ## See Also
 
-- [API Reference](../../api-reference/python/optimizers.md#nelder-mead)
+- [API Reference](../../api-reference/python/optimisers.md#nelder-mead)
 - [Choosing an Optimiser](../../guides/choosing-optimiser.md)
-- [Tuning Optimisers](../../guides/tuning-optimizers.md)
+- [Tuning Optimisers](../../guides/tuning-optimisers.md)

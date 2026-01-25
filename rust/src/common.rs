@@ -24,7 +24,7 @@ pub enum AskResult<R> {
 #[derive(Debug, Clone)]
 pub struct Unbounded;
 
-/// Represents parameter bounds for optimization and sampling algorithms.
+/// Represents parameter bounds for optimisation and sampling algorithms.
 ///
 /// Each dimension has a lower and upper bound represented as a `RangeInclusive<f64>`.
 /// Bounds can be finite (e.g., `[0.0, 1.0]`) or infinite (e.g., `[-∞, ∞]`).

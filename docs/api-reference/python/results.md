@@ -307,7 +307,7 @@ print(f"Time per evaluation: {elapsed/result.evaluations*1000:.2f}ms")
 
 ## See Also
 
-- [Optimisers](optimizers.md)
+- [Optimisers](optimisers.md)
 - [Samplers](samplers.md)
 - [Choosing an Optimiser](../../guides/choosing-optimiser.md)
 - [Troubleshooting](../../guides/troubleshooting.md)

@@ -9,6 +9,10 @@
 
 </div>
 
+<p align="center">
+    <img src="https://raw.githubusercontent.com/bradyplanden/diffid/main/docs/assets/diffid.svg" alt="Diffid architecture describing the two optimisation approaches." width="700" />
+</p>
+
 ## Project goals
 - Speed and numerical accuracy through a Rust core.
 - Modular components with informative diagnostics.

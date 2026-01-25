@@ -1,6 +1,10 @@
+<div align="center" markdown>
+
 # Diffid
 
 <b>diff</b>erential <b>id</b>entification is a Rust-first toolkit for time-series inference and optimisation with ergonomic Python bindings. It couples high-performance solvers with a highly customisable builder API for identification and optimisation of differential systems.
+
+</div>
 
 ## Why Diffid?
 

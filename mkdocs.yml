@@ -1,7 +1,7 @@
 site_name: Diffid
 site_description: High-performance time-series inference and optimisation toolkit with Rust core and ergonomic Python bindings
 site_author: Brady Planden
-site_url: https://bradyplanden.github.io/diffid/
+site_url: https://diffid.bradyplanden.com
 repo_name: bradyplanden/diffid
 repo_url: https://github.com/bradyplanden/diffid
 edit_uri: edit/main/docs/

@@ -74,8 +74,8 @@ The algorithm terminates when any condition is met:
 
 **Learning rate** (`step_size`) is the most critical parameter:
 
-- Start with 0.001 (the original paper's recommendation)
-- Try orders of magnitude: 0.1, 0.01, 0.001, 0.0001
+- Start with a conservative step-size (i.e, 1e-3)
+- Try orders of magnitude: (1e-2 to 1e-4)
 - Too large: oscillation, divergence, or overshooting
 - Too small: slow convergence
 

@@ -15,7 +15,7 @@ CMA-ES samples a population of candidate solutions from a multivariate normal di
 | Function evaluations | $\lambda$ per generation |
 | Best dimensions | 10-100+ parameters |
 
-## Mathematical Foundation
+## Algorithm
 
 The algorithm samples offspring from:
 
@@ -29,18 +29,6 @@ Where:
 - $\sigma$ is the global step size
 - $C$ is the covariance matrix
 
-### Strategy Parameters
-
-The algorithm automatically computes these from dimension $n$:
-
-| Parameter | Formula | Purpose |
-|-----------|---------|---------|
-| $\lambda$ | $\max(4, \lfloor 4 + 3\ln(n) \rfloor)$ | Population size |
-| $\mu$ | $\lfloor \lambda / 2 \rfloor$ | Parent count |
-| $\mu_\text{eff}$ | $1 / \sum w_i^2$ | Effective parent count |
-| $c_\sigma$ | $(μ_\text{eff} + 2) / (n + μ_\text{eff} + 5)$ | Step size learning rate |
-| $c_c$ | $(4 + μ_\text{eff}/n) / (n + 4 + 2μ_\text{eff}/n)$ | Covariance path learning rate |
-
 ## Algorithm Steps
 
 1. **Sample**: Generate $\lambda$ offspring from $\mathcal{N}(m, \sigma^2 C)$
@@ -53,6 +41,19 @@ The algorithm automatically computes these from dimension $n$:
 6. **Update covariance**: Rank-one + rank-$\mu$ update
 7. **Update step size**: Based on evolution path length vs expected length
 8. **Repeat**: Until convergence
+
+### Strategy Parameters
+
+The algorithm automatically computes these from dimension $n$:
+
+| Parameter | Formula | Purpose |
+|-----------|---------|---------|
+| $\lambda$ | $\max(4, \lfloor 4 + 3\ln(n) \rfloor)$ | Population size |
+| $\mu$ | $\lfloor \lambda / 2 \rfloor$ | Parent count |
+| $\mu_\text{eff}$ | $1 / \sum w_i^2$ | Effective parent count |
+| $c_\sigma$ | $(μ_\text{eff} + 2) / (n + μ_\text{eff} + 5)$ | Step size learning rate |
+| $c_c$ | $(4 + μ_\text{eff}/n) / (n + 4 + 2μ_\text{eff}/n)$ | Covariance path learning rate |
+
 
 ## Parameters
 

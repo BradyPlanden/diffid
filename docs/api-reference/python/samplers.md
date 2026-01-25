@@ -2,9 +2,6 @@
 
 MCMC and nested sampling algorithms for posterior exploration and model comparison.
 
-!!! info "Coming Soon"
-    Sampler Python bindings are currently in development. This page describes the planned API.
-
 ## Overview
 
 | Sampler | Type | Use Case |
@@ -16,11 +13,9 @@ Samplers complement optimisers by providing full posterior distributions rather 
 
 ---
 
-## Metropolis-Hastings (Planned)
+## Metropolis-Hastings
 
 MCMC sampling for exploring parameter posterior distributions.
-
-### Planned API
 
 ```python
 import diffid as chron
@@ -65,11 +60,9 @@ print(result.acceptance_rate)  # Target: 0.2-0.4
 
 ---
 
-## Dynamic Nested Sampling (Planned)
+## Dynamic Nested Sampling
 
 Nested sampling for calculating model evidence (marginal likelihood) for model comparison.
-
-### Planned API
 
 ```python
 import diffid as chron
@@ -191,22 +184,13 @@ print(f"MAP estimate: {opt_result.x}")
 
 ---
 
-## Future Tutorials
+## Tutorials
 
-Once samplers are available, see:
+The followings present sampler functionality:
 
 - [Parameter Uncertainty Tutorial](../../tutorials/notebooks/03_parameter_uncertainty.ipynb)
 - [Model Comparison Tutorial](../../tutorials/notebooks/04_model_comparison.ipynb)
 - [Choosing a Sampler Guide](../../guides/choosing-sampler.md)
-
----
-
-## Implementation Status
-
-Track sampler implementation progress:
-
-- [GitHub Issue #XXX](https://github.com/bradyplanden/diffid) - Metropolis-Hastings
-- [GitHub Issue #XXX](https://github.com/bradyplanden/diffid) - Dynamic Nested Sampling
 
 ---
 

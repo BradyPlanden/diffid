@@ -1,13 +1,13 @@
 import importlib.util
 import pathlib
 
-import chronopt as chron
+import diffid
 import numpy as np
 
 # Example diffsol ODE (logistic growth)
 ode = """
-in = [a, b, c, d ]
-a { 2.0/3.0 } b { 4.0/3.0 } c { 1.0 } d { 1.0 } x0 { 10.0 } y0 { 5.0 }
+in_i { a = 2.0/3.0, b = 4.0/3.0, c = 1.0, d = 1.0 }
+x0 { 10.0 } y0 { 5.0 }
 u_i {
     y1 = x0,
     y2 = y0,
@@ -32,7 +32,7 @@ stacked_data = data["observed_stacked"]
 
 # Simple API
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(ode)
     .with_data(stacked_data)
     .with_tolerances(rtol=1e-6, atol=1e-8)
@@ -42,7 +42,7 @@ builder = (
     .with_parameter("d", 0.6)
     .with_parallel(True)
     .with_optimiser(
-        chron.NelderMead().with_max_iter(1000)
+        diffid.NelderMead().with_max_iter(1000)
     )  # Override default optimiser
 )
 problem = builder.build()
@@ -54,7 +54,7 @@ results = problem.optimise()
 print(results)
 print(f"Optimal parameters: {results.x}")
 print(f"Optimal cost: {results.value}")
-print(f"Optimization success: {results.success}")
+print(f"Optimisation success: {results.success}")
 print(f"Iterations: {results.iterations}")
 print(f"Optimisation time: {results.time}")
 print(f"Eval per ms: {results.evaluations / (results.time.total_seconds() * 1000)}")

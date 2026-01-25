@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import partial
 
-import chronopt as chron
+import diffid
 import numpy as np
 import pytest
 
@@ -59,9 +59,9 @@ def ridge(x: list[float], alpha: float = 1.0) -> np.ndarray:
     return np.asarray([value], dtype=float)
 
 
-def make_nelder_mead() -> chron.NelderMead:
+def make_nelder_mead() -> diffid.NelderMead:
     return (
-        chron.NelderMead()
+        diffid.NelderMead()
         .with_max_iter(800)
         .with_step_size(0.2)
         .with_threshold(1e-8)
@@ -69,9 +69,9 @@ def make_nelder_mead() -> chron.NelderMead:
     )
 
 
-def make_cmaes() -> chron.CMAES:
+def make_cmaes() -> diffid.CMAES:
     return (
-        chron.CMAES()
+        diffid.CMAES()
         .with_max_iter(1500)
         .with_threshold(1e-8)
         .with_step_size(0.8)
@@ -161,7 +161,7 @@ def test_python_objectives_converge(
 ):
     """Ensure optimisation reaches known minima for several analytic functions."""
 
-    builder = chron.ScalarBuilder().with_callable(objective)
+    builder = diffid.ScalarBuilder().with_objective(objective)
     for idx in range(dimension):
         builder = builder.with_parameter(f"x{idx}", 1.0)
 
@@ -176,8 +176,7 @@ def test_python_objectives_converge(
 
 
 _LOGISTIC_DSL = """
-in = [r, k]
-r { 1 } k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
@@ -197,7 +196,7 @@ def test_diffsol_logistic_convergence():
     stacked_data = np.column_stack((time_points, data))
 
     builder = (
-        chron.DiffsolBuilder()
+        diffid.DiffsolBuilder()
         .with_diffsl(_LOGISTIC_DSL)
         .with_data(stacked_data)
         .with_tolerances(rtol=1e-6, atol=1e-6)
@@ -208,7 +207,7 @@ def test_diffsol_logistic_convergence():
     problem = builder.build()
 
     optimiser = (
-        chron.NelderMead()
+        diffid.NelderMead()
         .with_max_iter(400)
         .with_threshold(1e-7)
         .with_position_tolerance(1e-6)

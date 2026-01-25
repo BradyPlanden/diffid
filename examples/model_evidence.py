@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import chronopt as chron
+import diffid
 
 
 def rosenbrock(x: list[float]) -> float:
@@ -11,17 +11,17 @@ def rosenbrock(x: list[float]) -> float:
 
 
 builder = (
-    chron.ScalarBuilder()
-    .with_callable(rosenbrock)
+    diffid.ScalarBuilder()
+    .with_objective(rosenbrock)
     .with_parameter("x", initial_value=1.2)
     .with_parameter("y", initial_value=1.4)
-    .with_optimiser(chron.NelderMead().with_max_iter(2000))
+    .with_optimiser(diffid.NelderMead().with_max_iter(2000))
 )
 problem = builder.build()
 
 optimised = problem.optimise()
 
-sampler = chron.DynamicNestedSampler().with_live_points(256).with_seed(1234)
+sampler = diffid.DynamicNestedSampler().with_live_points(256).with_seed(1234)
 samples = sampler.run(problem, initial=optimised.x)
 
 print("time       :", samples.time)

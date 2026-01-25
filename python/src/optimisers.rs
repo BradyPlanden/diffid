@@ -2,9 +2,9 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use std::time::Duration;
 
-use chronopt_core::common::{AskResult, Bounds};
-use chronopt_core::optimisers::{AdamState, CMAESState, NelderMeadState};
-use chronopt_core::prelude::*;
+use diffid_core::common::{AskResult, Bounds};
+use diffid_core::optimisers::{AdamState, CMAESState, NelderMeadState};
+use diffid_core::prelude::*;
 
 #[cfg(feature = "stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -28,9 +28,9 @@ pub(crate) enum Optimiser {
 #[cfg(feature = "stubgen")]
 #[allow(dead_code)]
 pub(crate) fn optimiser_type_info() -> TypeInfo {
-    TypeInfo::unqualified("chronopt._chronopt.NelderMead")
-        | TypeInfo::unqualified("chronopt._chronopt.CMAES")
-        | TypeInfo::unqualified("chronopt._chronopt.Adam")
+    TypeInfo::unqualified("diffid._diffid.NelderMead")
+        | TypeInfo::unqualified("diffid._diffid.CMAES")
+        | TypeInfo::unqualified("diffid._diffid.Adam")
 }
 
 impl FromPyObject<'_, '_> for Optimiser {
@@ -53,7 +53,7 @@ impl FromPyObject<'_, '_> for Optimiser {
 
 impl Optimiser {
     /// Convert to the core Optimiser enum
-    pub(crate) fn to_core(&self) -> chronopt_core::optimisers::Optimiser {
+    pub(crate) fn to_core(&self) -> diffid_core::optimisers::Optimiser {
         match self {
             Optimiser::NelderMead(nm) => nm.clone().into(),
             Optimiser::Cmaes(cma) => cma.clone().into(),
@@ -159,9 +159,9 @@ impl PyNelderMead {
         PyOptimisationResults { inner: result }
     }
 
-    /// Initialize ask-tell optimization state.
+    /// Initialize ask-tell optimisation state.
     ///
-    /// Returns a NelderMeadState object that can be used for incremental optimization
+    /// Returns a NelderMeadState object that can be used for incremental optimisation
     /// via the ask-tell interface.
     ///
     /// Parameters
@@ -174,15 +174,15 @@ impl PyNelderMead {
     /// Returns
     /// -------
     /// NelderMeadState
-    ///     State object for ask-tell optimization
+    ///     State object for ask-tell optimisation
     ///
     /// Examples
     /// --------
-    /// >>> optimiser = chronopt.NelderMead()
+    /// >>> optimiser = diffid.NelderMead()
     /// >>> state = optimiser.init(initial=[1.0, 2.0])
     /// >>> while True:
     /// ...     result = state.ask()
-    /// ...     if isinstance(result, chronopt.Done):
+    /// ...     if isinstance(result, diffid.Done):
     /// ...         break
     /// ...     values = [evaluate(pt) for pt in result.points]
     /// ...     state.tell(values)
@@ -286,9 +286,9 @@ impl PyCMAES {
         PyOptimisationResults { inner: result }
     }
 
-    /// Initialize ask-tell optimization state.
+    /// Initialize ask-tell optimisation state.
     ///
-    /// Returns a CMAESState object that can be used for incremental optimization
+    /// Returns a CMAESState object that can be used for incremental optimisation
     /// via the ask-tell interface.
     ///
     /// Parameters
@@ -301,15 +301,15 @@ impl PyCMAES {
     /// Returns
     /// -------
     /// CMAESState
-    ///     State object for ask-tell optimization
+    ///     State object for ask-tell optimisation
     ///
     /// Examples
     /// --------
-    /// >>> optimiser = chronopt.CMAES()
+    /// >>> optimiser = diffid.CMAES()
     /// >>> state = optimiser.init(initial=[1.0, 2.0])
     /// >>> while True:
     /// ...     result = state.ask()
-    /// ...     if isinstance(result, chronopt.Done):
+    /// ...     if isinstance(result, diffid.Done):
     /// ...         break
     /// ...     values = [evaluate(pt) for pt in result.points]
     /// ...     state.tell(values)
@@ -404,9 +404,9 @@ impl PyAdam {
         PyOptimisationResults { inner: result }
     }
 
-    /// Initialize ask-tell optimization state.
+    /// Initialize ask-tell optimisation state.
     ///
-    /// Returns an AdamState object that can be used for incremental optimization
+    /// Returns an AdamState object that can be used for incremental optimisation
     /// via the ask-tell interface.
     ///
     /// Parameters
@@ -419,15 +419,15 @@ impl PyAdam {
     /// Returns
     /// -------
     /// AdamState
-    ///     State object for ask-tell optimization
+    ///     State object for ask-tell optimisation
     ///
     /// Examples
     /// --------
-    /// >>> optimiser = chronopt.Adam()
+    /// >>> optimiser = diffid.Adam()
     /// >>> state = optimiser.init(initial=[1.0, 2.0])
     /// >>> while True:
     /// ...     result = state.ask()
-    /// ...     if isinstance(result, chronopt.Done):
+    /// ...     if isinstance(result, diffid.Done):
     /// ...         break
     /// ...     values = [evaluate_with_gradient(pt) for pt in result.points]
     /// ...     state.tell(values)
@@ -443,18 +443,18 @@ impl PyAdam {
 }
 
 // Adam State
-/// Ask-tell state for incremental Adam optimization.
+/// Ask-tell state for incremental Adam optimisation.
 ///
-/// This state object allows step-by-step control over the optimization process.
+/// This state object allows step-by-step control over the optimisation process.
 /// Use `ask()` to get points to evaluate, and `tell()` to provide results.
 ///
 /// Examples
 /// --------
-/// >>> optimiser = chronopt.Adam().with_max_iter(100)
+/// >>> optimiser = diffid.Adam().with_max_iter(100)
 /// >>> state = optimiser.init(initial=[1.0, 2.0])
 /// >>> while True:
 /// ...     result = state.ask()
-/// ...     if isinstance(result, chronopt.Done):
+/// ...     if isinstance(result, diffid.Done):
 /// ...         print(f"Final result: {result.result}")
 /// ...         break
 /// ...     # Adam requires gradient information
@@ -469,7 +469,7 @@ pub struct PyAdamState {
 #[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyAdamState {
-    /// Get the next action: evaluate points or optimization complete.
+    /// Get the next action: evaluate points or optimisation complete.
     ///
     /// Returns
     /// -------
@@ -480,10 +480,10 @@ impl PyAdamState {
     /// Examples
     /// --------
     /// >>> result = state.ask()
-    /// >>> if isinstance(result, chronopt.Evaluate):
+    /// >>> if isinstance(result, diffid.Evaluate):
     /// ...     print(f"Need to evaluate {len(result.points)} points")
-    /// >>> elif isinstance(result, chronopt.Done):
-    /// ...     print(f"Optimization complete: {result.result}")
+    /// >>> elif isinstance(result, diffid.Done):
+    /// ...     print(f"optimisation complete: {result.result}")
     fn ask(&self, py: Python<'_>) -> Py<PyAny> {
         match self.inner.ask() {
             AskResult::Evaluate(points) => Py::new(py, PyEvaluate { points }).unwrap().into_any(),
@@ -504,14 +504,14 @@ impl PyAdamState {
     /// Raises
     /// ------
     /// TellError
-    ///     If called after optimization has terminated or if result format is invalid
+    ///     If called after optimisation has terminated or if result format is invalid
     /// EvaluationError
     ///     If the evaluation failed or contained invalid values
     ///
     /// Examples
     /// --------
     /// >>> result = state.ask()
-    /// >>> if isinstance(result, chronopt.Evaluate):
+    /// >>> if isinstance(result, diffid.Evaluate):
     /// ...     point = result.points[0]
     /// ...     value = objective(point)
     /// ...     gradient = compute_gradient(point)
@@ -581,18 +581,18 @@ impl PyAdamState {
 }
 
 // Nelder-Mead State
-/// Ask-tell state for incremental Nelder-Mead optimization.
+/// Ask-tell state for incremental Nelder-Mead optimisation.
 ///
-/// This state object allows step-by-step control over the optimization process.
+/// This state object allows step-by-step control over the optimisation process.
 /// Use `ask()` to get points to evaluate, and `tell()` to provide results.
 ///
 /// Examples
 /// --------
-/// >>> optimiser = chronopt.NelderMead().with_max_iter(100)
+/// >>> optimiser = diffid.NelderMead().with_max_iter(100)
 /// >>> state = optimiser.init(initial=[1.0, 2.0])
 /// >>> while True:
 /// ...     result = state.ask()
-/// ...     if isinstance(result, chronopt.Done):
+/// ...     if isinstance(result, diffid.Done):
 /// ...         print(f"Final result: {result.result}")
 /// ...         break
 /// ...     values = [f(pt) for pt in result.points]
@@ -606,7 +606,7 @@ pub struct PyNelderMeadState {
 #[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyNelderMeadState {
-    /// Get the next action: evaluate points or optimization complete.
+    /// Get the next action: evaluate points or optimisation complete.
     ///
     /// Returns
     /// -------
@@ -632,7 +632,7 @@ impl PyNelderMeadState {
     /// Raises
     /// ------
     /// TellError
-    ///     If called after optimization has terminated
+    ///     If called after optimisation has terminated
     /// EvaluationError
     ///     If the evaluation failed or contained invalid values
     fn tell(&mut self, result: f64) -> PyResult<()> {
@@ -692,18 +692,18 @@ impl PyNelderMeadState {
 }
 
 // CMAES State
-/// Ask-tell state for incremental CMA-ES optimization.
+/// Ask-tell state for incremental CMA-ES optimisation.
 ///
-/// This state object allows step-by-step control over the optimization process.
+/// This state object allows step-by-step control over the optimisation process.
 /// Use `ask()` to get a population of points to evaluate, and `tell()` to provide results.
 ///
 /// Examples
 /// --------
-/// >>> optimiser = chronopt.CMAES().with_max_iter(100)
+/// >>> optimiser = diffid.CMAES().with_max_iter(100)
 /// >>> state = optimiser.init(initial=[1.0, 2.0])
 /// >>> while True:
 /// ...     result = state.ask()
-/// ...     if isinstance(result, chronopt.Done):
+/// ...     if isinstance(result, diffid.Done):
 /// ...         print(f"Final result: {result.result}")
 /// ...         break
 /// ...     values = [f(pt) for pt in result.points]
@@ -717,7 +717,7 @@ pub struct PyCMAESState {
 #[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyCMAESState {
-    /// Get the next action: evaluate points or optimization complete.
+    /// Get the next action: evaluate points or optimisation complete.
     ///
     /// Returns
     /// -------
@@ -749,7 +749,7 @@ impl PyCMAESState {
     /// Raises
     /// ------
     /// TellError
-    ///     If called after optimization has terminated or if wrong number
+    ///     If called after optimisation has terminated or if wrong number
     ///     of results provided
     /// EvaluationError
     ///     If evaluations failed or contained invalid values

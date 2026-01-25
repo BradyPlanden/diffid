@@ -1,5 +1,5 @@
-use chronopt::prelude::*;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use diffid::prelude::*;
 use std::time::Duration;
 
 fn bench_metropolis_hastings_gaussian(c: &mut Criterion) {

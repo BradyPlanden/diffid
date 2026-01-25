@@ -1,13 +1,13 @@
-use chronopt::builders::DiffsolBackend;
-use chronopt::prelude::*;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use diffid::builders::DiffsolBackend;
+use diffid::prelude::*;
 use nalgebra::DMatrix;
 use std::time::Duration;
 
 macro_rules! build_logistic_problem {
     ($backend:expr, $parallel:expr) => {{
         let dsl = r#"
-in = [r, k]
+in_i { r = 1, k = 1 }
 r { 1 }
 k { 1 }
 u_i { y = 0.1 }

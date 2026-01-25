@@ -8,7 +8,7 @@ pub mod problem;
 pub mod sampler;
 mod types;
 
-// Convenience re-exports so users can `use chronopt::prelude::*;`
+// Convenience re-exports so users can `use diffid::prelude::*;`
 pub mod prelude {
     pub use crate::builders::{
         DiffsolConfig, DiffsolProblemBuilder, ScalarProblemBuilder, VectorProblemBuilder,

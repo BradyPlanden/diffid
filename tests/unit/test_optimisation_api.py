@@ -1,4 +1,4 @@
-import chronopt as chron
+import diffid
 import numpy as np
 
 
@@ -6,8 +6,7 @@ def _test_optimisation_api():
     """Test basic Diffsol builder functionality"""
     # Example diffsol ODE (logistic growth)
     ds = """
-in = [r, k]
-r { 1 } k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
@@ -20,7 +19,7 @@ F_i { (r * y) * (1 - (y / k)) }
 
     # Build the problem
     builder = (
-        chron.DiffsolBuilder()
+        diffid.DiffsolBuilder()
         .with_diffsl(ds)
         .with_data(stacked_data)
         .with_config({"rtol": 1e-6})
@@ -38,8 +37,7 @@ F_i { (r * y) * (1 - (y / k)) }
 
 def test_diffsol_builder_allows_multiple_builds():
     ds = """
-in = [r, k]
-r { 1 } k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
@@ -49,7 +47,7 @@ F_i { (r * y) * (1 - (y / k)) }
     stacked_data = np.column_stack((t_span, data))
 
     builder = (
-        chron.DiffsolBuilder()
+        diffid.DiffsolBuilder()
         .with_diffsl(ds)
         .with_data(stacked_data)
         .with_parameter("r", 1.0)
@@ -72,8 +70,8 @@ def test_scalar_builder_allows_multiple_builds():
         return (1 - x[0]) ** 2 + 100 * (x[1] - x[0] ** 2) ** 2
 
     builder = (
-        chron.ScalarBuilder()
-        .with_callable(rosenbrock)
+        diffid.ScalarBuilder()
+        .with_objective(rosenbrock)
         .with_parameter("x", 1.0)
         .with_parameter("y", 1.0)
     )
@@ -94,7 +92,7 @@ def test_vector_builder_allows_multiple_builds():
         return y0 * np.exp(rate * t_span)
 
     builder = (
-        chron.VectorBuilder()
+        diffid.VectorBuilder()
         .with_objective(exponential_model)
         .with_data(data)
         .with_parameter("rate", 1.0)
@@ -112,17 +110,17 @@ def test_all_builders_support_copy():
     import copy
 
     # ScalarBuilder
-    scalar_builder = chron.ScalarBuilder().with_callable(lambda x: x[0] ** 2)
+    scalar_builder = diffid.ScalarBuilder().with_objective(lambda x: x[0] ** 2)
     scalar_copy = copy.copy(scalar_builder)
     copy.deepcopy(scalar_builder)  # Test deepcopy
 
     # DiffsolBuilder
-    diffsol_builder = chron.DiffsolBuilder().with_diffsl("in = [a]")
+    diffsol_builder = diffid.DiffsolBuilder().with_diffsl("in { a }")
     diffsol_copy = copy.copy(diffsol_builder)
     copy.deepcopy(diffsol_builder)  # Test deepcopy
 
     # VectorBuilder
-    vector_builder = chron.VectorBuilder().with_objective(lambda x: [x[0]])
+    vector_builder = diffid.VectorBuilder().with_objective(lambda x: [x[0]])
     vector_copy = copy.copy(vector_builder)
     copy.deepcopy(vector_builder)  # Test deepcopy
 

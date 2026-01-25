@@ -1,4 +1,4 @@
-import chronopt as chron
+import diffid
 import numpy as np
 
 
@@ -16,8 +16,8 @@ def quadratic_grad(x):
 
 def build_quadratic_problem_with_gradient():
     return (
-        chron.ScalarBuilder()
-        .with_callable(quadratic)
+        diffid.ScalarBuilder()
+        .with_objective(quadratic)
         .with_gradient(quadratic_grad)
         .with_parameter("x", 1.0)
         .with_parameter("y", 1.0)
@@ -28,7 +28,9 @@ def build_quadratic_problem_with_gradient():
 def test_adam_direct_run_minimises_quadratic():
     problem = build_quadratic_problem_with_gradient()
 
-    optimiser = chron.Adam().with_step_size(0.1).with_max_iter(500).with_threshold(1e-8)
+    optimiser = (
+        diffid.Adam().with_step_size(0.1).with_max_iter(500).with_threshold(1e-8)
+    )
 
     result = optimiser.run(problem, [5.0, -4.0])
 
@@ -39,14 +41,16 @@ def test_adam_direct_run_minimises_quadratic():
 
 def test_python_builder_optimise_with_adam_default():
     builder = (
-        chron.ScalarBuilder()
-        .with_callable(quadratic)
+        diffid.ScalarBuilder()
+        .with_objective(quadratic)
         .with_gradient(quadratic_grad)
         .with_parameter("x", 1.0)
         .with_parameter("y", 1.0)
     )
 
-    optimiser = chron.Adam().with_step_size(0.1).with_max_iter(400).with_threshold(1e-8)
+    optimiser = (
+        diffid.Adam().with_step_size(0.1).with_max_iter(400).with_threshold(1e-8)
+    )
 
     builder.with_optimiser(optimiser)
     problem = builder.build()
@@ -60,15 +64,15 @@ def test_python_builder_optimise_with_adam_default():
 
 def test_adam_falls_back_with_numerical_grad():
     builder = (
-        chron.ScalarBuilder()
-        .with_callable(quadratic)
+        diffid.ScalarBuilder()
+        .with_objective(quadratic)
         .with_parameter("x", 0.0)
         .with_parameter("y", 0.0)
     )
 
     problem = builder.build()
 
-    optimiser = chron.Adam().with_max_iter(10)
+    optimiser = diffid.Adam().with_max_iter(10)
     result = optimiser.run(problem, [0.0, 0.0])
 
     assert result.iterations == 10

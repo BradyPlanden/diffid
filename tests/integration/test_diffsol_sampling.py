@@ -1,4 +1,4 @@
-import chronopt as chron
+import diffid
 import numpy as np
 
 
@@ -12,8 +12,7 @@ def ball_states(t: np.ndarray, g: float, h: float) -> tuple[np.ndarray, np.ndarr
 def test_diffsol_sampling_tracks_bouncy_ball_parameters():
     # DiffSL program for a falling (bouncy) ball terminated when the height reaches zero.
     dsl = """
-in = [g, h]
-g { 1 } h { 1 }
+in_i { g = 2.5, h = 1 }
 u_i {x = h, v = 0}
 F_i {v, -g}
 stop {x}
@@ -28,12 +27,12 @@ stop {x}
     data = np.column_stack((t_span, height, velocity))
 
     builder = (
-        chron.DiffsolBuilder()
+        diffid.DiffsolBuilder()
         .with_diffsl(dsl)
         .with_data(data)
         .with_parameter("g", g_true)
         .with_parameter("h", h_true)
-        .with_cost(chron.SSE())
+        .with_cost(diffid.SSE())
     )
 
     problem = builder.build()
@@ -42,7 +41,7 @@ stop {x}
     initial_cost = problem.evaluate(initial_guess)
 
     sampler = (
-        chron.MetropolisHastings()
+        diffid.MetropolisHastings()
         .with_num_chains(2)
         .with_iterations(250)
         .with_step_size(0.25)
@@ -70,8 +69,7 @@ stop {x}
 
 def test_diffsol_dynamic_nested_sampler_produces_evidence():
     dsl = """
-in = [g, h]
-g { 1 } h { 1 }
+in_i { g = 2.5, h = 1 }
 u_i {x = h, v = 0}
 F_i {v, -g}
 stop {x}
@@ -86,19 +84,19 @@ stop {x}
     data = np.column_stack((t_span, height, velocity))
 
     builder = (
-        chron.DiffsolBuilder()
+        diffid.DiffsolBuilder()
         .with_diffsl(dsl)
         .with_data(data)
         .with_parameter("g", g_true)
         .with_parameter("h", h_true)
         .with_tolerances(rtol=1e-6, atol=1e-6)
-        .with_cost(chron.SSE())
+        .with_cost(diffid.SSE())
     )
 
     problem = builder.build()
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.15)
         .with_termination_tolerance(1e-3)

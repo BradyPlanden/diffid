@@ -2,7 +2,7 @@ use numpy::{PyArray1, ToPyArray};
 use pyo3::prelude::*;
 use std::time::Duration;
 
-use chronopt_core::prelude::OptimisationResults;
+use diffid_core::prelude::OptimisationResults;
 
 #[cfg(feature = "stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -18,7 +18,7 @@ use crate::{PyNestedSamples, PySamples};
 /// --------
 /// >>> state = optimiser.init(problem, initial=[1.0, 2.0])
 /// >>> result = state.ask()
-/// >>> if isinstance(result, chronopt.Evaluate):
+/// >>> if isinstance(result, diffid.Evaluate):
 /// ...     values = [problem.evaluate(pt) for pt in result.points]
 /// ...     state.tell(values)
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
@@ -46,7 +46,7 @@ impl PyEvaluate {
     }
 }
 
-/// Optimization/sampling is complete with final results.
+/// Optimisation/sampling is complete with final results.
 ///
 /// This is returned by `ask()` when the algorithm has terminated.
 /// Access the results via the `result` attribute.
@@ -55,8 +55,8 @@ impl PyEvaluate {
 /// --------
 /// >>> while True:
 /// ...     result = state.ask()
-/// ...     if isinstance(result, chronopt.Done):
-/// ...         print(f"Optimization complete: {result.result}")
+/// ...     if isinstance(result, diffid.Done):
+/// ...         print(f"Optimisation complete: {result.result}")
 /// ...         break
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass(name = "Done")]
@@ -212,7 +212,7 @@ impl PyOptimisationResults {
         }
     }
 
-    /// Return truthiness based on optimization success.
+    /// Return truthiness based on optimisation success.
     ///
     /// Allows using `if result:` instead of `if result.success:`.
     fn __bool__(&self) -> bool {

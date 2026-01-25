@@ -1,4 +1,4 @@
-import chronopt as chron
+import diffid
 import numpy as np
 
 
@@ -11,8 +11,7 @@ def ball_states(t: np.ndarray, g: float, h: float) -> tuple[np.ndarray, np.ndarr
 
 # DiffSL program for a falling (bouncy) ball terminated when the height reaches zero.
 dsl = """
-in = [g, h]
-g { 1 } h { 1 }
+in_i { g = 2.5, h = 1 }
 u_i {x = h, v = 0}
 F_i {v, -g}
 stop {x}
@@ -31,14 +30,14 @@ data = np.column_stack((t_span, height + noise, velocity + noise))
 # Configure the problem
 initial_values = [4.0, 4.0]
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("g", initial_values[0])
     .with_parameter("h", initial_values[1])
-    .with_optimiser(chron.Adam().with_step_size(0.05).with_max_iter(1500))
-    # .with_cost(chron.GaussianNLL(variance=0.01))
-    .with_cost(chron.RMSE(2.0))
+    .with_optimiser(diffid.Adam().with_step_size(0.05).with_max_iter(1500))
+    # .with_cost(diffid.GaussianNLL(variance=0.01))
+    .with_cost(diffid.RMSE(2.0))
 )
 
 problem = builder.build()

@@ -1,13 +1,17 @@
 <div align="center">
 
-# chronopt
-[![Python Versions from PEP 621 TOML](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fbradyplanden%2Fchronopt%2Fmain%2Fpyproject.toml&label=Python)](https://pypi.org/project/chronopt/)
-[![License](https://img.shields.io/github/license/bradyplanden/chronopt?color=blue)](https://github.com/bradyplanden/chronopt/blob/main/LICENSE)
-[![Releases](https://img.shields.io/github/v/release/bradyplanden/chronopt?color=gold)](https://github.com/bradyplanden/chronopt/releases)
+# diffid
+[![Python Versions from PEP 621 TOML](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fbradyplanden%2Fdiffid%2Fmain%2Fpyproject.toml&label=Python)](https://pypi.org/project/diffid/)
+[![License](https://img.shields.io/github/license/bradyplanden/diffid?color=blue)](https://github.com/bradyplanden/diffid/blob/main/LICENSE)
+[![Releases](https://img.shields.io/github/v/release/bradyplanden/diffid?color=gold)](https://github.com/bradyplanden/diffid/releases)
 
-**chron**os-**opt**imum is a Rust-first toolkit for time-series inference and optimisation with ergonomic Python bindings. It couples high-performance solvers with a highly customisable builder API for identification and optimisation of differential systems.
+**diff**erential **id**entification offers a different paradigm for a parameter inference library. Conventional Python-based inference libraries are constructed via python bindings to a high-performance forward model with the optimisation algorithms implemented in Python.  Diffid offers an alternative, where the Python layer acts purely as a declarative configuration interface, while all computationally intensive work (the optimisation / sampling loop, gradient calculations, etc.) happens entirely within the Rust runtime without crossing the FFI boundary repeatedly. This is architecture is presented visually below,
 
 </div>
+
+<p align="center">
+    <img src="https://raw.githubusercontent.com/BradyPlanden/diffid/main/docs/assets/diffid.svg" alt="Diffid architecture describing the two optimisation approaches." width="700" />
+</p>
 
 ## Project goals
 - Speed and numerical accuracy through a Rust core.
@@ -20,24 +24,18 @@
 - Customisable likelihood/cost metrics and Monte-Carlo sampling for posterior exploration.
 - Flexible integration with state-of-the-art differential solvers, such as [Diffrax](https://github.com/patrick-kidger/diffrax), [DifferentialEquations.jl](https://github.com/SciML/diffeqpy)
 
-
-## Why Chronopt?
-- Optimisation based workflow run the forward simulation thousands of times, a performance improvement on the process can produce results hour or days earlier
-- The Rust core provides a high-performance inference loop with fewer runtime errors.
-- Quickly integrated into Python workflows, and later use the rust crate directly for even higher performance.
-
 ## Installation
 
-Chronopt targets Python >= 3.11. Windows builds are currently marked experimental. 
+Diffid targets Python >= 3.11. Windows builds are currently marked experimental.
 
 ```bash
-pip install chronopt
+pip install diffid
 
 # Or with uv
-uv pip install chronopt
+uv pip install diffid
 
 # Optional extras
-pip install "chronopt[plotting]"
+pip install "diffid[plotting]"
 ```
 
 ## Quickstart
@@ -45,7 +43,7 @@ pip install "chronopt[plotting]"
 ### ScalarProblem
 ```python
 import numpy as np
-import chronopt as chron
+import diffid
 
 
 def rosenbrock(x):
@@ -54,8 +52,8 @@ def rosenbrock(x):
 
 
 builder = (
-    chron.ScalarBuilder()
-    .with_callable(rosenbrock)
+    diffid.ScalarBuilder()
+    .with_objective(rosenbrock)
     .with_parameter("x", 1.5)
     .with_parameter("y", -1.5)
 )
@@ -71,13 +69,12 @@ print(f"Success: {result.success}")
 
 ```python
 import numpy as np
-import chronopt as chron
+import diffid
 
 
 # Example diffsol ODE (logistic growth)
 dsl = """
-in = [r, k]
-r { 1 } k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
@@ -87,7 +84,7 @@ observations = np.exp(-1.3 * t)
 data = np.column_stack((t, observations))
 
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("k", 1.0)
@@ -95,7 +92,7 @@ builder = (
 )
 problem = builder.build()
 
-optimiser = chron.CMAES().with_max_iter(1000)
+optimiser = diffid.CMAES().with_max_iter(1000)
 result = optimiser.run(problem, [0.5,0.5])
 
 print(result.x)
@@ -118,13 +115,13 @@ uv run maturin develop
 Regenerate `.pyi` stubs after changing the bindings:
 
 ```bash
-uv run cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
+uv run cargo run -p diffid-py --no-default-features --features stubgen --bin generate_stubs
 ```
 
 Without `uv`, invoke the generator directly:
 
 ```bash
-cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
+cargo run -p diffid-py --no-default-features --features stubgen --bin generate_stubs
 ```
 
 ### Pre-commit hooks

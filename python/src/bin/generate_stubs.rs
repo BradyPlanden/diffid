@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use chronopt::{stub_info, stub_info_from};
+use _diffid::{stub_info, stub_info_from};
 use clap::Parser;
 use pyo3_stub_gen::Result;
 
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
 }
 
 fn post_process_sampler_stub() -> Result<()> {
-    let sampler_stub_path = resolve_workspace_root()?.join("python/src/chronopt/sampler.pyi");
+    let sampler_stub_path = resolve_workspace_root()?.join("python/src/diffid/sampler.pyi");
     let contents = fs::read_to_string(&sampler_stub_path)?;
 
     let mut lines: Vec<&str> = contents.lines().collect();

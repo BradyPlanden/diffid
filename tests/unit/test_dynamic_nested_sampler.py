@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-import chronopt as chron
+import diffid
 import numpy as np
 import pytest
 from scipy.stats import norm
@@ -36,14 +36,14 @@ def test_gaussian_evidence_accuracy():
         return 0.5 * (diff / sigma) ** 2 + np.log(sigma) + 0.5 * np.log(2 * np.pi)
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(gaussian_nll)
+        diffid.ScalarBuilder()
+        .with_objective(gaussian_nll)
         .with_parameter("x", mu, bounds=(prior_lower, prior_upper))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(128)
         .with_expansion_factor(0.2)
         .with_termination_tolerance(1e-5)
@@ -84,14 +84,14 @@ def test_exponential_distribution_evidence():
         return lambda_param * x[0]
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(exponential_nll)
+        diffid.ScalarBuilder()
+        .with_objective(exponential_nll)
         .with_parameter("x", 1.0, bounds=(0.0, x_max))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(128)
         .with_expansion_factor(0.01)
         .with_termination_tolerance(1e-6)
@@ -123,14 +123,14 @@ def test_bimodal_gaussian_mixture():
         return -(log_sum - np.log(2) - np.log(sigma) - 0.5 * np.log(2 * np.pi))
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(bimodal_nll)
+        diffid.ScalarBuilder()
+        .with_objective(bimodal_nll)
         .with_parameter("x", 0.0, bounds=(-10.0, 10.0))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(128)
         .with_expansion_factor(0.2)
         .with_termination_tolerance(1e-4)
@@ -163,14 +163,14 @@ def test_handles_infinite_likelihood_gracefully():
         return 0.5 * x[0] ** 2
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(pathological_nll)
+        diffid.ScalarBuilder()
+        .with_objective(pathological_nll)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(32)
         .with_expansion_factor(0.2)
         .with_seed(456)
@@ -195,7 +195,7 @@ def test_very_high_dimensional_problem():
         """Simple quadratic in high dimensions."""
         return 0.5 * sum(xi**2 for xi in x)
 
-    problem = chron.ScalarBuilder().with_callable(high_dim_quadratic)
+    problem = diffid.ScalarBuilder().with_objective(high_dim_quadratic)
 
     for i in range(dimension):
         problem = problem.with_parameter(f"x{i}", 0.0, bounds=(-3.0, 3.0))
@@ -203,7 +203,7 @@ def test_very_high_dimensional_problem():
     problem = problem.build()
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(128)
         .with_expansion_factor(0.15)
         .with_termination_tolerance(1e-4)
@@ -227,14 +227,14 @@ def test_degenerate_posterior_delta_function():
         return 0.5 * (x[0] / sigma) ** 2
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(sharp_peak)
+        diffid.ScalarBuilder()
+        .with_objective(sharp_peak)
         .with_parameter("x", 0.0, bounds=(-1.0, 1.0))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.05)  # Small expansion for narrow peak
         .with_termination_tolerance(1e-3)
@@ -257,14 +257,14 @@ def test_very_small_evidence():
         return 100.0 + 0.5 * x[0] ** 2
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(large_offset)
+        diffid.ScalarBuilder()
+        .with_objective(large_offset)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.2)
         .with_seed(111)
@@ -285,14 +285,14 @@ def test_posterior_weights_normalize():
         return 0.5 * x[0] ** 2
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(simple_quadratic)
+        diffid.ScalarBuilder()
+        .with_objective(simple_quadratic)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(128)
         .with_expansion_factor(0.2)
         .with_seed(555)
@@ -320,14 +320,14 @@ def test_mean_matches_weighted_average():
         return 0.5 * (x[0] - 1.0) ** 2
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(quadratic)
+        diffid.ScalarBuilder()
+        .with_objective(quadratic)
         .with_parameter("x", 1.0, bounds=(-3.0, 5.0))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(128)
         .with_expansion_factor(0.2)
         .with_seed(777)
@@ -359,14 +359,14 @@ def test_termination_with_high_information():
         return 0.5 * (x[0] / sigma) ** 2 + np.log(sigma) + 0.5 * np.log(2 * np.pi)
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(narrow_gaussian)
+        diffid.ScalarBuilder()
+        .with_objective(narrow_gaussian)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.1)
         .with_termination_tolerance(1e-3)
@@ -388,21 +388,21 @@ def test_reproducibility_with_seed():
         return 0.5 * x[0] ** 2
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(simple_problem)
+        diffid.ScalarBuilder()
+        .with_objective(simple_problem)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
 
     sampler1 = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.2)
         .with_seed(12345)
     )
 
     sampler2 = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.2)
         .with_seed(12345)
@@ -430,14 +430,14 @@ def test_live_points_adapt_with_information():
         )
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(multimodal)
+        diffid.ScalarBuilder()
+        .with_objective(multimodal)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(32)
         .with_expansion_factor(0.5)  # Allow significant expansion
         .with_seed(999)
@@ -458,14 +458,14 @@ def test_respects_parameter_bounds():
         return 0.5 * x[0] ** 2
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(bounded_quadratic)
+        diffid.ScalarBuilder()
+        .with_objective(bounded_quadratic)
         .with_parameter("x", 0.0, bounds=(lower, upper))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.2)
         .with_seed(444)
@@ -486,14 +486,14 @@ def test_information_is_non_negative():
         return 0.5 * x[0] ** 2
 
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(simple_problem)
+        diffid.ScalarBuilder()
+        .with_objective(simple_problem)
         .with_parameter("x", 0.0, bounds=(-5.0, 5.0))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(64)
         .with_expansion_factor(0.2)
         .with_seed(666)
@@ -513,15 +513,15 @@ def test_information_increases_with_constraint():
             return 0.5 * (x[0] / sigma) ** 2 + np.log(sigma) + 0.5 * np.log(2 * np.pi)
 
         return (
-            chron.ScalarBuilder()
-            .with_callable(nll)
+            diffid.ScalarBuilder()
+            .with_objective(nll)
             .with_parameter("x", 0.0, bounds=(-10.0, 10.0))
             .build()
         )
 
     def sampler_config(seed):
         return (
-            chron.DynamicNestedSampler()
+            diffid.DynamicNestedSampler()
             .with_live_points(128)
             .with_expansion_factor(0.2)
             .with_seed(seed)

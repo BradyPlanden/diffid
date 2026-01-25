@@ -1,12 +1,10 @@
-import chronopt as chron
+import diffid
 import numpy as np
 
 
 def _logistic_dsl() -> str:
     return """
-in = [r, k]
-r { 1 }
-k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
@@ -18,10 +16,10 @@ def _logistic_data(n: int = 40) -> np.ndarray:
     return np.column_stack((t_span, y))
 
 
-def _build_diffsol_problem(parallel: bool) -> chron.Problem:
+def _build_diffsol_problem(parallel: bool) -> diffid.Problem:
     data = _logistic_data(40)
     builder = (
-        chron.DiffsolBuilder()
+        diffid.DiffsolBuilder()
         .with_diffsl(_logistic_dsl())
         .with_data(data)
         .with_parameter("r", 1.0, bounds=(0.1, 3.0))
@@ -40,7 +38,7 @@ def test_dynamic_nested_diffsol_parallel_vs_sequential():
     initial = [1.0, 1.0]
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(32)
         .with_expansion_factor(0.3)
         .with_termination_tolerance(1e-3)
@@ -68,14 +66,14 @@ def test_dynamic_nested_diffsol_parallel_vs_sequential():
 def test_dynamic_nested_sampler_parallel_fallback_for_non_parallel_problems():
     # Scalar problem does not support parallel evaluation; sampler should still work
     problem = (
-        chron.ScalarBuilder()
-        .with_callable(lambda x: 0.5 * (x[0] - 0.5) ** 2)
+        diffid.ScalarBuilder()
+        .with_objective(lambda x: 0.5 * (x[0] - 0.5) ** 2)
         .with_parameter("x", 0.5, bounds=(-5.0, 5.0))
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(24)
         .with_expansion_factor(0.2)
         .with_termination_tolerance(1e-3)

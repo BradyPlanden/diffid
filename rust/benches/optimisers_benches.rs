@@ -1,6 +1,6 @@
-use chronopt::common::Bounds;
-use chronopt::prelude::*;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use diffid::common::Bounds;
+use diffid::prelude::*;
 use std::time::Duration;
 
 fn bench_nelder_mead_quadratic(c: &mut Criterion) {

@@ -6,11 +6,11 @@ use pyo3::types::PyDict;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chronopt_core::builders::{
+use diffid_core::builders::{
     DiffsolBackend, DiffsolProblemBuilder, ScalarProblemBuilder, VectorProblemBuilder,
 };
-use chronopt_core::common::Unbounded;
-use chronopt_core::problem::{NoFunction, NoGradient};
+use diffid_core::common::Unbounded;
+use diffid_core::problem::{NoFunction, NoGradient};
 
 #[cfg(feature = "stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -245,7 +245,7 @@ impl PyScalarBuilder {
     }
 
     /// Attach the objective function callable executed during optimisation.
-    fn with_callable(mut slf: PyRefMut<'_, Self>, obj: Py<PyAny>) -> PyResult<PyRefMut<'_, Self>> {
+    fn with_objective(mut slf: PyRefMut<'_, Self>, obj: Py<PyAny>) -> PyResult<PyRefMut<'_, Self>> {
         Python::attach(|py| {
             if !obj.bind(py).is_callable() {
                 return Err(PyTypeError::new_err("Object must be callable"));
@@ -333,7 +333,7 @@ impl PyScalarBuilder {
             .push((name.clone(), initial_value, bounds));
 
         // Convert Option<(f64, f64)> to ParameterRange
-        let range: chronopt_core::problem::ParameterRange =
+        let range: diffid_core::problem::ParameterRange =
             bounds.map(|b| b.into()).unwrap_or_else(|| Unbounded.into());
 
         slf.state = match std::mem::replace(

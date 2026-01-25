@@ -5,7 +5,7 @@
 //! **IMPORTANT**: The objective function must return **negative log-likelihood** (-log L).
 //! Internally, values are negated to obtain log-likelihood for nested sampling calculations.
 //!
-//! This convention aligns with optimization where lower values are better, while nested
+//! This convention aligns with optimisation where lower values are better, while nested
 //! sampling requires higher log-likelihood values.
 
 use rand::prelude::StdRng;
@@ -588,6 +588,48 @@ impl DynamicNestedSampler {
                 AskResult::Done(SamplingResults::Nested(samples)) => return samples,
                 _ => unreachable!("DynamicNestedSampler always returns Nested results"),
             }
+        }
+    }
+
+    /// Run Dynamic Nested Sampling with automatic evaluation loop
+    ///
+    /// Internally uses the ask/tell interface. For external control,
+    /// use `init()`, `ask()`, and `tell()` directly.
+    ///
+    /// # Arguments
+    /// * `objective` - Function to evaluate. **Must return negative log-likelihood** (-log L).
+    ///   The sampler will negate this internally to obtain log-likelihood for
+    ///   nested sampling calculations.
+    /// * `initial` - Initial point (currently unused, reserved for future)
+    /// * `bounds` - Parameter bounds
+    pub fn run_batch<F, R, E>(&self, objective: F, initial: Point, bounds: Bounds) -> NestedSamples
+    where
+        F: Fn(&[Vec<f64>]) -> Vec<R>,
+        R: TryInto<ScalarEvaluation, Error = E>,
+        E: Into<EvaluationError>,
+    {
+        let (mut state, first_batch) = self.init(initial, bounds);
+        let mut results = objective(&first_batch);
+
+        loop {
+            // Call ask and break if an error is encountered
+            if state.tell(results).is_err() {
+                break;
+            }
+
+            match state.ask() {
+                AskResult::Evaluate(points) => {
+                    results = objective(&points);
+                }
+                AskResult::Done(SamplingResults::Nested(samples)) => return samples,
+                _ => unreachable!("DynamicNestedSampler always returns Nested results"),
+            }
+        }
+
+        // Final ask call for if tell returned an error
+        match state.ask() {
+            AskResult::Done(SamplingResults::Nested(samples)) => samples,
+            _ => panic!("Unexpected state after tell error"),
         }
     }
 }

@@ -151,7 +151,17 @@ impl NestedSamples {
             .iter()
             .map(|sample| sample.position.clone())
             .collect::<Vec<_>>()];
-        Samples::new(chains, self.mean.clone(), self.draws, self.time)
+
+        // DynamicNested doesn't use MCMC so no acceptance data
+        let acceptance_data = vec![Vec::new(); chains.len()];
+
+        Samples::new(
+            chains,
+            self.mean.clone(),
+            self.draws,
+            self.time,
+            acceptance_data,
+        )
     }
 }
 

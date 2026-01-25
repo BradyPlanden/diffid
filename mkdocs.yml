@@ -1,0 +1,198 @@
+site_name: Diffid
+site_description: High-performance time-series inference and optimisation toolkit with Rust core and ergonomic Python bindings
+site_author: Brady Planden
+site_url: https://bradyplanden.github.io/diffid/
+repo_name: bradyplanden/diffid
+repo_url: https://github.com/bradyplanden/diffid
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - search.share
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: date
+      fallback_to_build_date: true
+      strict: false
+  - minify:
+      minify_html: true
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [python/src]
+          options:
+            docstring_style: numpy
+            docstring_section_style: table
+            members_order: source
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            signature_crossrefs: true
+            separate_signature: true
+            line_length: 80
+            merge_init_into_class: true
+            docstring_options:
+              ignore_init_summary: true
+  - mkdocs-jupyter:
+      include_source: true
+      execute: false
+      allow_errors: false
+      kernel_name: python3
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+  - pymdownx.snippets
+  - pymdownx.emoji:
+        emoji_index: !!python/name:material.extensions.emoji.twemoji
+        emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/bradyplanden/diffid
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/diffid/
+  version:
+    provider: mike
+    default: latest
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - 5-Minute Quickstart: getting-started/quickstart.md
+      - First ODE Fit: getting-started/first-ode-fit.md
+      - Core Concepts: getting-started/concepts.md
+  - Tutorials:
+      - tutorials/index.md
+      - Notebooks:
+          - Optimisation Basics: tutorials/notebooks/optimisation_basics.ipynb
+          - ODE Fitting with DiffSL: tutorials/notebooks/ode_fitting_diffsol.ipynb
+          - Parameter Uncertainty: tutorials/notebooks/parameter_uncertainty.ipynb
+          - Model Comparison: tutorials/notebooks/model_comparison.ipynb
+          - Predator-Prey Models: tutorials/notebooks/advanced_predator_prey.ipynb
+          - Parallel Optimisation: tutorials/notebooks/parallel_optimisation.ipynb
+          - Advanced Cost Functions: tutorials/notebooks/advanced_cost_functions.ipynb
+  - User Guides:
+      - guides/index.md
+      - Choosing an Optimiser: guides/choosing-optimiser.md
+      - Tuning Optimisers: guides/tuning-optimisers.md
+      - Choosing a Sampler: guides/choosing-sampler.md
+      - Cost Metrics: guides/cost-metrics.md
+      - DiffSL Backend: guides/diffsol-backend.md
+      - Parallel Execution: guides/parallel-execution.md
+      - Custom Solvers: guides/custom-solvers.md
+      - Troubleshooting: guides/troubleshooting.md
+  - Algorithms:
+      - algorithms/index.md
+      - Optimisers:
+          - Nelder-Mead: algorithms/optimisers/nelder-mead.md
+          - CMA-ES: algorithms/optimisers/cmaes.md
+          - Adam: algorithms/optimisers/adam.md
+      - Samplers:
+          - Metropolis-Hastings: algorithms/samplers/metropolis-hastings.md
+          - Dynamic Nested Sampling: algorithms/samplers/dynamic-nested-sampling.md
+  - API Reference:
+      - api-reference/index.md
+      - Python:
+          - Builders: api-reference/python/builders.md
+          - Optimisers: api-reference/python/optimisers.md
+          - Samplers: api-reference/python/samplers.md
+          - Cost Metrics: api-reference/python/cost-metrics.md
+          - Results: api-reference/python/results.md
+      - Rust:
+          - api-reference/rust/index.md
+  - Examples:
+      - examples/gallery.md
+  - Development:
+      - development/index.md
+      - Contributing: development/contributing.md
+      - Architecture: development/architecture.md
+  - Changelog: changelog.md
+
+strict: true  # Fail on warnings
+
+watch:
+  - python/src/diffid
+  - docs

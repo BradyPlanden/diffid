@@ -42,12 +42,12 @@ impl ScalarSampler {
     /// Run the sampler with a scalar objective function
     ///
     /// # Arguments
-    /// * `problem` - Problem defining objective and parameter specs
+    /// * `objective` - Function that evaluates the objective at a single point
     /// * `initial` - Initial point for sampling
     /// * `bounds` - Parameter bounds
     ///
     /// # Returns
-    /// Sampling results (type depends on sampler algorithm)
+    /// Sampling results
     pub fn run<F, R, E>(&self, objective: F, initial: Point, bounds: Bounds) -> SamplingResults
     where
         F: FnMut(&[f64]) -> R,
@@ -62,6 +62,38 @@ impl ScalarSampler {
             ScalarSampler::DynamicNested(dns) => {
                 // Delegates to individual sampler's run() method
                 SamplingResults::Nested(dns.run(objective, initial, bounds))
+            }
+        }
+    }
+
+    /// Run the sampler with a batched scalar objective function
+    ///
+    /// # Arguments
+    /// * `objective` - Function that evaluates the objective with a batch of parameter candidates
+    /// * `initial` - Initial point for sampling
+    /// * `bounds` - Parameter bounds
+    ///
+    /// # Returns
+    /// Sampling results
+    pub fn run_batch<F, R, E>(
+        &self,
+        objective: F,
+        initial: Point,
+        bounds: Bounds,
+    ) -> SamplingResults
+    where
+        F: Fn(&[Vec<f64>]) -> Vec<R>,
+        R: TryInto<ScalarEvaluation, Error = E>,
+        E: Into<EvaluationError>,
+    {
+        match self {
+            ScalarSampler::MetropolisHastings(mh) => {
+                // Delegates to individual sampler's run() method
+                SamplingResults::MCMC(mh.run_batch(objective, initial, bounds))
+            }
+            ScalarSampler::DynamicNested(dns) => {
+                // Delegates to individual sampler's run() method
+                SamplingResults::Nested(dns.run_batch(objective, initial, bounds))
             }
         }
     }
@@ -239,20 +271,32 @@ pub struct Samples {
     mean_x: Vec<f64>,
     draws: usize,
     time: Duration,
+    acceptance_data: Vec<Vec<bool>>, // Per-chain acceptance history
 }
 
 impl Samples {
-    pub fn new(chains: Vec<Vec<Vec<f64>>>, mean_x: Vec<f64>, draws: usize, time: Duration) -> Self {
+    pub fn new(
+        chains: Vec<Vec<Vec<f64>>>,
+        mean_x: Vec<f64>,
+        draws: usize,
+        time: Duration,
+        acceptance_data: Vec<Vec<bool>>,
+    ) -> Self {
         Self {
             chains,
             mean_x,
             draws,
             time,
+            acceptance_data,
         }
     }
 
     pub fn chains(&self) -> &[Vec<Vec<f64>>] {
         &self.chains
+    }
+
+    pub fn samples(&self) -> Vec<Vec<f64>> {
+        self.chains.iter().flatten().cloned().collect()
     }
 
     pub fn mean_x(&self) -> &[f64] {
@@ -265,6 +309,23 @@ impl Samples {
 
     pub fn time(&self) -> Duration {
         self.time
+    }
+
+    /// Get the acceptance rate for each chain
+    ///
+    /// Returns a vector of acceptance rates (proportion of accepted proposals)
+    /// for each MCMC chain. Each value is between 0.0 and 1.0.
+    pub fn acceptance_rates(&self) -> Vec<f64> {
+        self.acceptance_data
+            .iter()
+            .map(|chain_accepts| {
+                if chain_accepts.is_empty() {
+                    0.0
+                } else {
+                    chain_accepts.iter().filter(|&&a| a).count() as f64 / chain_accepts.len() as f64
+                }
+            })
+            .collect()
     }
 }
 

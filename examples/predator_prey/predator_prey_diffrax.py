@@ -1,12 +1,12 @@
-"""Predator-prey parameter identification using JAX/Diffrax and Chronopt.
+"""Predator-prey parameter identification using JAX/Diffrax and diffid.
 
 Demonstrates parameter estimation for the Lotka-Volterra model by:
 1. Defining the predator-prey ODE in JAX
 2. Generating synthetic noisy observations
-3. Recovering parameters using Chronopt optimization
+3. Recovering parameters using diffid optimisation
 
 Prerequisites:
-    pip install chronopt diffrax jax numpy
+    pip install diffid diffrax jax numpy
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 
-import chronopt as chron
+import diffid
 import diffrax as dfx
 import jax.numpy as jnp
 import numpy as np
@@ -67,7 +67,7 @@ def simulate_jax(params):
 
 
 def simulate(params):
-    """NumPy wrapper for Chronopt compatibility."""
+    """NumPy wrapper for diffid compatibility."""
     return np.asarray(simulate_jax(jnp.asarray(params)))
 
 
@@ -89,15 +89,15 @@ observed = data["observed_flat"]
 
 # Parameter identification
 result = (
-    chron.VectorBuilder()
+    diffid.VectorBuilder()
     .with_objective(simulate)
     .with_data(observed)
     .with_parameter("alpha", 1.3)
     .with_parameter("beta", 0.3)
     .with_parameter("delta", 0.05)
     .with_parameter("gamma", 0.6)
-    .with_cost(chron.SSE())
-    .with_optimiser(chron.NelderMead().with_max_iter(1000))
+    .with_cost(diffid.SSE())
+    .with_optimiser(diffid.NelderMead().with_max_iter(1000))
     .build()
     .optimise()
 )

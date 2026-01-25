@@ -1,12 +1,12 @@
-"""Predator-prey parameter identification using DifferentialEquations.jl and Chronopt.
+"""Predator-prey parameter identification using DifferentialEquations.jl and diffid.
 
 Demonstrates parameter estimation for the Lotka-Volterra model by:
 1. Defining the predator-prey ODE in Julia via diffeqpy
 2. Generating synthetic noisy observations
-3. Recovering parameters using Chronopt optimization
+3. Recovering parameters using diffid optimisation
 
 Prerequisites:
-    pip install diffeqpy chronopt numpy
+    pip install diffeqpy diffid numpy
     python -c "from diffeqpy import de; de.install()"
 """
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 
-import chronopt as chron
+import diffid
 import numpy as np
 from diffeqpy import de
 
@@ -67,15 +67,15 @@ observed = data["observed_flat"]
 
 # Parameter identification
 result = (
-    chron.VectorBuilder()
+    diffid.VectorBuilder()
     .with_objective(simulate)
     .with_data(observed)
     .with_parameter("alpha", 0.8)
     .with_parameter("beta", 0.3)
     .with_parameter("delta", 0.05)
     .with_parameter("gamma", 0.6)
-    .with_cost(chron.SSE())
-    .with_optimiser(chron.NelderMead().with_max_iter(1000))
+    .with_cost(diffid.SSE())
+    .with_optimiser(diffid.NelderMead().with_max_iter(1000))
     .build()
     .optimise()
 )
@@ -89,3 +89,6 @@ print(f"Final SSE:            {result.value:.6f}")
 print(
     f"Relative error:       {np.linalg.norm(result.x - TRUE_PARAMS) / np.linalg.norm(TRUE_PARAMS):.2%}"
 )
+print(f"Success:              {result.success}")
+print(f"Iterations:           {result.iterations}")
+print(f"Time:                 {result.time}s")

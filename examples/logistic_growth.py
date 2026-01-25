@@ -1,10 +1,9 @@
-import chronopt as chron
+import diffid
 import numpy as np
 
 # Example diffsol ODE (logistic growth)
 ds = """
-in = [r, k]
-r { 1 } k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
@@ -16,11 +15,11 @@ stacked_data = np.column_stack((t_span, data))
 
 
 # Create an optimiser
-optimiser = chron.CMAES().with_max_iter(1000).with_threshold(1e-12)
+optimiser = diffid.CMAES().with_max_iter(1000).with_threshold(1e-12)
 
 # Simple API
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(ds)
     .with_data(stacked_data)
     .with_tolerances(1e-6, 1e-8)
@@ -36,9 +35,9 @@ results = problem.optimise()
 
 print(f"result: {results}")
 
-# For now, just print the optimization result since Hamiltonian sampler is not implemented yet
+# For now, just print the optimisation result since Hamiltonian sampler is not implemented yet
 print(f"Optimal parameters: {results.x}")
 print(f"Optimal cost: {results.value}")
-print(f"Optimization success: {results.success}")
+print(f"Optimisation success: {results.success}")
 print(f"Iterations: {results.iterations}")
 print(f"Optimisation time: {results.time}")

@@ -1,10 +1,10 @@
-use numpy::{PyArray1, ToPyArray};
+use numpy::{PyArray1, PyArray2, PyArray3, ToPyArray};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use std::time::Duration;
 
-use chronopt_core::common::{AskResult, Bounds};
-use chronopt_core::sampler::{
+use diffid_core::common::{AskResult, Bounds};
+use diffid_core::sampler::{
     DynamicNestedSampler as CoreDynamicNestedSampler,
     DynamicNestedSamplerState as CoreDynamicNestedSamplerState,
     MetropolisHastings as CoreMetropolisHastings,
@@ -34,8 +34,8 @@ pub(crate) enum Sampler {
 #[cfg(feature = "stubgen")]
 #[allow(dead_code)]
 pub(crate) fn sampler_type_info() -> TypeInfo {
-    TypeInfo::unqualified("chronopt._chronopt.MetropolisHastings")
-        | TypeInfo::unqualified("chronopt._chronopt.DynamicNestedSampler")
+    TypeInfo::unqualified("diffid._diffid.MetropolisHastings")
+        | TypeInfo::unqualified("diffid._diffid.DynamicNestedSampler")
 }
 
 impl FromPyObject<'_, '_> for Sampler {
@@ -70,7 +70,7 @@ impl Sampler {
 
 /// Container for sampler draws and diagnostics.
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
-#[pyclass(module = "chronopt.sampler", name = "Samples")]
+#[pyclass(module = "diffid.sampler", name = "Samples")]
 pub struct PySamples {
     pub(crate) inner: CoreSamples,
 }
@@ -79,13 +79,47 @@ pub struct PySamples {
 #[pymethods]
 impl PySamples {
     #[getter]
-    fn chains(&self) -> Vec<Vec<Vec<f64>>> {
-        self.inner.chains().to_vec()
+    fn chains<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray3<f64>> {
+        use numpy::ndarray::Array3;
+
+        let rust_chains = self.inner.chains();
+
+        if rust_chains.is_empty() {
+            let empty_array = Array3::<f64>::zeros((0, 0, 0));
+            return empty_array.to_pyarray(py);
+        }
+
+        let n_chains = rust_chains.len();
+        let n_iterations = rust_chains[0].len();
+        let n_params = rust_chains[0][0].len();
+
+        // Create ndarray from nested vec
+        let mut array = Array3::<f64>::zeros((n_chains, n_iterations, n_params));
+        for (i, chain) in rust_chains.iter().enumerate() {
+            for (j, sample) in chain.iter().enumerate() {
+                for (k, &value) in sample.iter().enumerate() {
+                    array[[i, j, k]] = value;
+                }
+            }
+        }
+
+        array.to_pyarray(py)
+    }
+
+    #[getter]
+    fn samples<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+        PyArray2::from_vec2(py, &self.inner.samples()).expect("Valid Array2")
     }
 
     #[getter]
     fn mean_x<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
         self.inner.mean_x().to_pyarray(py)
+    }
+
+    #[getter]
+    fn acceptance_rate<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        let rates = self.inner.acceptance_rates();
+        rates.to_pyarray(py)
     }
 
     #[getter]
@@ -164,12 +198,14 @@ impl PySamples {
 }
 
 /// Iterator for Samples chains
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass]
 struct SamplesIterator {
     chains: Vec<Vec<Vec<f64>>>,
     index: usize,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SamplesIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
@@ -189,7 +225,7 @@ impl SamplesIterator {
 
 /// Nested sampling results including evidence estimates.
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
-#[pyclass(module = "chronopt.sampler", name = "NestedSamples")]
+#[pyclass(module = "diffid.sampler", name = "NestedSamples")]
 #[derive(Clone)]
 pub struct PyNestedSamples {
     pub(crate) inner: CoreNestedSamples,
@@ -331,12 +367,14 @@ impl PyNestedSamples {
 }
 
 /// Iterator for NestedSamples posterior
+#[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass]
 struct NestedSamplesIterator {
     samples: Vec<(Vec<f64>, f64, f64)>,
     index: usize,
 }
 
+#[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl NestedSamplesIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
@@ -356,7 +394,7 @@ impl NestedSamplesIterator {
 
 /// Basic Metropolis-Hastings sampler binding mirroring the optimiser API.
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
-#[pyclass(module = "chronopt.sampler", name = "MetropolisHastings")]
+#[pyclass(module = "diffid.sampler", name = "MetropolisHastings")]
 #[derive(Clone)]
 pub struct PyMetropolisHastings {
     pub(crate) inner: CoreMetropolisHastings,
@@ -419,11 +457,11 @@ impl PyMetropolisHastings {
     ///
     /// Examples
     /// --------
-    /// >>> sampler = chronopt.MetropolisHastings().with_num_chains(4)
+    /// >>> sampler = diffid.MetropolisHastings().with_num_chains(4)
     /// >>> state = sampler.init(initial=[1.0, 2.0])
     /// >>> while True:
     /// ...     result = state.ask()
-    /// ...     if isinstance(result, chronopt.Done):
+    /// ...     if isinstance(result, diffid.Done):
     /// ...         break
     /// ...     values = [evaluate(pt) for pt in result.points]
     /// ...     state.tell(values)
@@ -444,7 +482,7 @@ impl PyMetropolisHastings {
 
 /// Dynamic nested sampler binding exposing DNS configuration knobs.
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
-#[pyclass(module = "chronopt.sampler", name = "DynamicNestedSampler")]
+#[pyclass(module = "diffid.sampler", name = "DynamicNestedSampler")]
 #[derive(Clone)]
 pub struct PyDynamicNestedSampler {
     pub(crate) inner: CoreDynamicNestedSampler,
@@ -515,11 +553,11 @@ impl PyDynamicNestedSampler {
     ///
     /// Examples
     /// --------
-    /// >>> sampler = chronopt.DynamicNestedSampler()
+    /// >>> sampler = diffid.DynamicNestedSampler()
     /// >>> state = sampler.init(initial=[1.0, 2.0])
     /// >>> while True:
     /// ...     result = state.ask()
-    /// ...     if isinstance(result, chronopt.Done):
+    /// ...     if isinstance(result, diffid.Done):
     /// ...         break
     /// ...     values = [evaluate(pt) for pt in result.points]
     /// ...     state.tell(values)
@@ -545,17 +583,17 @@ impl PyDynamicNestedSampler {
 ///
 /// Examples
 /// --------
-/// >>> sampler = chronopt.MetropolisHastings().with_num_chains(4)
+/// >>> sampler = diffid.MetropolisHastings().with_num_chains(4)
 /// >>> state = sampler.init(initial=[1.0, 2.0])
 /// >>> while True:
 /// ...     result = state.ask()
-/// ...     if isinstance(result, chronopt.Done):
+/// ...     if isinstance(result, diffid.Done):
 /// ...         print(f"Sampling complete: {result.result}")
 /// ...         break
 /// ...     values = [negative_log_likelihood(pt) for pt in result.points]
 /// ...     state.tell(values)
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
-#[pyclass(module = "chronopt.sampler", name = "MetropolisHastingsState")]
+#[pyclass(module = "diffid.sampler", name = "MetropolisHastingsState")]
 pub struct PyMetropolisHastingsState {
     inner: CoreMetropolisHastingsState,
 }
@@ -647,17 +685,17 @@ impl PyMetropolisHastingsState {
 ///
 /// Examples
 /// --------
-/// >>> sampler = chronopt.DynamicNestedSampler()
+/// >>> sampler = diffid.DynamicNestedSampler()
 /// >>> state = sampler.init(initial=[1.0, 2.0])
 /// >>> while True:
 /// ...     result = state.ask()
-/// ...     if isinstance(result, chronopt.Done):
+/// ...     if isinstance(result, diffid.Done):
 /// ...         print(f"Sampling complete: {result.result}")
 /// ...         break
 /// ...     values = [negative_log_likelihood(pt) for pt in result.points]
 /// ...     state.tell(values)
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
-#[pyclass(module = "chronopt.sampler", name = "DynamicNestedSamplerState")]
+#[pyclass(module = "diffid.sampler", name = "DynamicNestedSamplerState")]
 pub struct PyDynamicNestedSamplerState {
     inner: CoreDynamicNestedSamplerState,
 }

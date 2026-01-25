@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import chronopt as chron
+import diffid
 import numpy as np
 
 # Example diffsol ODE (logistic growth)
 ds = """
-in = [r, k]
-r { 1 } k { 1 }
+in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
 """
@@ -19,7 +18,7 @@ data = 0.1 * np.exp(t_span) / (1 + 0.1 * (np.exp(t_span) - 1))
 stacked_data = np.column_stack((t_span, data))
 
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(ds)
     .with_data(stacked_data)
     .with_parameter("r", initial_value=1.2)
@@ -30,7 +29,7 @@ problem = builder.build()
 
 optimised = problem.optimise()
 
-sampler = chron.DynamicNestedSampler().with_live_points(256).with_seed(1234)
+sampler = diffid.DynamicNestedSampler().with_live_points(256).with_seed(1234)
 samples = sampler.run(problem, initial=optimised.x)
 
 print("time       :", samples.time)

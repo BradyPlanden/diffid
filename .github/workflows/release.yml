@@ -50,7 +50,7 @@ jobs:
           uv venv .test-venv
           source .test-venv/bin/activate
           uv pip install dist/*.whl --reinstall
-          uv pip install --group dev --group examples
+          uv pip install --group dev --group docs --group examples
           pytest -v
 
       - uses: actions/upload-artifact@v5
@@ -106,7 +106,7 @@ jobs:
           uv pip install dist/*.whl --reinstall
           
           # Install dev dependencies from pyproject.toml using pip interface
-          uv pip install --group dev --group examples
+          uv pip install --group dev --group docs --group examples
           
           # Run tests directly
           pytest -v

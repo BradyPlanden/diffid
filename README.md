@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/github/license/bradyplanden/diffid?color=blue)](https://github.com/bradyplanden/diffid/blob/main/LICENSE)
 [![Releases](https://img.shields.io/github/v/release/bradyplanden/diffid?color=gold)](https://github.com/bradyplanden/diffid/releases)
 
-**diff**erential **id**entification is a Rust-first toolkit for time-series inference and optimisation with ergonomic Python bindings. It couples high-performance solvers with a highly customisable builder API for identification and optimisation of differential systems.
+**diff**erential **id**entification offers a different paradigm for a parameter inference library. Conventional Python-based inference libraries are constructed via python bindings to a high-performance forward model with the optimisation algorithms implemented in Python.  Diffid offers an alternative, where the Python layer acts purely as a declarative configuration interface, while all computationally intensive work (the optimisation / sampling loop, gradient calculations, etc.) happens entirely within the Rust runtime without crossing the FFI boundary repeatedly. This is architecture is presented visually below,
 
 </div>
 
@@ -23,22 +23,6 @@
 - Multi-threaded differential equation fitting via [DiffSL](https://github.com/martinjrobins/diffsl) with dense or sparse [Diffsol](https://github.com/martinjrobins/diffsol) backends.
 - Customisable likelihood/cost metrics and Monte-Carlo sampling for posterior exploration.
 - Flexible integration with state-of-the-art differential solvers, such as [Diffrax](https://github.com/patrick-kidger/diffrax), [DifferentialEquations.jl](https://github.com/SciML/diffeqpy)
-
-
-## Why Diffid?
-- Optimisation based workflow run the forward simulation thousands of times, a performance improvement on the process can produce results hour or days earlier
-- The Rust core provides a high-performance inference loop with fewer runtime errors.
-- Quickly integrated into Python workflows, and later use the rust crate directly for even higher performance.
-
-## Documentation
-
-**[Full Documentation](https://bradyplanden.github.io/diffid/)**
-
-Visit the comprehensive documentation for:
-- Getting started guides and tutorials
-- Complete API reference
-- User guides for choosing and tuning algorithms
-- Examples gallery and Jupyter notebooks
 
 ## Installation
 

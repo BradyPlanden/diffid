@@ -113,47 +113,6 @@ pip install diffeqpy
 python examples/predator_prey/predator_prey_diffrax.py
 ```
 
-## Example Categories
-
-### By Problem Type
-
-| Type | Examples | Builder |
-|------|----------|---------|
-| Scalar | Rosenbrock | ScalarBuilder |
-| ODE (DiffSL) | Logistic, Bouncy Ball | DiffsolBuilder |
-| ODE (Custom) | Predator-Prey | VectorBuilder |
-
-### By Algorithm
-
-| Algorithm | Examples |
-|-----------|----------|
-| Nelder-Mead | Most examples (default) |
-| CMA-ES | Logistic growth, bicycle model |
-| Adam | Coming soon |
-| MCMC | Bouncy ball sampling |
-| Nested Sampling | Bicycle evidence, model evidence |
-
-### By Difficulty
-
-**Beginner:**
-
-- python_problem.py
-- python_contour.py
-- logistic_growth.py
-
-**Intermediate:**
-
-- bouncy_ball.py
-- bicycle_model_diffsol.py
-- predator_prey_diffsol.py
-
-**Advanced:**
-
-- bouncy_ball_sampling.py
-- bicycle_model_evidence.py
-- predator_prey_diffrax.py
-- predator_prey_diffeqpy.py
-
 ## Contributing Examples
 
 Have an interesting use case? We'd love to include it!

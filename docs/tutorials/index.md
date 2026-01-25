@@ -1,7 +1,5 @@
 # Tutorials
 
-Interactive Jupyter notebooks for hands-on learning with Diffid.
-
 ## Learning Paths
 
 Follow these progressive learning paths based on your experience level and goals.
@@ -12,23 +10,22 @@ Perfect for those new to Diffid or optimisation:
 
 <div class="grid cards" markdown>
 
--   **[Optimisation Basics](notebooks/optimisation_basics.ipynb)**
+-   :material-tune:{ .lg .middle } __Optimisation Basics__
 
     ---
 
     Learn scalar optimisation with the Rosenbrock function. Compare Nelder-Mead, CMA-ES, and Adam optimisers.
 
-    **Topics:** ScalarBuilder, contour plots, optimiser comparison
-    **Runtime:** ~5 minutes
+    [:octicons-arrow-right-24: Optimisation Basics](notebooks/optimisation_basics.ipynb)
 
--   **[ODE Fitting with DiffSL](notebooks/ode_fitting_diffsol.ipynb)**
+-   :material-function-variant:{ .lg .middle } __ODE Fitting with DiffSL__
 
     ---
 
     Fit a logistic growth model to data using DiffSL and Diffsol.
 
-    **Topics:** DiffsolBuilder, DiffSL syntax, parameter fitting
-    **Runtime:** ~10 minutes
+    [:octicons-arrow-right-24: ODE Fitting with DiffSL](notebooks/ode_fitting_diffsol.ipynb)
+
 
 </div>
 
@@ -38,64 +35,50 @@ Building on the basics with real-world applications:
 
 <div class="grid cards" markdown>
 
--   **[Parameter Uncertainty](notebooks/parameter_uncertainty.ipynb)**
+-   :material-chart-bell-curve:{ .lg .middle } __Parameter Uncertainty__
 
     ---
 
     Go from optimisation to MCMC sampling. Quantify parameter uncertainty with confidence intervals.
 
-    **Topics:** Metropolis-Hastings, posterior distributions, diagnostics
-    **Runtime:** ~15 minutes
+    [:octicons-arrow-right-24: Parameter Uncertainty](notebooks/parameter_uncertainty.ipynb)
 
--   **[Model Comparison](notebooks/model_comparison.ipynb)** ⚠️ *Coming Soon*
+-   :material-scale-balance:{ .lg .middle } __Model Comparison__
 
     ---
 
     Use Dynamic Nested Sampling to calculate model evidence and Bayes factors.
 
-    **Topics:** Evidence calculation, Bayes factors, model selection
-    **Runtime:** ~20 minutes
+    [:octicons-arrow-right-24: Model Comparison](notebooks/model_comparison.ipynb)
 
 </div>
 
-## Advanced Track
+### Advanced Track
 
 Complex problems and advanced techniques:
 
 <div class="grid cards" markdown>
 
--   **[Multi-Backend ODE Solving](notebooks/advanced_predator_prey.ipynb)**
+-   :material-connection:{ .lg .middle } __Multi-Backend ODE Solving__
 
     ---
 
     Compare Diffsol, JAX/Diffrax, and Julia/DifferentialEquations.jl for predator-prey models.
 
-    **Topics:** VectorBuilder, backend comparison, custom solvers
-    **Runtime:** ~20 minutes
+    [:octicons-arrow-right-24: Multi-Backend ODE Solving](notebooks/advanced_predator_prey.ipynb)
 
 </div>
 
 ## Quick Reference
 
 | Tutorial                 | Difficulty | Key Concepts              | Prerequisites |
-|--------------------------|------------|---------------------------|---------------|
-| Optimisation Basics      | ⭐ Beginner | ScalarBuilder, Optimisers | None |
-| ODE Fitting              | ⭐ Beginner | DiffsolBuilder, DiffSL    | Optimisation Basics |
-| Parameter Uncertainty    | ⭐⭐ Intermediate | MCMC, uncertainty         | Optimisation Basics, ODE Fitting |
-| Model Comparison         | ⭐⭐ Intermediate | Nested sampling, evidence | Optimisation Basics, ODE Fitting, Parameter Uncertainty |
-| Multi-Backend            | ⭐⭐⭐ Advanced | VectorBuilder, JAX, Julia | Optimisation Basics, ODE Fitting |
+|--------------------------|----------|---------------------------|---------------|
+| Optimisation Basics      | Beginner | ScalarBuilder, Optimisers | None |
+| ODE Fitting              | Beginner | DiffsolBuilder, DiffSL    | Optimisation Basics |
+| Parameter Uncertainty    | Intermediate | MCMC, uncertainty         | Optimisation Basics, ODE Fitting |
+| Model Comparison         | Intermediate | Nested sampling, evidence | Optimisation Basics, ODE Fitting, Parameter Uncertainty |
+| Multi-Backend            | Advanced | VectorBuilder, JAX, Julia | Optimisation Basics, ODE Fitting |
 
-## Prerequisites
-
-### All Tutorials
-- Python >= 3.11
-- Basic Python programming
-- NumPy fundamentals
-- Jupyter notebook environment
-
-### Additional for Specific Tutorials
-- **Parameter Uncertainty & Model Comparison**: Basic Bayesian statistics
-- **Multi-Backend**: JAX or Julia knowledge (optional)
 
 ## Running the Notebooks
 

@@ -4,8 +4,7 @@
 
 ## Why Diffid?
 
-Diffid offers a different paradigm for a parameter inference library. Conventionally, Python-based inference libraries are constructed via python bindings to a high-performance forward model with the inference algorithms implemented in Python. This package instead introduces an alternative, where the Python layer acts purely as a declarative configuration interface,
-while all computationally intensive work (the optimisation / sampling loop, gradient calculations, etc.) happens entirely within the Rust runtime without crossing the FFI boundary repeatedly. This is architecture is presented visually below,
+Diffid offers a different paradigm for a parameter inference library. Conventionally, Python-based inference libraries are constructed via python bindings to a high-performance forward model with the inference algorithms implemented in Python. Alongside this approach, Diffid introduces an alternative, where the Python layer acts purely as a declarative configuration interface, while all computationally intensive work (the optimisation / sampling loop, gradient calculations, etc.) happens entirely within the Rust runtime without crossing the FFI boundary repeatedly. This is architecture is presented visually below,
 
 <br>
 
@@ -17,46 +16,31 @@ while all computationally intensive work (the optimisation / sampling loop, grad
 
 ## Core Capabilities
 
-- **Gradient-free** (Nelder-Mead, CMA-ES) and **gradient-based** (Adam) optimisers with configurable convergence criteria
-- **Multi-threaded differential equation fitting** via [DiffSL](https://github.com/martinjrobins/diffsl) with dense or sparse [Diffsol](https://github.com/martinjrobins/diffsol) backends
-- **Customisable likelihood/cost metrics** and Monte-Carlo sampling for posterior exploration
-- **Flexible integration** with state-of-the-art differential solvers, such as [Diffrax](https://github.com/patrick-kidger/diffrax), [DifferentialEquations.jl](https://github.com/SciML/diffeqpy)
-
-## Quick Links
-
 <div class="grid cards" markdown>
 
--   :material-clock-fast:{ .lg .middle } __5-Minute Quickstart__
+-   __Optimisation Algorithms__
 
     ---
 
-    Get started with Diffid in 5 minutes with a simple scalar optimisation example.
+    Gradient-free (Nelder-Mead, CMA-ES) and gradient-based (Adam) optimisers with configurable convergence criteria
 
-    [:octicons-arrow-right-24: Quickstart](getting-started/quickstart.md)
-
--   :material-function:{ .lg .middle } __First ODE Fit__
+-   __High-Performance ODE Fitting__
 
     ---
 
-    Learn how to fit differential equations to data using DiffSL and Diffsol.
+    Multi-threaded differential equation fitting via [DiffSL](https://github.com/martinjrobins/diffsl) with dense or sparse [Diffsol](https://github.com/martinjrobins/diffsol) backends
 
-    [:octicons-arrow-right-24: ODE Fitting Tutorial](getting-started/first-ode-fit.md)
-
--   :material-book-open-variant:{ .lg .middle } __Core Concepts__
+-   __Uncertainty Quantification__
 
     ---
 
-    Understand the builder pattern, problem types, and optimiser vs sampler workflows.
+    Customisable likelihood/cost metrics and Monte-Carlo sampling for posterior exploration
 
-    [:octicons-arrow-right-24: Concepts Guide](getting-started/concepts.md)
-
--   :material-code-tags:{ .lg .middle } __API Reference__
+-   __Flexible Integration__
 
     ---
 
-    Browse the complete Python and Rust API documentation.
-
-    [:octicons-arrow-right-24: API Reference](api-reference/index.md)
+    Integration with state-of-the-art differential solvers: [Diffrax](https://github.com/patrick-kidger/diffrax), [DifferentialEquations.jl](https://github.com/SciML/diffeqpy)
 
 </div>
 

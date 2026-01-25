@@ -10,7 +10,7 @@ while all computationally intensive work (the optimisation / sampling loop, grad
 <br>
 
 <figure markdown="span">
-  ![Paradigm Comparison](diffid.svg){ width="100%" }
+  ![Paradigm Comparison](assets/diffid.svg){ width="100%" }
   <figcaption>Conventional vs configuration approach: the optimisation loop moves from Python to Rust</figcaption>
 </figure>
 

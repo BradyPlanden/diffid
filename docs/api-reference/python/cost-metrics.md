@@ -12,7 +12,7 @@ Cost metrics define how model predictions are compared to observations. They det
 
 ## CostMetric
 
-::: chronopt.CostMetric
+::: diffid.CostMetric
     options:
       show_root_heading: true
       show_source: false
@@ -28,15 +28,15 @@ $$\text{SSE} = \sum_{i=1}^{n} (y_i - \hat{y}_i)^2$$
 ### Example Usage
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("k", 1.0)
     # SSE is used by default, but can be explicit:
-    # .with_cost_metric(chron.SSE())
+    # .with_cost_metric(diffid.SSE())
 )
 ```
 
@@ -71,14 +71,14 @@ $$\text{RMSE} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2}$$
 ### Example Usage
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("k", 1.0)
-    .with_cost_metric(chron.RMSE())
+    .with_cost_metric(diffid.RMSE())
 )
 ```
 
@@ -114,18 +114,18 @@ where $\sigma^2$ is estimated from residuals.
 ### Example Usage
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("k", 1.0)
-    .with_cost_metric(chron.GaussianNLL())
+    .with_cost_metric(diffid.GaussianNLL())
 )
 
 # Use with MCMC sampling for Bayesian inference
-sampler = chron.MetropolisHastings().with_max_iter(10000)
+sampler = diffid.MetropolisHastings().with_max_iter(10000)
 result = sampler.run(problem, initial_guess)
 ```
 
@@ -200,7 +200,7 @@ To implement a custom cost metric:
 2. Expose through Python bindings
 3. Rebuild the package
 
-See the [Development Guide](../../development/architecture.md) for details on extending Chronopt.
+See the [Development Guide](../../development/architecture.md) for details on extending Diffid.
 
 ---
 

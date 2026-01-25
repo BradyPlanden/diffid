@@ -49,7 +49,7 @@ jobs:
           uv venv .test-venv
           source .test-venv/bin/activate
           uv pip install dist/*.whl --reinstall
-          uv pip install --group dev --group examples
+          uv pip install --group dev --group docs --group examples
           pytest -v
 
       - uses: actions/upload-artifact@v5
@@ -104,7 +104,7 @@ jobs:
           uv pip install dist/*.whl --reinstall
           
           # Install dev dependencies from pyproject.toml using pip interface
-          uv pip install --group dev --group examples
+          uv pip install --group dev --group docs --group examples
           
           # Run tests directly
           pytest -v
@@ -132,7 +132,7 @@ jobs:
           sudo apt-get install -y llvm-18-dev libclang-18-dev libzstd-dev libpolly-18-dev patchelf
 
       - name: Generate stubs
-        run: cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
+        run: cargo run -p diffid-py --no-default-features --features stubgen --bin generate_stubs
         env:
           LLVM_SYS_181_PREFIX: /usr/lib/llvm-18
           LIBCLANG_PATH: /usr/lib/llvm-18/lib

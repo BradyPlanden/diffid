@@ -1,12 +1,12 @@
 [package]
-name = "chronopt"
+name = "diffid"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Time-series optimisation and inference toolkit with differential-system support"
-repository = "https://github.com/BradyPlanden/chronopt"
-homepage = "https://github.com/BradyPlanden/chronopt"
-documentation = "https://docs.rs/chronopt"
+repository = "https://github.com/BradyPlanden/diffid"
+homepage = "https://github.com/BradyPlanden/diffid"
+documentation = "https://docs.rs/diffid"
 readme = "../README.md"
 keywords = ["optimisation", "time-series", "differential-equations", "sampler", "inference"]
 categories = ["algorithms", "science", "simulation"]

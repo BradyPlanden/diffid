@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import chronopt as chron
+import diffid
 import numpy as np
 
 TRUE_L = 2.5  # wheelbase
@@ -36,10 +36,10 @@ psi_obs = psi_true + rng.normal(scale=0.005, size=psi_true.shape)
 
 stacked_data = np.column_stack((t_span, x_obs, y_obs, psi_obs))
 
-optimiser = chron.CMAES().with_max_iter(500).with_threshold(1e-10)
+optimiser = diffid.CMAES().with_max_iter(500).with_threshold(1e-10)
 
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(stacked_data)
     .with_tolerances(rtol=1e-6, atol=1e-8)

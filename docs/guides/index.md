@@ -1,6 +1,6 @@
 # User Guides
 
-In-depth guides for making the most of Chronopt's optimisation and sampling capabilities.
+In-depth guides for making the most of Diffid's optimisation and sampling capabilities.
 
 ## Algorithm Selection
 

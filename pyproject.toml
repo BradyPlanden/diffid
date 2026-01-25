@@ -3,7 +3,7 @@ requires = ["maturin>=1.9,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "chronopt"
+name = "diffid"
 requires-python = ">=3.11"
 dynamic = ["version"]
 license = { file = "LICENSE" }
@@ -31,7 +31,7 @@ diffeqpy = [
 
 [tool.maturin]
 manifest-path = "python/Cargo.toml"
-module-name = "chronopt._chronopt"
+module-name = "diffid._diffid"
 features = ["extension-module"]
 python-source = "python/src"
 sdist-include = ["LICENSE", "README.md"]

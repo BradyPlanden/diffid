@@ -1,6 +1,6 @@
 # Development
 
-Resources for contributors and developers working with Chronopt.
+Resources for contributors and developers working with Diffid.
 
 ## Getting Started with Development
 
@@ -18,7 +18,7 @@ Resources for contributors and developers working with Chronopt.
 
     ---
 
-    Understanding Chronopt's Rust core and PyO3 bindings design.
+    Understanding Diffid's Rust core and PyO3 bindings design.
 
     [:octicons-arrow-right-24: Architecture Overview](architecture.md)
 
@@ -28,8 +28,8 @@ Resources for contributors and developers working with Chronopt.
 
 ```bash
 # Clone the repository
-git clone https://github.com/bradyplanden/chronopt.git
-cd chronopt
+git clone https://github.com/bradyplanden/diffid.git
+cd diffid
 
 # Create Python environment
 uv sync
@@ -72,7 +72,7 @@ cargo test && uv run pytest -v
 If you modified Python bindings:
 
 ```bash
-uv run cargo run -p chronopt-py --no-default-features --features stubgen --bin generate_stubs
+uv run cargo run -p diffid-py --no-default-features --features stubgen --bin generate_stubs
 ```
 
 ### 5. Format and Lint
@@ -90,7 +90,7 @@ uv run ruff format .
 ## Project Structure
 
 ```
-chronopt/
+diffid/
 ├── rust/                   # Rust core implementation
 │   ├── src/
 │   │   ├── builders/       # Problem builders
@@ -101,10 +101,10 @@ chronopt/
 │   ├── Cargo.toml
 │   └── tests/              # Rust tests
 ├── python/                 # Python bindings
-│   ├── src/chronopt/
+│   ├── src/diffid/
 │   │   ├── __init__.py
-│   │   └── _chronopt.pyi   # Generated type stubs
-│   └── chronopt/           # PyO3 bindings source
+│   │   └── _diffid.pyi   # Generated type stubs
+│   └── diffid/           # PyO3 bindings source
 ├── examples/               # Example scripts
 ├── tests/                  # Python tests
 ├── docs/                   # Documentation (this site)
@@ -144,7 +144,7 @@ Python integration tests in `tests/`:
 
 ```python
 def test_optimisation():
-    builder = chron.ScalarBuilder().with_objective(func)
+    builder = diffid.ScalarBuilder().with_objective(func)
     # ...
     assert result.success
 ```

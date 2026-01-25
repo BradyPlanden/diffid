@@ -1,10 +1,10 @@
-import chronopt as chron
+import diffid
 import numpy as np
 
 
 def test_builder_exposes_config_and_parameters():
     builder = (
-        chron.ScalarBuilder()
+        diffid.ScalarBuilder()
         .with_objective(lambda x: np.asarray([float(x[0]) ** 2]))
         .with_parameter("x", 3.5, bounds=(0.0, 10.0))
     )
@@ -30,7 +30,7 @@ def bounded_quadratic(x):
 
 def test_python_builder_rosenbrock():
     builder = (
-        chron.ScalarBuilder()
+        diffid.ScalarBuilder()
         .with_objective(rosenbrock)
         .with_parameter("x", 1.2, None)
         .with_parameter("y", -1.2, None)
@@ -39,7 +39,7 @@ def test_python_builder_rosenbrock():
 
     # Create the optimisation
     optimiser = (
-        chron.NelderMead().with_max_iter(500).with_threshold(1e-6).with_step_size(0.15)
+        diffid.NelderMead().with_max_iter(500).with_threshold(1e-6).with_step_size(0.15)
     )
     results = optimiser.run(problem, [1.5, -1.5])
 
@@ -51,14 +51,14 @@ def test_python_builder_rosenbrock():
 
 def test_python_builder_bounds_respected():
     builder = (
-        chron.ScalarBuilder()
+        diffid.ScalarBuilder()
         .with_objective(bounded_quadratic)
         .with_parameter("x", 0.0, bounds=(0.0, 1.0))
         .with_parameter("y", 0.0, bounds=(0.0, 2.0))
     )
     problem = builder.build()
 
-    optimiser = chron.NelderMead().with_max_iter(200).with_threshold(1e-8)
+    optimiser = diffid.NelderMead().with_max_iter(200).with_threshold(1e-8)
     results = optimiser.run(problem, [0.5, 1.0])
 
     assert results.success

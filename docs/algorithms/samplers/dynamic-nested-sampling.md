@@ -120,9 +120,9 @@ Nested sampling requires a **negative log-likelihood** cost metric:
 
 ```python
 problem = (
-    chron.ScalarProblemBuilder()
+    diffid.ScalarProblemBuilder()
     .with_objective(model_fn)
-    .with_cost_metric(chron.CostMetric.GaussianNLL)  # Required
+    .with_cost_metric(diffid.CostMetric.GaussianNLL)  # Required
     .build()
 )
 ```
@@ -132,10 +132,10 @@ The objective function should return negative log-likelihood; the algorithm inte
 ## Example
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 sampler = (
-    chron.DynamicNestedSampling()
+    diffid.DynamicNestedSampling()
     .with_live_points(128)
     .with_termination_tol(1e-3)
     .with_seed(42)

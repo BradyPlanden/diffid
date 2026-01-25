@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-import chronopt as chron
+import diffid
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -15,7 +15,7 @@ def rosenbrock(x: np.ndarray) -> float:
 
 # Setup
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_objective(rosenbrock)
     .with_parameter("x", 1.0)
     .with_parameter("y", 1.0)
@@ -23,11 +23,11 @@ builder = (
 problem = builder.build()
 
 # Optimise
-optimiser = chron.NelderMead().with_max_iter(500).with_threshold(1e-8)
+optimiser = diffid.NelderMead().with_max_iter(500).with_threshold(1e-8)
 result = optimiser.run(problem, [-1.5, 1.5])
 
 # Plot
-contour_set = chron.plotting.contour(
+contour_set = diffid.plotting.contour(
     problem,
     x_bounds=(-2.0, 2.0),
     y_bounds=(-1.0, 3.0),

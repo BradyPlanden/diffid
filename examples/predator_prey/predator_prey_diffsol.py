@@ -1,7 +1,7 @@
 import importlib.util
 import pathlib
 
-import chronopt as chron
+import diffid
 import numpy as np
 
 # Example diffsol ODE (logistic growth)
@@ -32,7 +32,7 @@ stacked_data = data["observed_stacked"]
 
 # Simple API
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(ode)
     .with_data(stacked_data)
     .with_tolerances(rtol=1e-6, atol=1e-8)
@@ -42,7 +42,7 @@ builder = (
     .with_parameter("d", 0.6)
     .with_parallel(True)
     .with_optimiser(
-        chron.NelderMead().with_max_iter(1000)
+        diffid.NelderMead().with_max_iter(1000)
     )  # Override default optimiser
 )
 problem = builder.build()

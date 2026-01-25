@@ -12,7 +12,7 @@ Builders provide a fluent API for constructing optimisation problems. Choose the
 
 ## ScalarBuilder
 
-::: chronopt.ScalarBuilder
+::: diffid.ScalarBuilder
     options:
       show_root_heading: true
       show_source: false
@@ -27,13 +27,13 @@ Builders provide a fluent API for constructing optimisation problems. Choose the
 
 ```python
 import numpy as np
-import chronopt as chron
+import diffid as chron
 
 def rosenbrock(x):
     return np.asarray([(1 - x[0])**2 + 100*(x[1] - x[0]**2)**2])
 
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_objective(rosenbrock)
     .with_parameter("x", 1.5)
     .with_parameter("y", -1.5)
@@ -52,7 +52,7 @@ result = problem.optimise()
 
 ## DiffsolBuilder
 
-::: chronopt.DiffsolBuilder
+::: diffid.DiffsolBuilder
     options:
       show_root_heading: true
       show_source: false
@@ -70,7 +70,7 @@ result = problem.optimise()
 
 ```python
 import numpy as np
-import chronopt as chron
+import diffid as chron
 
 dsl = """
 in { r = 1, k = 1 }
@@ -83,14 +83,14 @@ observations = np.exp(-1.3 * t)
 data = np.column_stack((t, observations))
 
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("k", 1.0)
     .with_backend("dense")
 )
 problem = builder.build()
-optimiser = chron.CMAES().with_max_iter(1000)
+optimiser = diffid.CMAES().with_max_iter(1000)
 result = optimiser.run(problem, [0.5, 0.5])
 ```
 
@@ -113,14 +113,14 @@ out_i { state1, state2 }        # Optional: output variables
 ### When to Use
 
 - Fitting ODE parameters to time-series data
-- Using Chronopt's built-in high-performance solver
+- Using Diffid's built-in high-performance solver
 - Models expressible in DiffSL syntax
 
 ---
 
 ## VectorBuilder
 
-::: chronopt.VectorBuilder
+::: diffid.VectorBuilder
     options:
       show_root_heading: true
       show_source: false
@@ -136,7 +136,7 @@ out_i { state1, state2 }        # Optional: output variables
 
 ```python
 import numpy as np
-import chronopt as chron
+import diffid as chron
 
 def custom_solver(params):
     """Your custom ODE solver (e.g., using JAX/Diffrax)."""
@@ -150,7 +150,7 @@ observations = ...  # Your experimental data
 data = np.column_stack((t, observations))
 
 builder = (
-    chron.VectorBuilder()
+    diffid.VectorBuilder()
     .with_objective(custom_solver)
     .with_data(data)
     .with_parameter("alpha", 1.0)
@@ -181,7 +181,7 @@ See the [Custom Solvers Guide](../../guides/custom-solvers.md) for examples with
 
 ## Problem
 
-::: chronopt.Problem
+::: diffid.Problem
     options:
       show_root_heading: true
       show_source: false
@@ -208,11 +208,11 @@ Builders use a fluent interface - chain methods in any order:
 
 ```python
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_objective(func)
     .with_parameter("x", 1.0)
     .with_parameter("y", 2.0)
-    .with_cost_metric(chron.RMSE())
+    .with_cost_metric(diffid.RMSE())
 )
 ```
 
@@ -221,7 +221,7 @@ builder = (
 Builders are immutable - each method returns a new builder:
 
 ```python
-base = chron.ScalarBuilder().with_objective(func)
+base = diffid.ScalarBuilder().with_objective(func)
 
 problem1 = base.with_parameter("x", 1.0).build()
 problem2 = base.with_parameter("x", 2.0).build()  # Different initial guess
@@ -233,7 +233,7 @@ Parameters are indexed in the order they're added:
 
 ```python
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_parameter("y", 2.0)  # Index 0
     .with_parameter("x", 1.0)  # Index 1
 )

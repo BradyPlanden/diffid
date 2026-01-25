@@ -111,10 +111,10 @@ The algorithm terminates when any condition is met:
 ## Example
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 optimiser = (
-    chron.Adam()
+    diffid.Adam()
     .with_max_iter(5000)
     .with_step_size(0.001)
     .with_betas(0.9, 0.999)

@@ -52,8 +52,8 @@ impl ScalarOptimiser {
     ///
     /// # Example
     /// ```
-    /// use chronopt::common::Bounds;
-    /// use chronopt::optimisers::{ScalarOptimiser, NelderMead};
+    /// use diffid::common::Bounds;
+    /// use diffid::optimisers::{ScalarOptimiser, NelderMead};
     ///
     /// let optimiser = ScalarOptimiser::from(NelderMead::new());
     /// let result = optimiser.run(
@@ -86,8 +86,8 @@ impl ScalarOptimiser {
     ///
     /// # Example
     /// ```
-    /// use chronopt::common::Bounds;
-    /// use chronopt::optimisers::{ScalarOptimiser, NelderMead};
+    /// use diffid::common::Bounds;
+    /// use diffid::optimisers::{ScalarOptimiser, NelderMead};
     ///
     /// let optimiser = ScalarOptimiser::from(NelderMead::new());
     /// let result = optimiser.run_batch(
@@ -137,8 +137,8 @@ impl GradientOptimiser {
     ///
     /// # Example
     /// ```
-    /// use chronopt::common::Bounds;
-    /// use chronopt::optimisers::{GradientOptimiser, Adam};
+    /// use diffid::common::Bounds;
+    /// use diffid::optimisers::{GradientOptimiser, Adam};
     ///
     /// let optimiser = GradientOptimiser::from(Adam::new());
     /// let result = optimiser.run(

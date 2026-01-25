@@ -32,7 +32,7 @@ pub struct Unbounded;
 /// # Examples
 ///
 /// ```
-/// use chronopt::common::Bounds;
+/// use diffid::common::Bounds;
 ///
 /// // Create bounds for a two-dimensional parameter-space
 /// let bounds = Bounds::new(vec![(0.0, 1.0), (-5.0, 5.0)]);
@@ -56,7 +56,7 @@ impl Bounds {
     /// # Examples
     ///
     /// ```
-    /// use chronopt::common::Bounds;
+    /// use diffid::common::Bounds;
     ///
     /// let bounds = Bounds::new(vec![(0.0, 1.0), (-10.0, 10.0)]);
     /// ```
@@ -69,7 +69,7 @@ impl Bounds {
     /// # Examples
     ///
     /// ```
-    /// use chronopt::common::Bounds;
+    /// use diffid::common::Bounds;
     ///
     /// let bounds = Bounds::new(vec![(0.0, 1.0), (-5.0, 5.0), (0.0, 100.0)]);
     /// assert_eq!(bounds.dimension(), 3);
@@ -89,7 +89,7 @@ impl Bounds {
     ///
     /// # Examples
     /// ```
-    /// use chronopt::common::Bounds;
+    /// use diffid::common::Bounds;
     ///
     /// let initial = [0.0];
     /// let bounds = Bounds::unbounded_like(&initial);
@@ -123,7 +123,7 @@ impl Bounds {
     /// # Examples
     ///
     /// ```
-    /// use chronopt::common::Bounds;
+    /// use diffid::common::Bounds;
     ///
     /// let bounds = Bounds::new(vec![(0.0, 1.0), (-5.0, 5.0)]);
     /// let mut pos = vec![1.5, -10.0];
@@ -156,7 +156,7 @@ impl Bounds {
     /// # Examples
     ///
     /// ```
-    /// use chronopt::common::Bounds;
+    /// use diffid::common::Bounds;
     /// use rand::SeedableRng;
     /// use rand::prelude::StdRng;
     ///
@@ -205,7 +205,7 @@ impl From<Vec<(f64, f64)>> for Bounds {
     /// # Examples
     ///
     /// ```
-    /// use chronopt::common::Bounds;
+    /// use diffid::common::Bounds;
     ///
     /// let bounds: Bounds = vec![(0.0, 1.0), (-5.0, 5.0)].into();
     /// assert_eq!(bounds.dimension(), 2);

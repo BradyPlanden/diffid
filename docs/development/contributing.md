@@ -1,4 +1,4 @@
-# Contributing to Chronopt
+# Contributing to Diffid
 
 !!! info "Coming Soon"
     Detailed contributing guidelines are being written.
@@ -7,8 +7,8 @@
 
 ```bash
 # Fork and clone
-git clone https://github.com/YOUR_USERNAME/chronopt.git
-cd chronopt
+git clone https://github.com/YOUR_USERNAME/diffid.git
+cd diffid
 
 # Set up environment
 uv sync
@@ -32,4 +32,4 @@ cargo test
 ## See Also
 
 - [Architecture](architecture.md)
-- [GitHub Issues](https://github.com/bradyplanden/chronopt/issues)
+- [GitHub Issues](https://github.com/bradyplanden/diffid/issues)

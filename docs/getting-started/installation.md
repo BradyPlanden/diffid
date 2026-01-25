@@ -1,6 +1,6 @@
 # Installation
 
-Chronopt is available as a Python package with pre-built wheels for most platforms.
+Diffid is available as a Python package with pre-built wheels for most platforms.
 
 ## Installation Methods
 
@@ -9,44 +9,44 @@ Chronopt is available as a Python package with pre-built wheels for most platfor
     [uv](https://docs.astral.sh/uv/) is a fast Python package installer and resolver.
 
     ```bash
-    uv pip install chronopt
+    uv pip install diffid
     ```
 
 === "pip"
 
     ```bash
-    pip install chronopt
+    pip install diffid
     ```
 
 ### Optional Dependencies
 
-Chronopt has optional plotting support via matplotlib:
+Diffid has optional plotting support via matplotlib:
 
 === "uv"
 
     ```bash
-    uv pip install "chronopt[plotting]"
+    uv pip install "diffid[plotting]"
     ```
 
 === "pip"
 
     ```bash
-    pip install "chronopt[plotting]"
+    pip install "diffid[plotting]"
     ```
 
 ## Verifying Installation
 
-After installation, verify that Chronopt is working correctly:
+After installation, verify that Diffid is working correctly:
 
 ```python
-import chronopt as chron
+import diffid
 import numpy as np
 
 # Simple test
 def test_func(x):
     return np.asarray([(x[0] - 1.0) ** 2])
 
-builder = chron.ScalarBuilder().with_objective(test_func).with_parameter("x", 0.0)
+builder = diffid.ScalarBuilder().with_objective(test_func).with_parameter("x", 0.0)
 problem = builder.build()
 result = problem.optimise()
 
@@ -92,8 +92,8 @@ If you need to build from source (for development or if pre-built wheels aren't 
 
 ```bash
 # Clone the repository
-git clone https://github.com/bradyplanden/chronopt.git
-cd chronopt
+git clone https://github.com/bradyplanden/diffid.git
+cd diffid
 
 # Create Python environment
 uv sync
@@ -104,9 +104,9 @@ uv run maturin develop
 # Run tests
 uv run pytest -v
 ```
- 
+
 For additional troubleshooting, see the [Troubleshooting Guide](../guides/troubleshooting.md).
 
 ## Next Steps
 
-Now that Chronopt is installed, proceed to the [5-Minute Quickstart](quickstart.md) to run your first optimisation.
+Now that Diffid is installed, proceed to the [5-Minute Quickstart](quickstart.md) to run your first optimisation.

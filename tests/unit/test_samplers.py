@@ -1,6 +1,6 @@
 import math
 
-import chronopt as chron
+import diffid
 import numpy as np
 import pytest
 
@@ -12,14 +12,14 @@ def quadratic_potential(x: np.ndarray) -> np.ndarray:
 
 def test_metropolis_hastings_runs_and_returns_samples():
     problem = (
-        chron.ScalarBuilder()
+        diffid.ScalarBuilder()
         .with_objective(quadratic_potential)
         .with_parameter("x", 1.0)
         .build()
     )
 
     sampler = (
-        chron.MetropolisHastings()
+        diffid.MetropolisHastings()
         .with_num_chains(3)
         .with_iterations(400)
         .with_step_size(0.4)
@@ -44,14 +44,14 @@ def test_metropolis_hastings_runs_and_returns_samples():
 
 def test_dynamic_nested_sampler_runs_on_scalar_problem():
     problem = (
-        chron.ScalarBuilder()
+        diffid.ScalarBuilder()
         .with_objective(quadratic_potential)
         .with_parameter("x", 0.5)
         .build()
     )
 
     sampler = (
-        chron.DynamicNestedSampler()
+        diffid.DynamicNestedSampler()
         .with_live_points(32)
         .with_expansion_factor(0.1)
         .with_seed(99)
@@ -67,20 +67,20 @@ def test_dynamic_nested_sampler_runs_on_scalar_problem():
 
 def test_dynamic_nested_invalid_live_points_are_clamped():
     problem = (
-        chron.ScalarBuilder()
+        diffid.ScalarBuilder()
         .with_objective(quadratic_potential)
         .with_parameter("x", 1.0)
         .build()
     )
 
-    sampler = chron.DynamicNestedSampler().with_live_points(1)
+    sampler = diffid.DynamicNestedSampler().with_live_points(1)
     nested = sampler.run(problem)
 
     assert nested.draws >= 0
 
 
 def test_dynamic_nested_requires_problem_instance():
-    sampler = chron.DynamicNestedSampler()
+    sampler = diffid.DynamicNestedSampler()
 
     with pytest.raises(TypeError):
         sampler.run(object())  # type: ignore[arg-type]

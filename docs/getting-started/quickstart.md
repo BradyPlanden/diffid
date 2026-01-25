@@ -14,7 +14,7 @@ The global minimum is at $(x, y) = (1, 1)$ with $f(1, 1) = 0$.
 
 ```python
 import numpy as np
-import chronopt as chron
+import diffid
 
 
 def rosenbrock(x):
@@ -25,7 +25,7 @@ def rosenbrock(x):
 
 # Build the problem
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_objective(rosenbrock)
     .with_parameter("x", 1.5)   # Initial guess
     .with_parameter("y", -1.5)  # Initial guess
@@ -70,7 +70,7 @@ You can specify which optimiser to use:
 
 ```python
 # Use CMA-ES for global search
-optimiser = chron.CMAES().with_max_iter(1000).with_step_size(0.5)
+optimiser = diffid.CMAES().with_max_iter(1000).with_step_size(0.5)
 result = optimiser.run(problem, [1.5, -1.5])
 
 print(f"Optimal parameters: {result.x}")
@@ -81,7 +81,7 @@ print(f"Objective value: {result.value:.3e}")
 
 ```python
 # Use Adam optimiser
-optimiser = chron.Adam().with_max_iter(1000).with_step_size(0.01)
+optimiser = diffid.Adam().with_max_iter(1000).with_step_size(0.01)
 result = optimiser.run(problem, [1.5, -1.5])
 
 print(f"Optimal parameters: {result.x}")
@@ -95,7 +95,7 @@ If you installed the `plotting` extra, you can visualise the optimisation landsc
 ```python
 import numpy as np
 import matplotlib.pyplot as plt
-import chronopt as chron
+import diffid
 
 
 def rosenbrock(x):
@@ -124,7 +124,7 @@ plt.plot(1.0, 1.0, 'r*', markersize=20, label='Global minimum')
 
 # Run optimisation and plot path
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_objective(rosenbrock)
     .with_parameter("x", -1.5)
     .with_parameter("y", -0.5)

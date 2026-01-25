@@ -1,6 +1,6 @@
 # Tutorials
 
-Interactive Jupyter notebooks for hands-on learning with Chronopt.
+Interactive Jupyter notebooks for hands-on learning with Diffid.
 
 ## Learning Paths
 
@@ -8,7 +8,7 @@ Follow these progressive learning paths based on your experience level and goals
 
 ### 🎯 Beginner Track
 
-Perfect for those new to Chronopt or optimisation:
+Perfect for those new to Diffid or optimisation:
 
 <div class="grid cards" markdown>
 
@@ -101,26 +101,26 @@ Complex problems and advanced techniques:
 
 ### Installation
 
-Install Chronopt with Jupyter and plotting support:
+Install Diffid with Jupyter and plotting support:
 
 === "pip"
 
     ```bash
-    pip install chronopt jupyter matplotlib
+    pip install diffid jupyter matplotlib
     ```
 
 === "uv"
 
     ```bash
-    uv pip install chronopt jupyter matplotlib
+    uv pip install diffid jupyter matplotlib
     ```
 
 ### Clone and Run
 
 ```bash
 # Clone the repository
-git clone https://github.com/bradyplanden/chronopt.git
-cd chronopt/docs/tutorials/notebooks
+git clone https://github.com/bradyplanden/diffid.git
+cd diffid/docs/tutorials/notebooks
 
 # Launch Jupyter
 jupyter notebook
@@ -134,13 +134,13 @@ You can also run these notebooks in Google Colab (coming soon with hosted versio
 
 By completing all tutorials, you will:
 
-✅ Understand Chronopt's builder pattern and API
-✅ Optimize both scalar functions and ODE parameters
-✅ Compare and tune different optimisation algorithms
-✅ Quantify parameter uncertainty with MCMC
-✅ Compare models using Bayesian evidence
-✅ Integrate custom ODE solvers (JAX, Julia)
-✅ Make informed decisions about algorithm selection
+- Understand Diffid's builder pattern and API
+- Optimize both scalar functions and ODE parameters
+- Compare and tune different optimisation algorithms
+- Quantify parameter uncertainty with MCMC
+- Compare models using Bayesian evidence
+- Integrate custom ODE solvers (JAX, Julia)
+- Make informed decisions about algorithm selection
 
 ## Notebook Structure
 
@@ -157,7 +157,7 @@ Each tutorial follows a consistent structure:
 
 ## Alternative: Python Scripts
 
-Prefer scripts to notebooks? Check out the [examples directory](https://github.com/bradyplanden/chronopt/tree/main/examples):
+Prefer scripts to notebooks? Check out the [examples directory](https://github.com/bradyplanden/diffid/tree/main/examples):
 
 - `python_problem.py` - Basic scalar optimisation
 - `logistic_growth.py` - ODE fitting
@@ -183,10 +183,10 @@ Feel free to reuse these in your own projects!
 ### Import Errors
 
 ```python
-ModuleNotFoundError: No module named 'chronopt'
+ModuleNotFoundError: No module named 'diffid'
 ```
 
-**Solution**: Install Chronopt: `pip install chronopt`
+**Solution**: Install Diffid: `pip install diffid`
 
 ### Notebook Kernel Issues
 
@@ -222,13 +222,13 @@ If MCMC sampling is slow:
 - **Documentation**: Browse the [complete docs](../index.md)
 - **Examples**: See the [examples gallery](../examples/gallery.md)
 - **API Reference**: Check the [API docs](../api-reference/index.md)
-- **Issues**: Report problems on [GitHub](https://github.com/bradyplanden/chronopt/issues)
+- **Issues**: Report problems on [GitHub](https://github.com/bradyplanden/diffid/issues)
 
 ## Contributing
 
 Found an issue or want to improve a tutorial?
 
-1. Fork the [repository](https://github.com/bradyplanden/chronopt)
+1. Fork the [repository](https://github.com/bradyplanden/diffid)
 2. Edit notebooks in `docs/tutorials/notebooks/`
 3. Test your changes locally
 4. Submit a pull request
@@ -253,7 +253,7 @@ After completing the tutorials:
 
     More applications and use cases
 
--   [:material-github:{ .lg .middle } __GitHub Repository__](https://github.com/bradyplanden/chronopt)
+-   [:material-github:{ .lg .middle } __GitHub Repository__](https://github.com/bradyplanden/diffid)
 
     Source code and development
 

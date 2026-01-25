@@ -1,17 +1,17 @@
-# Chronopt
+# Diffid
 
-**chron**os-**opt**imum is a Rust-first toolkit for time-series inference and optimisation with ergonomic Python bindings. It couples high-performance solvers with a highly customisable builder API for identification and optimisation of differential systems.
+<b>diff</b>erential <b>id</b>entification is a Rust-first toolkit for time-series inference and optimisation with ergonomic Python bindings. It couples high-performance solvers with a highly customisable builder API for identification and optimisation of differential systems.
 
-## Why Chronopt?
+## Why Diffid?
 
-Chronopt offers a different paradigm for a parameter inference library. Conventionally, Python-based inference libraries are constructed via python bindings to a high-performance forward model with the inference algorithms implemented in Python. This package instead introduces an alternative, where the Python layer acts purely as a declarative configuration interface,
+Diffid offers a different paradigm for a parameter inference library. Conventionally, Python-based inference libraries are constructed via python bindings to a high-performance forward model with the inference algorithms implemented in Python. This package instead introduces an alternative, where the Python layer acts purely as a declarative configuration interface,
 while all computationally intensive work (the optimisation / sampling loop, gradient calculations, etc.) happens entirely within the Rust runtime without crossing the FFI boundary repeatedly. This is architecture is presented visually below,
 
 <br>
 
 <figure markdown="span">
-  ![Paradigm Comparison](chronopt.drawio.svg){ width="100%" }
-  <figcaption>Conventional approach vs Chronopt: the optimisation loop moves from Python to Rust</figcaption>
+  ![Paradigm Comparison](assets/diffid.svg){ width="100%" }
+  <figcaption>Conventional vs configuration approach: the optimisation loop moves from Python to Rust</figcaption>
 </figure>
 
 
@@ -30,7 +30,7 @@ while all computationally intensive work (the optimisation / sampling loop, grad
 
     ---
 
-    Get started with Chronopt in 5 minutes with a simple scalar optimisation example.
+    Get started with Diffid in 5 minutes with a simple scalar optimisation example.
 
     [:octicons-arrow-right-24: Quickstart](getting-started/quickstart.md)
 
@@ -62,38 +62,38 @@ while all computationally intensive work (the optimisation / sampling loop, grad
 
 ## Installation
 
-Chronopt targets Python >= 3.11. Windows builds are currently marked experimental.
+Diffid targets Python >= 3.11. Windows builds are currently marked experimental.
 
 === "pip"
 
     ```bash
-    pip install chronopt
+    pip install diffid
 
     # Optional extras for plotting
-    pip install "chronopt[plotting]"
+    pip install "diffid[plotting]"
     ```
 
 === "uv"
 
     ```bash
-    uv pip install chronopt
+    uv pip install diffid
 
     # Optional extras for plotting
-    uv pip install "chronopt[plotting]"
+    uv pip install "diffid[plotting]"
     ```
 
 ## Example: Scalar Optimisation
 
 ```python
 import numpy as np
-import chronopt as chron
+import diffid
 
 def rosenbrock(x):
     value = (1 - x[0]) ** 2 + 100 * (x[1] - x[0] ** 2) ** 2
     return np.asarray([value])
 
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_objective(rosenbrock)
     .with_parameter("x", 1.5)
     .with_parameter("y", -1.5)
@@ -110,7 +110,7 @@ print(f"Success: {result.success}")
 
 ```python
 import numpy as np
-import chronopt as chron
+import diffid
 
 # Logistic growth model in DiffSL
 dsl = """
@@ -124,7 +124,7 @@ observations = np.exp(-1.3 * t)
 data = np.column_stack((t, observations))
 
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("k", 1.0)
@@ -132,7 +132,7 @@ builder = (
 )
 problem = builder.build()
 
-optimiser = chron.CMAES().with_max_iter(1000)
+optimiser = diffid.CMAES().with_max_iter(1000)
 result = optimiser.run(problem, [0.5, 0.5])
 
 print(result.x)

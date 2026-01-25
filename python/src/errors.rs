@@ -2,11 +2,11 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 
-use chronopt_core::errors::{EvaluationError as CoreEvaluationError, TellError as CoreTellError};
+use diffid_core::errors::{EvaluationError as CoreEvaluationError, TellError as CoreTellError};
 
-/// Get the custom exception class from chronopt.errors module
+/// Get the custom exception class from diffid.errors module
 fn get_exception_class<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    let errors_module = PyModule::import(py, "chronopt.errors")?;
+    let errors_module = PyModule::import(py, "diffid.errors")?;
     errors_module.getattr(name)
 }
 

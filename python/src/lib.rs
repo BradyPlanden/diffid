@@ -10,9 +10,9 @@ use std::env;
 #[cfg(feature = "stubgen")]
 use std::path::PathBuf;
 
-use chronopt_core::cost::{CostMetric, GaussianNll, RootMeanSquaredError, SumSquaredError};
-use chronopt_core::prelude::*;
-use chronopt_core::sampler::SamplingResults;
+use diffid_core::cost::{CostMetric, GaussianNll, RootMeanSquaredError, SumSquaredError};
+use diffid_core::prelude::*;
+use diffid_core::sampler::SamplingResults;
 
 #[cfg(feature = "stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pymethods};
@@ -39,7 +39,7 @@ use samplers::Sampler;
 type ParameterSpecEntry = (String, f64, Option<(f64, f64)>);
 
 // Import objective types for the problem enum
-use chronopt_core::problem::{DiffsolObjective, ScalarObjective, VectorObjective};
+use diffid_core::problem::{DiffsolObjective, ScalarObjective, VectorObjective};
 
 // Enum to hold different Problem types internally
 pub(crate) enum DynProblem {
@@ -57,7 +57,7 @@ pub(crate) enum DynProblem {
 }
 
 impl DynProblem {
-    fn evaluate(&self, x: &[f64]) -> Result<f64, chronopt_core::problem::ProblemError> {
+    fn evaluate(&self, x: &[f64]) -> Result<f64, diffid_core::problem::ProblemError> {
         match self {
             Self::Scalar(p) => p.evaluate(x),
             Self::ScalarWithGradient(p) => p.evaluate(x),
@@ -210,7 +210,7 @@ fn gaussian_nll(variance: f64, weight: f64) -> PyResult<PyCostMetric> {
 }
 
 // Problem
-/// Executable optimisation problem wrapping the Chronopt core implementation.
+/// Executable optimisation problem wrapping the Diffid core implementation.
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass(name = "Problem")]
 pub struct PyProblem {
@@ -227,7 +227,7 @@ impl PyProblem {
     /// Evaluate the configured objective function at `x`.
     fn evaluate(&self, x: Vec<f64>) -> PyResult<f64> {
         self.inner.evaluate(&x).map_err(|e| {
-            crate::errors::evaluation_error_to_py(chronopt_core::errors::EvaluationError::message(
+            crate::errors::evaluation_error_to_py(diffid_core::errors::EvaluationError::message(
                 format!("{}", e),
             ))
         })
@@ -239,7 +239,7 @@ impl PyProblem {
             DynProblem::ScalarWithGradient(p) => match p.evaluate_with_gradient(&x) {
                 Ok((_val, grad_opt)) => Ok(grad_opt),
                 Err(e) => Err(crate::errors::evaluation_error_to_py(
-                    chronopt_core::errors::EvaluationError::message(format!("{}", e)),
+                    diffid_core::errors::EvaluationError::message(format!("{}", e)),
                 )),
             },
             _ => Ok(None),
@@ -399,7 +399,7 @@ fn builder_factory_py() -> PyScalarBuilder {
 }
 
 #[pymodule]
-fn _chronopt(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _diffid(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Main classes
     m.add_class::<PyScalarBuilder>()?;
     m.add_class::<PyProblem>()?;
@@ -461,11 +461,11 @@ fn _chronopt(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_submodule(&sampler_module)?;
     m.setattr("sampler", &sampler_module)?;
 
-    // Register submodules for `import chronopt.builder` and `chronopt.cost`
+    // Register submodules for `import diffid.builder` and `diffid.cost`
     let sys_modules = py.import("sys")?.getattr("modules")?;
-    sys_modules.set_item("chronopt.builder", &builder_module)?;
-    sys_modules.set_item("chronopt.cost", &cost_module)?;
-    sys_modules.set_item("chronopt.sampler", &sampler_module)?;
+    sys_modules.set_item("diffid.builder", &builder_module)?;
+    sys_modules.set_item("diffid.cost", &cost_module)?;
+    sys_modules.set_item("diffid.sampler", &sampler_module)?;
 
     // Factory function
     m.add_function(wrap_pyfunction!(builder_factory_py, m)?)?;

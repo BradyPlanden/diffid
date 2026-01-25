@@ -1,5 +1,5 @@
-use chronopt::builders::DiffsolBackend;
-use chronopt::prelude::*;
+use diffid::builders::DiffsolBackend;
+use diffid::prelude::*;
 use nalgebra::DMatrix;
 
 #[test]

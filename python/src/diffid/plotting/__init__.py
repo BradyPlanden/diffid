@@ -1,4 +1,4 @@
-"""Plotting utilities for Chronopt.
+"""Plotting utilities for Diffid.
 
 This module provides convenience helpers for visualising optimisation and sampling
 results. The implementation only depends on ``numpy`` at import time and lazily
@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Tuple, Union
 import numpy as np
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from chronopt import Problem
+    from diffid import Problem
 
 __all__ = [
     "contour",
@@ -70,7 +70,7 @@ def contour(
     ----------
     objective:
         A callable mapping a two-dimensional input to a scalar value, or a
-        :class:`chronopt.Problem` instance whose ``evaluate`` method will be
+        :class:`diffid.Problem` instance whose ``evaluate`` method will be
         invoked.
     x_bounds, y_bounds:
         Inclusive ranges ``(min, max)`` spanning the region to sample along each
@@ -116,7 +116,7 @@ def contour(
         import matplotlib.pyplot as plt
     except ModuleNotFoundError as exc:  # pragma: no cover - import guard
         raise ModuleNotFoundError(
-            "matplotlib is required for plotting; install it via 'pip install chronopt[plotting]'"
+            "matplotlib is required for plotting; install it via 'pip install diffid[plotting]'"
         ) from exc
 
     xs = np.linspace(x_min, x_max, grid_size)
@@ -193,7 +193,7 @@ def contour_2d(
         import matplotlib.pyplot as plt
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
-            "matplotlib is required for plotting; install it via 'pip install chronopt[plotting]'"
+            "matplotlib is required for plotting; install it via 'pip install diffid[plotting]'"
         ) from exc
 
     _setup_plotting()
@@ -294,7 +294,7 @@ def ode_fit(
         import matplotlib.pyplot as plt
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
-            "matplotlib is required for plotting; install it via 'pip install chronopt[plotting]'"
+            "matplotlib is required for plotting; install it via 'pip install diffid[plotting]'"
         ) from exc
 
     _setup_plotting()
@@ -359,7 +359,7 @@ def convergence(
         import matplotlib.pyplot as plt
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
-            "matplotlib is required for plotting; install it via 'pip install chronopt[plotting]'"
+            "matplotlib is required for plotting; install it via 'pip install diffid[plotting]'"
         ) from exc
 
     _setup_plotting()
@@ -420,7 +420,7 @@ def parameter_traces(
         import matplotlib.pyplot as plt
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
-            "matplotlib is required for plotting; install it via 'pip install chronopt[plotting]'"
+            "matplotlib is required for plotting; install it via 'pip install diffid[plotting]'"
         ) from exc
 
     _setup_plotting()
@@ -502,7 +502,7 @@ def parameter_distributions(
         import matplotlib.pyplot as plt
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
-            "matplotlib is required for plotting; install it via 'pip install chronopt[plotting]'"
+            "matplotlib is required for plotting; install it via 'pip install diffid[plotting]'"
         ) from exc
 
     _setup_plotting()
@@ -598,7 +598,7 @@ def compare_models(
         import matplotlib.pyplot as plt
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
-            "matplotlib is required for plotting; install it via 'pip install chronopt[plotting]'"
+            "matplotlib is required for plotting; install it via 'pip install diffid[plotting]'"
         ) from exc
 
     _setup_plotting()

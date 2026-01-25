@@ -1,6 +1,6 @@
 import copy
 
-import chronopt as chron
+import diffid
 import numpy as np
 import pytest
 
@@ -22,14 +22,14 @@ F_i { (r * y) * (1 - (y / k)) }
 
     # Build the problem
     builder = (
-        chron.DiffsolBuilder()
+        diffid.DiffsolBuilder()
         .with_diffsl(ds)
         .with_data(stacked_data)
         .with_tolerances(rtol=1e-6, atol=1e-6)
         .with_parameter("r", 1.0, None)
         .with_parameter("k", 1.0, None)
-        .with_cost(chron.SSE())
-        .with_cost(chron.RMSE())
+        .with_cost(diffid.SSE())
+        .with_cost(diffid.RMSE())
     )
 
     problem = builder.build()
@@ -44,7 +44,7 @@ F_i { (r * y) * (1 - (y / k)) }
 
     # Test that we can optimise the problem
     optimiser = (
-        chron.NelderMead().with_max_iter(500).with_threshold(1e-7).with_patience(10)
+        diffid.NelderMead().with_max_iter(500).with_threshold(1e-7).with_patience(10)
     )
     result = optimiser.run(problem, x0)
     assert result.success
@@ -62,10 +62,10 @@ F_i { a * y }
     data = t_span**2
     stacked_data = np.column_stack((t_span, data))
 
-    metric = chron.RMSE()
+    metric = diffid.RMSE()
 
     builder = (
-        chron.DiffsolBuilder()
+        diffid.DiffsolBuilder()
         .with_diffsl(ds)
         .with_data(stacked_data)
         .with_parameter("a", 1.0, None)
@@ -94,7 +94,7 @@ F_i { a * y }
 
     # Change cost
     builder = builder.remove_cost()
-    builder = builder.with_cost(chron.SSE())
+    builder = builder.with_cost(diffid.SSE())
     problem_5 = builder.build()
 
     # Check that problems are different
@@ -120,7 +120,7 @@ F_i { a * y }
     stacked_data = np.column_stack((t_span, data))
 
     problem = (
-        chron.DiffsolBuilder()
+        diffid.DiffsolBuilder()
         .with_diffsl(ds)
         .with_tolerances(rtol=1e-4, atol=1e-4)
         .with_data(stacked_data)
@@ -128,7 +128,7 @@ F_i { a * y }
         .build()
     )
 
-    optimiser = chron.NelderMead().with_max_iter(0)
+    optimiser = diffid.NelderMead().with_max_iter(0)
 
     result = problem.optimise(optimiser=optimiser)
 
@@ -154,7 +154,7 @@ F_i { (r * y) * (1 - (y / k)) }
 
     def build_problem(cost_metric=None):
         builder = (
-            chron.DiffsolBuilder()
+            diffid.DiffsolBuilder()
             .with_diffsl(ds)
             .with_data(stacked_data)
             .with_tolerances(rtol=1e-6, atol=1e-6)
@@ -166,9 +166,9 @@ F_i { (r * y) * (1 - (y / k)) }
         return builder.build()
 
     sse_problem = build_problem()
-    sse_problem_explicit = build_problem(chron.SSE())
-    rmse_problem = build_problem(chron.RMSE())
-    gaussian_problem = build_problem(chron.GaussianNLL(variance))
+    sse_problem_explicit = build_problem(diffid.SSE())
+    rmse_problem = build_problem(diffid.RMSE())
+    gaussian_problem = build_problem(diffid.GaussianNLL(variance))
 
     test_params = [0.8, 1.2]
     sse_cost = sse_problem.evaluate(test_params)
@@ -189,7 +189,7 @@ F_i { (r * y) * (1 - (y / k)) }
     assert pytest.approx(expected_gaussian, rel=1e-6, abs=1e-9) == gaussian_cost
 
     with pytest.raises(ValueError):
-        chron.GaussianNLL(0.0)
+        diffid.GaussianNLL(0.0)
 
 
 def test_diffsol_bicycle_model_neldermead_recovers_wheelbase() -> None:
@@ -217,7 +217,7 @@ F_i {
     stacked_data = np.column_stack((t_span, y_true, psi_true))
 
     builder = (
-        chron.DiffsolBuilder()
+        diffid.DiffsolBuilder()
         .with_diffsl(ds)
         .with_data(stacked_data)
         .with_tolerances(rtol=1e-6, atol=1e-8)
@@ -227,7 +227,7 @@ F_i {
     problem = builder.build()
 
     optimiser = (
-        chron.NelderMead()
+        diffid.NelderMead()
         .with_max_iter(500)
         .with_threshold(1e-10)
         .with_position_tolerance(1e-8)

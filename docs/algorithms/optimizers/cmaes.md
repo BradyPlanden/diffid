@@ -108,10 +108,10 @@ The algorithm terminates when any condition is met:
 ## Example
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 optimiser = (
-    chron.CMAES()
+    diffid.CMAES()
     .with_max_iter(500)
     .with_step_size(0.3)
     .with_population_size(20)

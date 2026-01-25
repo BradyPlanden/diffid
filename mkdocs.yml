@@ -1,9 +1,9 @@
-site_name: Chronopt
+site_name: Diffid
 site_description: High-performance time-series inference and optimisation toolkit with Rust core and ergonomic Python bindings
 site_author: Brady Planden
-site_url: https://bradyplanden.github.io/chronopt/
-repo_name: bradyplanden/chronopt
-repo_url: https://github.com/bradyplanden/chronopt
+site_url: https://bradyplanden.github.io/diffid/
+repo_name: bradyplanden/diffid
+repo_url: https://github.com/bradyplanden/diffid
 edit_uri: edit/main/docs/
 
 theme:
@@ -124,9 +124,9 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/bradyplanden/chronopt
+      link: https://github.com/bradyplanden/diffid
     - icon: fontawesome/brands/python
-      link: https://pypi.org/project/chronopt/
+      link: https://pypi.org/project/diffid/
   version:
     provider: mike
     default: latest
@@ -195,5 +195,5 @@ nav:
 strict: true  # Fail on warnings
 
 watch:
-  - python/src/chronopt
+  - python/src/diffid
   - docs

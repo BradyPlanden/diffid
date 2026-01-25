@@ -703,7 +703,7 @@ checksum = "930c7171c8df9fb1782bdf9b918ed9ed2d33d1d22300abb754f9085bc48bf8e8"
 
 [[package]]
 name = "diffid"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "criterion",
  "diffsol",
@@ -716,7 +716,7 @@ dependencies = [
 
 [[package]]
 name = "diffid-py"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap 4.5.54",
  "diffid",

@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-01-25
+
+### Features
+- Python package renamed from `chronopt` to `diffid`
+- Ask-Tell interface for optimisers and samplers, enabling stateful step-by-step execution
+- Optimisers unified into an `Optimiser` enum with shared `run()` API
+- `ParameterRange` type with improved Bounds API supporting unbounded parameters
+- Python bindings enhanced with magic methods (`__repr__`, `__str__`, etc.) for better REPL experience
+- Cached Diffsol parallelisation with single solver build per thread and improved multithreaded error management
+- Improved error hierarchy with `EvaluationError`, `TellError`, and `ProblemBuilderError` distinctions
+- Added MCMC proposals for Dynamic Nested Sampling with corresponding benchmarks
+
+### Breaking Changes
+- Result attributes renamed: `sigma0` → `step_size`, standardised to `evaluations` and `iterations`
+- Codebase aligned to British English spelling conventions
+- Samplers refactored with Ask-Tell interface, matching optimiser patterns
+- Module restructure: `types.rs` moved to library level, error types consolidated
+- `ScalarEvaluation` and `GradientEvaluation` now use `TryFrom` trait implementations
+- `Objective` trait extended with `has_gradient()` method
+- Optimiser `.tell()` and `.run()` methods use relaxed error management
+
+### Fixes
+- Incorrectly indexed proposal storage in Dynamic Nested Sampling
+- Patience convergence criterion now uses proper type conversions
+
 ## [0.2.0] - 2025-12-01
 
 ### Features

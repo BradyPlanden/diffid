@@ -1,5 +1,5 @@
-use chronopt::prelude::*;
-use chronopt::problem::ParameterRange;
+use diffid::prelude::*;
+use diffid::problem::ParameterRange;
 
 /// Test evidence calculation against known analytical result.
 /// For a Gaussian N(x | 0, σ²) with uniform prior U(a, b),

@@ -23,11 +23,11 @@ MCMC sampling for exploring parameter posterior distributions.
 ### Planned API
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 # Will be available in a future release
 sampler = (
-    chron.MetropolisHastings()
+    diffid.MetropolisHastings()
     .with_max_iter(10000)
     .with_step_size(0.1)
     .with_burn_in(1000)
@@ -72,11 +72,11 @@ Nested sampling for calculating model evidence (marginal likelihood) for model c
 ### Planned API
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 # Will be available in a future release
 sampler = (
-    chron.DynamicNestedSampling()
+    diffid.DynamicNestedSampling()
     .with_max_iter(5000)
     .with_n_live_points(500)
     .with_seed(42)
@@ -147,11 +147,11 @@ graph TD
 ```python
 # Required for samplers
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("k", 1.0)
-    .with_cost_metric(chron.GaussianNLL())  # Required!
+    .with_cost_metric(diffid.GaussianNLL())  # Required!
 )
 ```
 
@@ -164,26 +164,26 @@ SSE and RMSE cannot be used with samplers as they lack probabilistic interpretat
 Typical workflow: optimise first, then sample for uncertainty:
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 # 1. Build problem with GaussianNLL
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("k", 1.0)
-    .with_cost_metric(chron.GaussianNLL())
+    .with_cost_metric(diffid.GaussianNLL())
 )
 problem = builder.build()
 
 # 2. Find MAP estimate with optimiser
-optimiser = chron.CMAES().with_max_iter(1000)
+optimiser = diffid.CMAES().with_max_iter(1000)
 opt_result = optimiser.run(problem, [1.0])
 
 print(f"MAP estimate: {opt_result.x}")
 
 # 3. Sample around MAP for uncertainty (future API)
-# sampler = chron.MetropolisHastings().with_max_iter(10000)
+# sampler = diffid.MetropolisHastings().with_max_iter(10000)
 # sample_result = sampler.run(problem, opt_result.x)
 # print(f"Posterior mean: {sample_result.samples.mean(axis=0)}")
 # print(f"Posterior std: {sample_result.samples.std(axis=0)}")
@@ -205,8 +205,8 @@ Once samplers are available, see:
 
 Track sampler implementation progress:
 
-- [GitHub Issue #XXX](https://github.com/bradyplanden/chronopt) - Metropolis-Hastings
-- [GitHub Issue #XXX](https://github.com/bradyplanden/chronopt) - Dynamic Nested Sampling
+- [GitHub Issue #XXX](https://github.com/bradyplanden/diffid) - Metropolis-Hastings
+- [GitHub Issue #XXX](https://github.com/bradyplanden/diffid) - Dynamic Nested Sampling
 
 ---
 

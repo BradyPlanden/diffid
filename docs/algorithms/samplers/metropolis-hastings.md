@@ -104,9 +104,9 @@ Metropolis-Hastings requires a **negative log-likelihood** cost metric:
 
 ```python
 problem = (
-    chron.ScalarProblemBuilder()
+    diffid.ScalarProblemBuilder()
     .with_objective(model_fn)
-    .with_cost_metric(chron.CostMetric.GaussianNLL)  # Required
+    .with_cost_metric(diffid.CostMetric.GaussianNLL)  # Required
     .build()
 )
 ```
@@ -114,10 +114,10 @@ problem = (
 ## Example
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 sampler = (
-    chron.MetropolisHastings()
+    diffid.MetropolisHastings()
     .with_iterations(5000)
     .with_num_chains(4)
     .with_step_size(0.05)

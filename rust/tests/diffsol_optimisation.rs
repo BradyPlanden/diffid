@@ -1,4 +1,4 @@
-use chronopt::prelude::*;
+use diffid::prelude::*;
 use nalgebra::DMatrix;
 
 #[test]

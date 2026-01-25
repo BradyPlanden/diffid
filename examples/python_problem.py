@@ -1,4 +1,4 @@
-import chronopt as chron
+import diffid
 import numpy as np
 
 
@@ -10,11 +10,11 @@ def rosenbrock(x):
 
 # Simple API
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_objective(rosenbrock)
     .with_parameter("x", 1.0)
     .with_parameter("y", 1.0)
-    .with_optimiser(chron.NelderMead().with_max_iter(1000))
+    .with_optimiser(diffid.NelderMead().with_max_iter(1000))
 )
 problem = builder.build()
 result = problem.optimise(initial=[10.0, 10.0])

@@ -1,6 +1,6 @@
-use chronopt::builders::DiffsolBackend;
-use chronopt::prelude::*;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use diffid::builders::DiffsolBackend;
+use diffid::prelude::*;
 use nalgebra::DMatrix;
 use std::time::Duration;
 

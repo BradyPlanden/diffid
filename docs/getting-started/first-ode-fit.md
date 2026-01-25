@@ -1,6 +1,6 @@
 # First ODE Fit
 
-This tutorial demonstrates how to fit ordinary differential equations (ODEs) to data using Chronopt's DiffSL integration with the Diffsol solver.
+This tutorial demonstrates how to fit ordinary differential equations (ODEs) to data using Diffid's DiffSL integration with the Diffsol solver.
 
 ## The Problem: Logistic Growth
 
@@ -14,7 +14,7 @@ where: $r$ is the growth rate, $k$ is the carrying capacity, and $y$ is the popu
 
 ```python
 import numpy as np
-import chronopt as chron
+import diffid as chron
 
 # Define the ODE model in DiffSL syntax
 dsl = """
@@ -37,7 +37,7 @@ data = np.column_stack((t, observations))
 
 # Build the problem
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("r", 0.5)  # Initial guess for growth rate
@@ -47,7 +47,7 @@ builder = (
 problem = builder.build()
 
 # Run optimisation with CMA-ES
-optimiser = chron.CMAES().with_max_iter(1000)
+optimiser = diffid.CMAES().with_max_iter(1000)
 result = optimiser.run(problem, [0.5, 1.0])
 
 # Display results
@@ -70,7 +70,7 @@ F_i { (r * y) * (1 - (y / k)) }  # Right-hand side of dy/dt = ...
 
 ## Data Format
 
-Chronopt expects data as a 2D NumPy array where:
+Diffid expects data as a 2D NumPy array where:
 
 - **First column**: Time points
 - **Remaining columns**: Observed values for each variable
@@ -158,14 +158,14 @@ F_i { k * sin(t) - y }
 
 ## Cost Metrics
 
-By default, Chronopt uses sum of squared errors (SSE). You can specify different cost metrics as shown below. See the [Cost Metrics Guide](../guides/cost-metrics.md) for more details.
+By default, Diffid uses sum of squared errors (SSE). You can specify different cost metrics as shown below. See the [Cost Metrics Guide](../guides/cost-metrics.md) for more details.
 
 ```python
-from chronopt import GaussianNLL, RMSE
+from diffid import GaussianNLL, RMSE
 
 # Use Gaussian negative log-likelihood
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("k", 1.0)
@@ -191,7 +191,7 @@ result = problem.optimise()  # Uses Nelder-Mead
 ### CMA-ES
 
 ```python
-optimiser = chron.CMAES().with_max_iter(1000).with_step_size(0.5)
+optimiser = diffid.CMAES().with_max_iter(1000).with_step_size(0.5)
 result = optimiser.run(problem, initial_guess)
 ```
 
@@ -200,7 +200,7 @@ result = optimiser.run(problem, initial_guess)
 ### Adam
 
 ```python
-optimiser = chron.Adam().with_max_iter(1000).with_step_size(0.01)
+optimiser = diffid.Adam().with_max_iter(1000).with_step_size(0.01)
 result = optimiser.run(problem, initial_guess)
 ```
 

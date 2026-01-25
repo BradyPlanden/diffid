@@ -1,6 +1,6 @@
 # Algorithms
 
-Detailed documentation for each optimisation and sampling algorithm in Chronopt.
+Detailed documentation for each optimisation and sampling algorithm in Diffid.
 
 ## Optimisers
 
@@ -114,7 +114,7 @@ All algorithms are implemented in Rust for performance:
 - **Numerically stable**: Careful floating-point handling
 - **Well-tested**: Comprehensive test suite
 
-Source code: [rust/src/optimisers/](https://github.com/bradyplanden/chronopt/tree/main/rust/src/optimisers)
+Source code: [rust/src/optimisers/](https://github.com/bradyplanden/diffid/tree/main/rust/src/optimisers)
 
 ## References
 

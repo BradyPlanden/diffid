@@ -1,4 +1,4 @@
-import chronopt as chron
+import diffid
 import numpy as np
 
 
@@ -30,20 +30,20 @@ data = np.column_stack((t_span, height + noise, velocity + noise))
 # Configure the problem
 initial_values = [4.0, 4.0]
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("g", initial_values[0])
     .with_parameter("h", initial_values[1])
     .with_parallel(True)
-    .with_cost(chron.GaussianNLL(variance=0.01))
+    .with_cost(diffid.GaussianNLL(variance=0.01))
 )
 
 problem = builder.build()
 
 # Setup sampler
 sampler = (
-    chron.MetropolisHastings()
+    diffid.MetropolisHastings()
     .with_num_chains(100)
     .with_iterations(1000)
     .with_step_size(0.25)

@@ -2,7 +2,7 @@ use numpy::{PyArray1, ToPyArray};
 use pyo3::prelude::*;
 use std::time::Duration;
 
-use chronopt_core::prelude::OptimisationResults;
+use diffid_core::prelude::OptimisationResults;
 
 #[cfg(feature = "stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -18,7 +18,7 @@ use crate::{PyNestedSamples, PySamples};
 /// --------
 /// >>> state = optimiser.init(problem, initial=[1.0, 2.0])
 /// >>> result = state.ask()
-/// >>> if isinstance(result, chronopt.Evaluate):
+/// >>> if isinstance(result, diffid.Evaluate):
 /// ...     values = [problem.evaluate(pt) for pt in result.points]
 /// ...     state.tell(values)
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
@@ -55,7 +55,7 @@ impl PyEvaluate {
 /// --------
 /// >>> while True:
 /// ...     result = state.ask()
-/// ...     if isinstance(result, chronopt.Done):
+/// ...     if isinstance(result, diffid.Done):
 /// ...         print(f"Optimization complete: {result.result}")
 /// ...         break
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]

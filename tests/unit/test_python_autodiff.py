@@ -1,4 +1,4 @@
-import chronopt as chron
+import diffid
 import numpy as np
 import pytest
 
@@ -26,7 +26,7 @@ def _quadratic_gradient(x):
 def quadratic_problem():
     """Creates a 3D quadratic optimization problem using ScalarBuilder"""
     return (
-        chron.ScalarBuilder()
+        diffid.ScalarBuilder()
         .with_objective(_quadratic_objective)
         .with_gradient(_quadratic_gradient)
         .with_parameter("x1", 1.0)

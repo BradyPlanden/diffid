@@ -1,10 +1,10 @@
 # API Reference
 
-Complete API documentation for Chronopt's Python and Rust interfaces.
+Complete API documentation for Diffid's Python and Rust interfaces.
 
 ## Python API
 
-Chronopt provides a comprehensive Python API with full type hints and automatic documentation.
+Diffid provides a comprehensive Python API with full type hints and automatic documentation.
 
 <div class="grid cards" markdown>
 
@@ -54,12 +54,12 @@ Chronopt provides a comprehensive Python API with full type hints and automatic 
 
 The Rust core provides high-performance implementations of all algorithms.
 
-[:octicons-arrow-right-24: Rust Documentation on docs.rs](https://docs.rs/chronopt/latest/chronopt/)
+[:octicons-arrow-right-24: Rust Documentation on docs.rs](https://docs.rs/diffid/latest/diffid/)
 
 ## Module Structure
 
 ```
-chronopt/
+diffid/
 ├── ScalarBuilder        # Direct function optimisation
 ├── DiffsolBuilder       # ODE fitting with DiffSL/Diffsol
 ├── VectorBuilder        # Custom solver integration
@@ -80,7 +80,7 @@ chronopt/
 All Python functions include comprehensive type hints:
 
 ```python
-from chronopt import ScalarBuilder, CMAES, OptimisationResults
+from diffid import ScalarBuilder, CMAES, OptimisationResults
 import numpy.typing as npt
 
 def optimize_function(
@@ -106,7 +106,7 @@ All builders maintain parameter order based on the sequence of `.with_parameter(
 
 ```python
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_parameter("x", 1.0)  # Index 0
     .with_parameter("y", 2.0)  # Index 1
 )

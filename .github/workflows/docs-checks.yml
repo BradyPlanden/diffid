@@ -74,18 +74,18 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install chronopt and dependencies
+      - name: Install diffid and dependencies
         run: |
           uv pip install --system pytest
           uv pip install --system mkdocs mkdocs-material mkdocstrings[python] \
                           mkdocs-git-revision-date-localized-plugin \
                           mkdocs-minify-plugin mkdocs-jupyter pymdown-extensions
-          # Install chronopt if possible (may fail if rust build needed)
-          uv pip install --system -e python/ || echo "⚠️  Could not install chronopt (rust build required)"
+          # Install diffid if possible (may fail if rust build needed)
+          uv pip install --system -e python/ || echo "⚠️  Could not install diffid (rust build required)"
 
       - name: Run documentation tests
         run: pytest tests/test_docs.py -v
-        continue-on-error: true  # Don't fail if chronopt not installed
+        continue-on-error: true  # Don't fail if diffid not installed
 
   notebook-validation:
     name: Validate Notebooks
@@ -119,7 +119,7 @@ jobs:
               exit 1
             fi
           done
-          echo "✅ No error outputs found in notebooks"
+          echo "No error outputs found in notebooks"
 
   spelling-check:
     name: Spelling Check

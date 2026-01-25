@@ -19,7 +19,7 @@ def custom_solver(params):
     return predictions
 
 builder = (
-    chron.VectorBuilder()
+    diffid.VectorBuilder()
     .with_objective(custom_solver)
     .with_data(data)
     .with_parameter("alpha", 1.0)
@@ -29,8 +29,8 @@ builder = (
 ## Examples
 
 See the predator-prey examples:
-- [predator_prey_diffrax.py](https://github.com/bradyplanden/chronopt/blob/main/examples/predator_prey/predator_prey_diffrax.py)
-- [predator_prey_diffeqpy.py](https://github.com/bradyplanden/chronopt/blob/main/examples/predator_prey/predator_prey_diffeqpy.py)
+- [predator_prey_diffrax.py](https://github.com/bradyplanden/diffid/blob/main/examples/predator_prey/predator_prey_diffrax.py)
+- [predator_prey_diffeqpy.py](https://github.com/bradyplanden/diffid/blob/main/examples/predator_prey/predator_prey_diffeqpy.py)
 
 ## See Also
 

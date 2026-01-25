@@ -12,7 +12,7 @@ Optimisation algorithms for finding parameter values that minimise the objective
 
 ## Nelder-Mead
 
-::: chronopt.NelderMead
+::: diffid.NelderMead
     options:
       show_root_heading: true
       show_source: false
@@ -20,11 +20,11 @@ Optimisation algorithms for finding parameter values that minimise the objective
 ### Example Usage
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 # Create optimiser with custom settings
 optimiser = (
-    chron.NelderMead()
+    diffid.NelderMead()
     .with_max_iter(5000)
     .with_step_size(0.1)
     .with_threshold(1e-6)
@@ -75,7 +75,7 @@ See the [Nelder-Mead Algorithm Guide](../../algorithms/optimizers/nelder-mead.md
 
 ## CMA-ES
 
-::: chronopt.CMAES
+::: diffid.CMAES
     options:
       show_root_heading: true
       show_source: false
@@ -83,11 +83,11 @@ See the [Nelder-Mead Algorithm Guide](../../algorithms/optimizers/nelder-mead.md
 ### Example Usage
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 # Create CMA-ES optimiser
 optimiser = (
-    chron.CMAES()
+    diffid.CMAES()
     .with_max_iter(1000)
     .with_step_size(0.5)
     .with_population_size(20)
@@ -148,7 +148,7 @@ See the [CMA-ES Algorithm Guide](../../algorithms/optimizers/cmaes.md) for more 
 
 ## Adam
 
-::: chronopt.Adam
+::: diffid.Adam
     options:
       show_root_heading: true
       show_source: false
@@ -156,11 +156,11 @@ See the [CMA-ES Algorithm Guide](../../algorithms/optimizers/cmaes.md) for more 
 ### Example Usage
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 # Create Adam optimiser
 optimiser = (
-    chron.Adam()
+    diffid.Adam()
     .with_max_iter(5000)
     .with_step_size(0.01)  # Learning rate
     .with_betas(0.9, 0.999)
@@ -236,7 +236,7 @@ result = problem.optimise()  # Uses Nelder-Mead with defaults
 
 ```python
 optimiser = (
-    chron.CMAES()
+    diffid.CMAES()
     .with_max_iter(10000)         # Maximum iterations
     .with_threshold(1e-8)         # Objective threshold
     .with_patience(300.0)         # Patience in seconds
@@ -253,7 +253,7 @@ The optimiser stops when:
 For stochastic optimisers (CMA-ES), set a seed:
 
 ```python
-optimiser = chron.CMAES().with_seed(42)
+optimiser = diffid.CMAES().with_seed(42)
 result1 = optimiser.run(problem, [0.0, 0.0])
 result2 = optimiser.run(problem, [0.0, 0.0])
 # result1 == result2 (same random sequence)

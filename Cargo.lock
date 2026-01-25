@@ -269,33 +269,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chronopt"
-version = "0.2.0"
-dependencies = [
- "criterion",
- "diffsol",
- "nalgebra",
- "proptest",
- "rand 0.9.2",
- "rand_distr",
- "rayon",
-]
-
-[[package]]
-name = "chronopt-py"
-version = "0.2.0"
-dependencies = [
- "chronopt",
- "clap 4.5.54",
- "nalgebra",
- "numpy",
- "pyo3",
- "pyo3-build-config",
- "pyo3-stub-gen",
- "pyo3-stub-gen-derive",
-]
-
-[[package]]
 name = "clang-sys"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -727,6 +700,33 @@ name = "defer"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "930c7171c8df9fb1782bdf9b918ed9ed2d33d1d22300abb754f9085bc48bf8e8"
+
+[[package]]
+name = "diffid"
+version = "0.2.0"
+dependencies = [
+ "criterion",
+ "diffsol",
+ "nalgebra",
+ "proptest",
+ "rand 0.9.2",
+ "rand_distr",
+ "rayon",
+]
+
+[[package]]
+name = "diffid-py"
+version = "0.2.0"
+dependencies = [
+ "clap 4.5.54",
+ "diffid",
+ "nalgebra",
+ "numpy",
+ "pyo3",
+ "pyo3-build-config",
+ "pyo3-stub-gen",
+ "pyo3-stub-gen-derive",
+]
 
 [[package]]
 name = "diffsl"

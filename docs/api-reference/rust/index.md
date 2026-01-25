@@ -1,12 +1,12 @@
 # Rust API Documentation
 
-Chronopt's Rust core provides high-performance implementations of all optimisation and sampling algorithms.
+Diffid's Rust core provides high-performance implementations of all optimisation and sampling algorithms.
 
 ## Official Documentation
 
 The complete Rust API documentation is hosted on docs.rs:
 
-**[:octicons-arrow-right-24: Chronopt Rust Documentation on docs.rs](https://docs.rs/chronopt/latest/chronopt/)**
+**[:octicons-arrow-right-24: Diffid Rust Documentation on docs.rs](https://docs.rs/diffid/latest/diffid/)**
 
 ## When to Use the Rust API
 
@@ -16,14 +16,14 @@ Consider using the Rust crate directly when:
 - Building **Rust-native applications**
 - Need **zero-copy** data handling
 - Deploying to **embedded systems** or **constrained environments**
-- Building **custom tooling** around Chronopt
+- Building **custom tooling** around Diffid
 
 For most users, the Python API provides excellent performance with easier integration.
 
 ## Crate Structure
 
 ```
-chronopt/
+diffid/
 ├── builders/           # Problem builders (ScalarBuilder, DiffsolBuilder, etc.)
 ├── optimisers/         # Optimisation algorithms
 │   ├── nelder_mead/    # Nelder-Mead simplex
@@ -38,7 +38,7 @@ chronopt/
 ## Quick Example
 
 ```rust
-use chronopt::prelude::*;
+use diffid::prelude::*;
 use ndarray::array;
 
 // Define objective function
@@ -64,13 +64,13 @@ fn main() {
 }
 ```
 
-## Adding Chronopt to Your Project
+## Adding Diffid to Your Project
 
 Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-chronopt = "0.2"
+diffid = "0.2"
 ndarray = "0.15"
 ```
 
@@ -78,7 +78,7 @@ For ODE support with DiffSL:
 
 ```toml
 [dependencies]
-chronopt = { version = "0.2", features = ["diffsol"] }
+diffid = { version = "0.2", features = ["diffsol"] }
 ```
 
 ## Key Rust Features
@@ -149,7 +149,7 @@ Key modules (click through on docs.rs for full details):
 Problem construction with fluent API.
 
 ```rust
-pub use chronopt::builders::{ScalarBuilder, DiffsolBuilder, VectorBuilder};
+pub use diffid::builders::{ScalarBuilder, DiffsolBuilder, VectorBuilder};
 ```
 
 ### `optimisers`
@@ -157,7 +157,7 @@ pub use chronopt::builders::{ScalarBuilder, DiffsolBuilder, VectorBuilder};
 Optimisation algorithms.
 
 ```rust
-pub use chronopt::optimisers::{NelderMead, CMAES, Adam};
+pub use diffid::optimisers::{NelderMead, CMAES, Adam};
 ```
 
 ### `cost`
@@ -165,7 +165,7 @@ pub use chronopt::optimisers::{NelderMead, CMAES, Adam};
 Cost metrics for objective functions.
 
 ```rust
-pub use chronopt::cost::{CostMetric, SSE, RMSE, GaussianNLL};
+pub use diffid::cost::{CostMetric, SSE, RMSE, GaussianNLL};
 ```
 
 ### `problem`
@@ -173,7 +173,7 @@ pub use chronopt::cost::{CostMetric, SSE, RMSE, GaussianNLL};
 Problem types and evaluation.
 
 ```rust
-pub use chronopt::problem::{Problem, ScalarProblem, VectorProblem};
+pub use diffid::problem::{Problem, ScalarProblem, VectorProblem};
 ```
 
 ## Performance Tips
@@ -194,7 +194,7 @@ cargo run --example rosenbrock
 cargo run --example ode_fitting
 ```
 
-Browse examples on GitHub: [rust/examples/](https://github.com/bradyplanden/chronopt/tree/main/rust/examples)
+Browse examples on GitHub: [rust/examples/](https://github.com/bradyplanden/diffid/tree/main/rust/examples)
 
 ## See Also
 

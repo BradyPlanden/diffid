@@ -3,7 +3,7 @@
 ## High-Level Overview
 
 <figure markdown="span">
-  ![Paradigm Comparison](../chronopt.drawio.svg){ width="100%" }
+  ![Paradigm Comparison](../diffid.svg){ width="100%" }
 </figure>
 
 ## Key Design Patterns

@@ -1,9 +1,9 @@
 # Examples Gallery
 
-Visual gallery of Chronopt applications and use cases.
+Visual gallery of Diffid applications and use cases.
 
 !!! info "Gallery Under Construction"
-    This gallery is being populated with examples. Check the [examples directory](https://github.com/bradyplanden/chronopt/tree/main/examples) for current code.
+    This gallery is being populated with examples. Check the [examples directory](https://github.com/bradyplanden/diffid/tree/main/examples) for current code.
 
 ## Available Examples
 
@@ -14,8 +14,8 @@ Classic 2D optimisation test problem.
 
 **Files:**
 
-- [python_problem.py](https://github.com/bradyplanden/chronopt/blob/main/examples/python_problem.py)
-- [python_contour.py](https://github.com/bradyplanden/chronopt/blob/main/examples/python_contour.py)
+- [python_problem.py](https://github.com/bradyplanden/diffid/blob/main/examples/python_problem.py)
+- [python_contour.py](https://github.com/bradyplanden/diffid/blob/main/examples/python_contour.py)
 
 **Topics:** ScalarBuilder, contour plots, optimiser comparison
 
@@ -26,7 +26,7 @@ Classic 2D optimisation test problem.
 #### Logistic Growth
 Single-variable ODE with DiffSL.
 
-**File:** [logistic_growth.py](https://github.com/bradyplanden/chronopt/blob/main/examples/logistic_growth.py)
+**File:** [logistic_growth.py](https://github.com/bradyplanden/diffid/blob/main/examples/logistic_growth.py)
 
 **Topics:** DiffsolBuilder, DiffSL syntax, data fitting
 
@@ -37,8 +37,8 @@ Physics-based model with event handling.
 
 **Files:**
 
-- [bouncy_ball.py](https://github.com/bradyplanden/chronopt/blob/main/examples/bouncy_ball.py)
-- [bouncy_ball_sampling.py](https://github.com/bradyplanden/chronopt/blob/main/examples/bouncy_ball_sampling.py)
+- [bouncy_ball.py](https://github.com/bradyplanden/diffid/blob/main/examples/bouncy_ball.py)
+- [bouncy_ball_sampling.py](https://github.com/bradyplanden/diffid/blob/main/examples/bouncy_ball_sampling.py)
 
 **Topics:** Event detection, parameter uncertainty, MCMC
 
@@ -51,8 +51,8 @@ Comparing different bicycle dynamics formulations.
 
 **Files:**
 
-- [bicycle_model_diffsol.py](https://github.com/bradyplanden/chronopt/blob/main/examples/bicycle_model_diffsol.py)
-- [bicycle_model_evidence.py](https://github.com/bradyplanden/chronopt/blob/main/examples/bicycle_model_evidence.py)
+- [bicycle_model_diffsol.py](https://github.com/bradyplanden/diffid/blob/main/examples/bicycle_model_diffsol.py)
+- [bicycle_model_evidence.py](https://github.com/bradyplanden/diffid/blob/main/examples/bicycle_model_evidence.py)
 
 **Topics:** Model selection, evidence calculation, Bayes factors
 
@@ -65,9 +65,9 @@ Lotka-Volterra equations with multiple solver backends.
 
 **Files:**
 
-- [predator_prey_diffsol.py](https://github.com/bradyplanden/chronopt/blob/main/examples/predator_prey/predator_prey_diffsol.py)
-- [predator_prey_diffrax.py](https://github.com/bradyplanden/chronopt/blob/main/examples/predator_prey/predator_prey_diffrax.py)
-- [predator_prey_diffeqpy.py](https://github.com/bradyplanden/chronopt/blob/main/examples/predator_prey/predator_prey_diffeqpy.py)
+- [predator_prey_diffsol.py](https://github.com/bradyplanden/diffid/blob/main/examples/predator_prey/predator_prey_diffsol.py)
+- [predator_prey_diffrax.py](https://github.com/bradyplanden/diffid/blob/main/examples/predator_prey/predator_prey_diffrax.py)
+- [predator_prey_diffeqpy.py](https://github.com/bradyplanden/diffid/blob/main/examples/predator_prey/predator_prey_diffeqpy.py)
 
 **Topics:** VectorBuilder, JAX/Diffrax, Julia/DifferentialEquations.jl, performance comparison
 
@@ -78,14 +78,14 @@ Lotka-Volterra equations with multiple solver backends.
 Clone the repository:
 
 ```bash
-git clone https://github.com/bradyplanden/chronopt.git
-cd chronopt
+git clone https://github.com/bradyplanden/diffid.git
+cd diffid
 ```
 
 Install dependencies:
 
 ```bash
-pip install chronopt matplotlib
+pip install diffid matplotlib
 ```
 
 Run an example:

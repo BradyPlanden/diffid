@@ -3,10 +3,10 @@
 ### Import Error
 
 ```python
-ImportError: No module named 'chronopt'
+ImportError: No module named 'diffid'
 ```
 
-**Solution**: Install Chronopt: `pip install chronopt`
+**Solution**: Install Diffid: `pip install diffid`
 
 ### Poor Fit Quality
 
@@ -29,4 +29,4 @@ ImportError: No module named 'chronopt'
 
 - [Installation](../getting-started/installation.md)
 - [Tuning Optimisers](tuning-optimizers.md)
-- [GitHub Issues](https://github.com/bradyplanden/chronopt/issues)
+- [GitHub Issues](https://github.com/bradyplanden/diffid/issues)

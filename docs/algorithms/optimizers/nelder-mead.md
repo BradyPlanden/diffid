@@ -88,10 +88,10 @@ The algorithm terminates when any of the following conditions is met:
 ## Example
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 optimiser = (
-    chron.NelderMead()
+    diffid.NelderMead()
     .with_max_iter(5000)
     .with_step_size(0.1)
     .with_threshold(1e-8)

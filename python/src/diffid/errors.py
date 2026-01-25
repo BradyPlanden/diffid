@@ -1,30 +1,30 @@
-"""Custom exception hierarchy for Chronopt.
+"""Custom exception hierarchy for Diffid.
 
-This module defines the exception hierarchy used throughout the chronopt library,
+This module defines the exception hierarchy used throughout the diffid library,
 providing clear and actionable error messages for different failure modes.
 """
 
 from __future__ import annotations
 
 
-class ChronoptError(Exception):
-    """Base exception class for all Chronopt errors.
+class DiffidError(Exception):
+    """Base exception class for all Diffid errors.
 
-    All custom exceptions in the chronopt library inherit from this class,
-    making it easy to catch any chronopt-specific error.
+    All custom exceptions in the diffid library inherit from this class,
+    making it easy to catch any diffid-specific error.
 
     Examples
     --------
     >>> try:
     ...     optimiser.run(problem, initial=[1.0, 2.0])
-    ... except ChronoptError as e:
-    ...     print(f"Chronopt error occurred: {e}")
+    ... except DiffidError as e:
+    ...     print(f"Diffid error occurred: {e}")
     """
 
     pass
 
 
-class EvaluationError(ChronoptError):
+class EvaluationError(DiffidError):
     """Raised when objective function evaluation fails.
 
     This exception is raised when the objective function (or callback) throws
@@ -65,7 +65,7 @@ class EvaluationError(ChronoptError):
         self.original_error = original_error
 
 
-class BuildError(ChronoptError):
+class BuildError(DiffidError):
     """Raised when problem or optimiser construction fails.
 
     This exception is raised during the build phase when invalid parameters
@@ -84,7 +84,7 @@ class BuildError(ChronoptError):
     pass
 
 
-class TellError(ChronoptError):
+class TellError(DiffidError):
     """Base exception for errors during the 'tell' phase of ask-tell interface.
 
     This exception is raised when providing results back to an optimiser or
@@ -161,7 +161,7 @@ class AlreadyTerminated(TellError):
 
 
 __all__ = [
-    "ChronoptError",
+    "DiffidError",
     "EvaluationError",
     "BuildError",
     "TellError",

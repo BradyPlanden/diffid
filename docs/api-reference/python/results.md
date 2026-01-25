@@ -4,7 +4,7 @@ Result objects returned by optimisers and samplers containing optimal parameters
 
 ## OptimisationResults
 
-::: chronopt.OptimisationResults
+::: diffid.OptimisationResults
     options:
       show_root_heading: true
       show_source: false
@@ -14,7 +14,7 @@ All optimisers return an `OptimisationResults` object with the following attribu
 ### Example Usage
 
 ```python
-import chronopt as chron
+import diffid as chron
 
 problem = builder.build()
 result = problem.optimise()
@@ -46,7 +46,7 @@ Parameters are ordered according to `.with_parameter()` calls:
 
 ```python
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_parameter("alpha", 1.0)  # result.x[0]
     .with_parameter("beta", 2.0)   # result.x[1]
 )
@@ -172,7 +172,7 @@ Results don't store parameter names. Track them manually if needed:
 ```python
 param_names = ["alpha", "beta", "gamma"]
 
-builder = chron.ScalarBuilder().with_objective(func)
+builder = diffid.ScalarBuilder().with_objective(func)
 for name in param_names:
     builder = builder.with_parameter(name, 1.0)
 

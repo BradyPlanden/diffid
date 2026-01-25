@@ -1,6 +1,6 @@
-# Getting Started with Chronopt
+# Getting Started with Diffid
 
-Welcome to Chronopt! This section will help you get up and running with time-series inference and optimisation.
+Welcome to Diffid! This section will help you get up and running with time-series inference and optimisation.
 
 ## Learning Path
 
@@ -22,7 +22,7 @@ We recommend following this sequence:
 
 By the end of this section, you will be able to:
 
-- Install Chronopt on your platform
+- Install Diffid on your platform
 - Create and solve scalar optimisation problems
 - Fit differential equations to experimental data
 - Understand the builder pattern and problem types
@@ -34,6 +34,6 @@ If you encounter issues:
 
 1. Check the [Troubleshooting](../guides/troubleshooting.md) guide
 2. Browse the [examples gallery](../examples/gallery.md)
-3. Open an issue on [GitHub](https://github.com/bradyplanden/chronopt/issues)
+3. Open an issue on [GitHub](https://github.com/bradyplanden/diffid/issues)
 
 Ready to begin? Start with [Installation](installation.md).

@@ -2,9 +2,9 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use std::time::Duration;
 
-use chronopt_core::common::{AskResult, Bounds};
-use chronopt_core::optimisers::{AdamState, CMAESState, NelderMeadState};
-use chronopt_core::prelude::*;
+use diffid_core::common::{AskResult, Bounds};
+use diffid_core::optimisers::{AdamState, CMAESState, NelderMeadState};
+use diffid_core::prelude::*;
 
 #[cfg(feature = "stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -28,9 +28,9 @@ pub(crate) enum Optimiser {
 #[cfg(feature = "stubgen")]
 #[allow(dead_code)]
 pub(crate) fn optimiser_type_info() -> TypeInfo {
-    TypeInfo::unqualified("chronopt._chronopt.NelderMead")
-        | TypeInfo::unqualified("chronopt._chronopt.CMAES")
-        | TypeInfo::unqualified("chronopt._chronopt.Adam")
+    TypeInfo::unqualified("diffid._diffid.NelderMead")
+        | TypeInfo::unqualified("diffid._diffid.CMAES")
+        | TypeInfo::unqualified("diffid._diffid.Adam")
 }
 
 impl FromPyObject<'_, '_> for Optimiser {
@@ -53,7 +53,7 @@ impl FromPyObject<'_, '_> for Optimiser {
 
 impl Optimiser {
     /// Convert to the core Optimiser enum
-    pub(crate) fn to_core(&self) -> chronopt_core::optimisers::Optimiser {
+    pub(crate) fn to_core(&self) -> diffid_core::optimisers::Optimiser {
         match self {
             Optimiser::NelderMead(nm) => nm.clone().into(),
             Optimiser::Cmaes(cma) => cma.clone().into(),
@@ -178,11 +178,11 @@ impl PyNelderMead {
     ///
     /// Examples
     /// --------
-    /// >>> optimiser = chronopt.NelderMead()
+    /// >>> optimiser = diffid.NelderMead()
     /// >>> state = optimiser.init(initial=[1.0, 2.0])
     /// >>> while True:
     /// ...     result = state.ask()
-    /// ...     if isinstance(result, chronopt.Done):
+    /// ...     if isinstance(result, diffid.Done):
     /// ...         break
     /// ...     values = [evaluate(pt) for pt in result.points]
     /// ...     state.tell(values)
@@ -305,11 +305,11 @@ impl PyCMAES {
     ///
     /// Examples
     /// --------
-    /// >>> optimiser = chronopt.CMAES()
+    /// >>> optimiser = diffid.CMAES()
     /// >>> state = optimiser.init(initial=[1.0, 2.0])
     /// >>> while True:
     /// ...     result = state.ask()
-    /// ...     if isinstance(result, chronopt.Done):
+    /// ...     if isinstance(result, diffid.Done):
     /// ...         break
     /// ...     values = [evaluate(pt) for pt in result.points]
     /// ...     state.tell(values)
@@ -423,11 +423,11 @@ impl PyAdam {
     ///
     /// Examples
     /// --------
-    /// >>> optimiser = chronopt.Adam()
+    /// >>> optimiser = diffid.Adam()
     /// >>> state = optimiser.init(initial=[1.0, 2.0])
     /// >>> while True:
     /// ...     result = state.ask()
-    /// ...     if isinstance(result, chronopt.Done):
+    /// ...     if isinstance(result, diffid.Done):
     /// ...         break
     /// ...     values = [evaluate_with_gradient(pt) for pt in result.points]
     /// ...     state.tell(values)
@@ -450,11 +450,11 @@ impl PyAdam {
 ///
 /// Examples
 /// --------
-/// >>> optimiser = chronopt.Adam().with_max_iter(100)
+/// >>> optimiser = diffid.Adam().with_max_iter(100)
 /// >>> state = optimiser.init(initial=[1.0, 2.0])
 /// >>> while True:
 /// ...     result = state.ask()
-/// ...     if isinstance(result, chronopt.Done):
+/// ...     if isinstance(result, diffid.Done):
 /// ...         print(f"Final result: {result.result}")
 /// ...         break
 /// ...     # Adam requires gradient information
@@ -480,9 +480,9 @@ impl PyAdamState {
     /// Examples
     /// --------
     /// >>> result = state.ask()
-    /// >>> if isinstance(result, chronopt.Evaluate):
+    /// >>> if isinstance(result, diffid.Evaluate):
     /// ...     print(f"Need to evaluate {len(result.points)} points")
-    /// >>> elif isinstance(result, chronopt.Done):
+    /// >>> elif isinstance(result, diffid.Done):
     /// ...     print(f"Optimization complete: {result.result}")
     fn ask(&self, py: Python<'_>) -> Py<PyAny> {
         match self.inner.ask() {
@@ -511,7 +511,7 @@ impl PyAdamState {
     /// Examples
     /// --------
     /// >>> result = state.ask()
-    /// >>> if isinstance(result, chronopt.Evaluate):
+    /// >>> if isinstance(result, diffid.Evaluate):
     /// ...     point = result.points[0]
     /// ...     value = objective(point)
     /// ...     gradient = compute_gradient(point)
@@ -588,11 +588,11 @@ impl PyAdamState {
 ///
 /// Examples
 /// --------
-/// >>> optimiser = chronopt.NelderMead().with_max_iter(100)
+/// >>> optimiser = diffid.NelderMead().with_max_iter(100)
 /// >>> state = optimiser.init(initial=[1.0, 2.0])
 /// >>> while True:
 /// ...     result = state.ask()
-/// ...     if isinstance(result, chronopt.Done):
+/// ...     if isinstance(result, diffid.Done):
 /// ...         print(f"Final result: {result.result}")
 /// ...         break
 /// ...     values = [f(pt) for pt in result.points]
@@ -699,11 +699,11 @@ impl PyNelderMeadState {
 ///
 /// Examples
 /// --------
-/// >>> optimiser = chronopt.CMAES().with_max_iter(100)
+/// >>> optimiser = diffid.CMAES().with_max_iter(100)
 /// >>> state = optimiser.init(initial=[1.0, 2.0])
 /// >>> while True:
 /// ...     result = state.ask()
-/// ...     if isinstance(result, chronopt.Done):
+/// ...     if isinstance(result, diffid.Done):
 /// ...         print(f"Final result: {result.result}")
 /// ...         break
 /// ...     values = [f(pt) for pt in result.points]

@@ -1,14 +1,14 @@
 # Core Concepts
 
-This guide explains the fundamental concepts and patterns in Chronopt.
+This guide explains the fundamental concepts and patterns in Diffid.
 
 ## The Builder Pattern
 
-Chronopt uses the **builder pattern** for constructing problems. This provides a fluent, chainable API for configuration:
+Diffid uses the **builder pattern** for constructing problems. This provides a fluent, chainable API for configuration:
 
 ```python
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_objective(my_function)
     .with_parameter("x", 1.0)
     .with_parameter("y", 2.0)
@@ -25,7 +25,7 @@ problem = builder.build()
 
 ## Problem Types
 
-Chronopt provides different builders for different problem types:
+Diffid provides different builders for different problem types:
 
 ### ScalarBuilder
 
@@ -36,7 +36,7 @@ def objective(x):
     return np.asarray([x[0]**2 + x[1]**2])
 
 problem = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_objective(objective)
     .with_parameter("x", 0.0)
     .with_parameter("y", 0.0)
@@ -62,7 +62,7 @@ F_i { (r * y) * (1 - (y / k)) }
 """
 
 problem = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_parameter("k", 1.0)
@@ -88,7 +88,7 @@ def solve_ode(params):
     return predictions
 
 problem = (
-    chron.VectorBuilder()
+    diffid.VectorBuilder()
     .with_objective(solve_ode)
     .with_data(data)
     .with_parameter("alpha", 1.0)
@@ -111,7 +111,7 @@ Parameters are the decision variables you want to optimise:
 
 ```python
 builder = (
-    chron.ScalarBuilder()
+    diffid.ScalarBuilder()
     .with_parameter("x", initial_value=1.0)  # Name and initial guess
     .with_parameter("y", initial_value=-1.0)
 )
@@ -125,7 +125,7 @@ builder = (
 
 ## Optimisers vs Samplers
 
-Chronopt provides two types of algorithms:
+Diffid provides two types of algorithms:
 
 ### Optimisers: Finding the Best Solution
 
@@ -144,7 +144,7 @@ Chronopt provides two types of algorithms:
 result = problem.optimise()
 
 # Specific optimiser
-optimiser = chron.CMAES().with_max_iter(1000)
+optimiser = diffid.CMAES().with_max_iter(1000)
 result = optimiser.run(problem, initial_guess)
 ```
 
@@ -162,7 +162,7 @@ result = optimiser.run(problem, initial_guess)
 **Usage:**
 
 ```python
-sampler = chron.MetropolisHastings().with_max_iter(10000)
+sampler = diffid.MetropolisHastings().with_max_iter(10000)
 result = sampler.run(problem, initial_guess)
 
 # Result contains samples, not a single optimum
@@ -184,10 +184,10 @@ See [Choosing an Optimiser](../guides/choosing-optimiser.md) and [Choosing a Sam
 
 ## The Ask/Tell Pattern
 
-For advanced use cases, Chronopt supports the **ask/tell pattern** for manual control of the optimisation loop:
+For advanced use cases, Diffid supports the **ask/tell pattern** for manual control of the optimisation loop:
 
 ```python
-optimiser = chron.CMAES().with_max_iter(1000)
+optimiser = diffid.CMAES().with_max_iter(1000)
 
 # Ask for candidates
 candidates = optimiser.ask(n_candidates=10)
@@ -219,7 +219,7 @@ result = optimiser.get_result()
 Cost metrics define how model predictions are compared to observations:
 
 ```python
-from chronopt import SSE, RMSE, GaussianNLL
+from diffid import SSE, RMSE, GaussianNLL
 
 # Sum of squared errors (default)
 builder = builder.with_cost_metric(SSE())
@@ -278,7 +278,7 @@ print(result.samples)          # Posterior samples
 
 ## Parallelisation
 
-Chronopt automatically parallelises where possible:
+Diffid automatically parallelises where possible:
 
 - **DiffsolBuilder**: Multi-threaded ODE solving
 - **CMA-ES**: Parallel candidate evaluation
@@ -291,7 +291,7 @@ Control parallelism:
 builder = builder.with_max_threads(4)
 
 # Population size for CMA-ES (larger = more parallel work)
-optimiser = chron.CMAES().with_population_size(20)
+optimiser = diffid.CMAES().with_population_size(20)
 ```
 
 See the [Parallel Execution Guide](../guides/parallel-execution.md) for details.

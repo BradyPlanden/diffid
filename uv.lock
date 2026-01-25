@@ -260,86 +260,6 @@ wheels = [
 ]
 
 [[package]]
-name = "chronopt"
-source = { editable = "." }
-dependencies = [
-    { name = "numpy" },
-]
-
-[package.optional-dependencies]
-diffeqpy = [
-    { name = "diffeqpy" },
-]
-jax = [
-    { name = "diffrax" },
-    { name = "jax", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "jaxlib", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-]
-plotting = [
-    { name = "matplotlib" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "scipy" },
-]
-docs = [
-    { name = "matplotlib" },
-    { name = "mkdocs" },
-    { name = "mkdocs-git-revision-date-localized-plugin" },
-    { name = "mkdocs-jupyter" },
-    { name = "mkdocs-material" },
-    { name = "mkdocs-minify-plugin" },
-    { name = "mkdocstrings", extra = ["python"] },
-    { name = "nbconvert" },
-    { name = "pymdown-extensions" },
-]
-examples = [
-    { name = "diffeqpy" },
-    { name = "diffrax", marker = "(python_full_version < '3.15' and platform_machine != 'x86_64') or (python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin') or (python_full_version < '3.15' and sys_platform != 'darwin')" },
-    { name = "jax", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "jaxlib", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "matplotlib" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "diffeqpy", marker = "extra == 'diffeqpy'" },
-    { name = "diffrax", marker = "extra == 'jax'", specifier = ">=0.7.0" },
-    { name = "jax", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin' and extra == 'jax'", specifier = "==0.4.38" },
-    { name = "jaxlib", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin' and extra == 'jax'", specifier = "==0.4.38" },
-    { name = "matplotlib", marker = "extra == 'plotting'", specifier = ">=3.8" },
-    { name = "numpy", specifier = ">=1.24.4" },
-]
-provides-extras = ["diffeqpy", "jax", "plotting"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.3.5" },
-    { name = "scipy", specifier = ">=1.16.2" },
-]
-docs = [
-    { name = "matplotlib", specifier = ">=3.8" },
-    { name = "mkdocs", specifier = ">=1.5.0" },
-    { name = "mkdocs-git-revision-date-localized-plugin", specifier = ">=1.2.0" },
-    { name = "mkdocs-jupyter", specifier = ">=0.24.0" },
-    { name = "mkdocs-material", specifier = ">=9.5.0" },
-    { name = "mkdocs-minify-plugin", specifier = ">=0.8.0" },
-    { name = "mkdocstrings", extras = ["python"], specifier = ">=0.24.0" },
-    { name = "nbconvert", specifier = ">=7.0" },
-    { name = "pymdown-extensions", specifier = ">=10.7" },
-]
-examples = [
-    { name = "diffeqpy" },
-    { name = "diffrax", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = ">=0.7.0" },
-    { name = "diffrax", marker = "(python_full_version < '3.15' and platform_machine != 'x86_64') or (python_full_version < '3.15' and sys_platform != 'darwin')", specifier = ">=0.7.0" },
-    { name = "jax", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "==0.4.38" },
-    { name = "jaxlib", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "==0.4.38" },
-    { name = "matplotlib", specifier = ">=3.8" },
-]
-
-[[package]]
 name = "click"
 version = "8.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -520,6 +440,86 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/56/68/e9ec32f94718839ab3079808236e058493229de9ad9cde0bebff932f347b/diffeqpy-2.5.4.tar.gz", hash = "sha256:543874615c74d4737c17e0fd3779626cb22d84a85fae95d780acbf9af05534c1", size = 23740, upload-time = "2025-09-08T01:33:38.073Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/20/5b/3866770a8e01811e767bd1b560c39f65dc4b57f74e70a2865526f7177999/diffeqpy-2.5.4-py3-none-any.whl", hash = "sha256:8214d747dfacfb5fc49690e0a3b8182c14d82e1b609d045086c036a1bceb9370", size = 17342, upload-time = "2025-09-08T01:33:37.032Z" },
+]
+
+[[package]]
+name = "diffid"
+source = { editable = "." }
+dependencies = [
+    { name = "numpy" },
+]
+
+[package.optional-dependencies]
+diffeqpy = [
+    { name = "diffeqpy" },
+]
+jax = [
+    { name = "diffrax" },
+    { name = "jax", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "jaxlib", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+]
+plotting = [
+    { name = "matplotlib" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "scipy" },
+]
+docs = [
+    { name = "matplotlib" },
+    { name = "mkdocs" },
+    { name = "mkdocs-git-revision-date-localized-plugin" },
+    { name = "mkdocs-jupyter" },
+    { name = "mkdocs-material" },
+    { name = "mkdocs-minify-plugin" },
+    { name = "mkdocstrings", extra = ["python"] },
+    { name = "nbconvert" },
+    { name = "pymdown-extensions" },
+]
+examples = [
+    { name = "diffeqpy" },
+    { name = "diffrax", marker = "(python_full_version < '3.15' and platform_machine != 'x86_64') or (python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin') or (python_full_version < '3.15' and sys_platform != 'darwin')" },
+    { name = "jax", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "jaxlib", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "matplotlib" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "diffeqpy", marker = "extra == 'diffeqpy'" },
+    { name = "diffrax", marker = "extra == 'jax'", specifier = ">=0.7.0" },
+    { name = "jax", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin' and extra == 'jax'", specifier = "==0.4.38" },
+    { name = "jaxlib", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin' and extra == 'jax'", specifier = "==0.4.38" },
+    { name = "matplotlib", marker = "extra == 'plotting'", specifier = ">=3.8" },
+    { name = "numpy", specifier = ">=1.24.4" },
+]
+provides-extras = ["diffeqpy", "jax", "plotting"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3.5" },
+    { name = "scipy", specifier = ">=1.16.2" },
+]
+docs = [
+    { name = "matplotlib", specifier = ">=3.8" },
+    { name = "mkdocs", specifier = ">=1.5.0" },
+    { name = "mkdocs-git-revision-date-localized-plugin", specifier = ">=1.2.0" },
+    { name = "mkdocs-jupyter", specifier = ">=0.24.0" },
+    { name = "mkdocs-material", specifier = ">=9.5.0" },
+    { name = "mkdocs-minify-plugin", specifier = ">=0.8.0" },
+    { name = "mkdocstrings", extras = ["python"], specifier = ">=0.24.0" },
+    { name = "nbconvert", specifier = ">=7.0" },
+    { name = "pymdown-extensions", specifier = ">=10.7" },
+]
+examples = [
+    { name = "diffeqpy" },
+    { name = "diffrax", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = ">=0.7.0" },
+    { name = "diffrax", marker = "(python_full_version < '3.15' and platform_machine != 'x86_64') or (python_full_version < '3.15' and sys_platform != 'darwin')", specifier = ">=0.7.0" },
+    { name = "jax", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "==0.4.38" },
+    { name = "jaxlib", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "==0.4.38" },
+    { name = "matplotlib", specifier = ">=3.8" },
 ]
 
 [[package]]

@@ -16,7 +16,7 @@
 builder = builder.with_max_threads(4)
 
 # Population size for CMA-ES
-optimiser = chron.CMAES().with_population_size(20)
+optimiser = diffid.CMAES().with_population_size(20)
 ```
 
 ## See Also

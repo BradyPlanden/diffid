@@ -91,18 +91,18 @@ class TestAPIDocumentation:
         return documented
 
     @pytest.mark.skipif(
-        not (ROOT / "python" / "src" / "chronopt").exists(),
-        reason="chronopt package not installed",
+        not (ROOT / "python" / "src" / "diffid").exists(),
+        reason="diffid package not installed",
     )
     def test_core_apis_documented(self):
-        """Check that core chronopt APIs are documented."""
+        """Check that core diffid APIs are documented."""
         try:
-            import chronopt as chron
+            import diffid
         except ImportError:
-            pytest.skip("chronopt not installed")
+            pytest.skip("diffid not installed")
 
-        # Get public APIs from chronopt
-        self._get_public_apis(chron)
+        # Get public APIs from diffid
+        self._get_public_apis(diffid)
 
         # Find documentation files
         api_docs = list((DOCS_DIR / "api-reference" / "python").rglob("*.md"))

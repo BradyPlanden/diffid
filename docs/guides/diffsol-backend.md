@@ -14,7 +14,7 @@
 
 ```python
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(dsl)
     .with_data(data)
     .with_backend("dense")  # or "sparse"

@@ -1,4 +1,4 @@
-import chronopt as chron
+import diffid
 import numpy as np
 import pytest
 
@@ -17,12 +17,12 @@ def test_vector_builder_basic():
 
     # Build the problem
     builder = (
-        chron.VectorBuilder()
+        diffid.VectorBuilder()
         .with_objective(exponential_model)
         .with_data(data)
         .with_parameter("rate", 1.0, None)
         .with_parameter("y0", 1.0, None)
-        .with_cost(chron.SSE())
+        .with_cost(diffid.SSE())
     )
 
     problem = builder.build()
@@ -35,7 +35,7 @@ def test_vector_builder_basic():
     assert cost >= 0, f"Cost should be non-negative, got {cost}"
 
     # Test optimization
-    optimiser = chron.NelderMead().with_max_iter(1000).with_threshold(1e-8)
+    optimiser = diffid.NelderMead().with_max_iter(1000).with_threshold(1e-8)
     result = problem.optimise(x0, optimiser)
 
     assert result.success
@@ -55,7 +55,7 @@ def test_vector_builder_with_shape():
         return params[0] * np.ones(n_points) + params[1]
 
     builder = (
-        chron.VectorBuilder()
+        diffid.VectorBuilder()
         .with_objective(model)
         .with_data(data)
         .with_parameter("scale", 1.0)
@@ -80,18 +80,18 @@ def test_vector_builder_sinusoidal():
         return amp * np.sin(freq * t + phase)
 
     problem = (
-        chron.VectorBuilder()
+        diffid.VectorBuilder()
         .with_objective(sinusoid)
         .with_data(data)
         .with_parameter("amplitude", 2.0, (0.0, 5.0))
         .with_parameter("frequency", 1.0, (0.1, 3.0))
         .with_parameter("phase", 0.0, (-np.pi, np.pi))
-        .with_cost(chron.RMSE())
+        .with_cost(diffid.RMSE())
         .build()
     )
 
     x0 = [2.0, 1.0, 0.0]
-    optimiser = chron.NelderMead().with_max_iter(2000).with_threshold(1e-9)
+    optimiser = diffid.NelderMead().with_max_iter(2000).with_threshold(1e-9)
     result = problem.optimise(x0, optimiser)
 
     # Note: Sinusoidal fitting can be challenging due to local minima
@@ -114,7 +114,7 @@ def test_vector_builder_cost_metrics():
 
     def build_problem(cost_metric=None):
         builder = (
-            chron.VectorBuilder()
+            diffid.VectorBuilder()
             .with_objective(quadratic)
             .with_data(data)
             .with_parameter("scale", 1.5)
@@ -124,9 +124,9 @@ def test_vector_builder_cost_metrics():
         return builder.build()
 
     sse_problem = build_problem()
-    sse_problem_explicit = build_problem(chron.SSE())
-    rmse_problem = build_problem(chron.RMSE())
-    gaussian_problem = build_problem(chron.GaussianNLL(1.0))
+    sse_problem_explicit = build_problem(diffid.SSE())
+    rmse_problem = build_problem(diffid.RMSE())
+    gaussian_problem = build_problem(diffid.GaussianNLL(1.0))
 
     test_params = [1.5]
     sse_cost = sse_problem.evaluate(test_params)
@@ -157,21 +157,21 @@ def test_vector_builder_remove_methods():
 
     # Build with SSE
     builder1 = (
-        chron.VectorBuilder()
+        diffid.VectorBuilder()
         .with_objective(model)
         .with_data(data)
         .with_parameter("a", 1.0)
-        .with_cost(chron.SSE())
+        .with_cost(diffid.SSE())
     )
     problem1 = builder1.build()
 
     # Build with RMSE
     builder2 = (
-        chron.VectorBuilder()
+        diffid.VectorBuilder()
         .with_objective(model)
         .with_data(data)
         .with_parameter("a", 1.0)
-        .with_cost(chron.RMSE())
+        .with_cost(diffid.RMSE())
     )
     problem2 = builder2.build()
 
@@ -188,10 +188,10 @@ def test_vector_builder_with_default_optimiser():
     def linear(params):
         return params[0] * np.arange(4) + params[1]
 
-    optimiser = chron.NelderMead().with_max_iter(100)
+    optimiser = diffid.NelderMead().with_max_iter(100)
 
     problem = (
-        chron.VectorBuilder()
+        diffid.VectorBuilder()
         .with_objective(linear)
         .with_data(data)
         .with_parameter("slope", 0.5)
@@ -214,7 +214,7 @@ def test_vector_builder_dimension_mismatch():
         return params[0] * np.ones(5)  # Wrong size!
 
     problem = (
-        chron.VectorBuilder()
+        diffid.VectorBuilder()
         .with_objective(wrong_size)
         .with_data(data)
         .with_parameter("a", 1.0)
@@ -222,7 +222,7 @@ def test_vector_builder_dimension_mismatch():
     )
 
     with pytest.raises(
-        chron.errors.EvaluationError,
+        diffid.errors.EvaluationError,
         match="Evaluation failed: Evaluation failed:: expected 3 elements, got 5",
     ):
         problem.evaluate([1.0])
@@ -237,16 +237,16 @@ def test_vector_builder_multiple_builds():
 
     # Build two problems with same configuration
     builder = (
-        chron.VectorBuilder()
+        diffid.VectorBuilder()
         .with_objective(model)
         .with_data(data)
         .with_parameter("scale", 1.0)
-        .with_cost(chron.RMSE())
+        .with_cost(diffid.RMSE())
     )
 
     problem1 = builder.build()
     builder.remove_cost()
-    builder.with_cost(chron.SSE())
+    builder.with_cost(diffid.SSE())
     problem2 = builder.build()
 
     # Should produce same results
@@ -261,7 +261,7 @@ def test_vector_builder_config():
         return params[0] * data
 
     problem = (
-        chron.VectorBuilder()
+        diffid.VectorBuilder()
         .with_objective(model)
         .with_data(data)
         .with_parameter("a", 1.0)

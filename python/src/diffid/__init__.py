@@ -1,22 +1,22 @@
-"""Chronopt public Python API."""
+"""Diffid public Python API."""
 
 from __future__ import annotations
 
 # Error hierarchy
-from chronopt.errors import (
+from diffid.errors import (
     AlreadyTerminated,
     BuildError,
-    ChronoptError,
+    DiffidError,
     EvaluationError,
     ResultCountMismatch,
     TellError,
 )
 
 # Plotting module
-from chronopt import plotting
+from diffid import plotting
 
 # Core bindings - optimisers
-from chronopt._chronopt import (
+from diffid._diffid import (
     Adam,
     AdamState,
     CMAES,
@@ -26,7 +26,7 @@ from chronopt._chronopt import (
 )
 
 # Core bindings - samplers
-from chronopt._chronopt import (
+from diffid._diffid import (
     DynamicNestedSampler,
     DynamicNestedSamplerState,
     MetropolisHastings,
@@ -36,14 +36,14 @@ from chronopt._chronopt import (
 )
 
 # Core bindings - builders
-from chronopt._chronopt import (
+from diffid._diffid import (
     DiffsolBuilder,
     ScalarBuilder,
     VectorBuilder,
 )
 
 # Core bindings - results and problems
-from chronopt._chronopt import (
+from diffid._diffid import (
     CostMetric,
     Done,
     Evaluate,
@@ -52,9 +52,9 @@ from chronopt._chronopt import (
 )
 
 # Cost metric factory functions
-from chronopt._chronopt import RMSE as _RMSE
-from chronopt._chronopt import SSE as _SSE
-from chronopt._chronopt import GaussianNLL as _GaussianNLL
+from diffid._diffid import RMSE as _RMSE
+from diffid._diffid import SSE as _SSE
+from diffid._diffid import GaussianNLL as _GaussianNLL
 
 
 def SSE(weight: float = 1.0) -> CostMetric:
@@ -116,7 +116,7 @@ __all__ = [
     # Modules
     "plotting",
     # Errors
-    "ChronoptError",
+    "DiffidError",
     "EvaluationError",
     "BuildError",
     "TellError",

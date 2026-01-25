@@ -1,4 +1,4 @@
-import chronopt as chron
+import diffid
 import numpy as np
 
 # Example diffsol ODE (logistic growth)
@@ -15,11 +15,11 @@ stacked_data = np.column_stack((t_span, data))
 
 
 # Create an optimiser
-optimiser = chron.CMAES().with_max_iter(1000).with_threshold(1e-12)
+optimiser = diffid.CMAES().with_max_iter(1000).with_threshold(1e-12)
 
 # Simple API
 builder = (
-    chron.DiffsolBuilder()
+    diffid.DiffsolBuilder()
     .with_diffsl(ds)
     .with_data(stacked_data)
     .with_tolerances(1e-6, 1e-8)

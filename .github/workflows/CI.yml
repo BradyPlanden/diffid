@@ -99,15 +99,17 @@ jobs:
         run: |
           uv venv .test-venv
           source .test-venv/bin/activate || source .test-venv/Scripts/activate
-          
+
           # Install the wheel we built
           uv pip install dist/*.whl --reinstall
-          
+
           # Install dev dependencies from pyproject.toml using pip interface
           uv pip install --group dev --group docs --group examples
-          
+
           # Run tests directly
           pytest -v
+        env:
+          MPLBACKEND: Agg
 
       - uses: actions/upload-artifact@v5
         with:

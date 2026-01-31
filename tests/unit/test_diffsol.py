@@ -188,7 +188,7 @@ F_i { (r * y) * (1 - (y / k)) }
     )
     assert pytest.approx(expected_gaussian, rel=1e-6, abs=1e-9) == gaussian_cost
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="variance must be positive"):
         diffid.GaussianNLL(0.0)
 
 

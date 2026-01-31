@@ -5,6 +5,7 @@ use crate::prelude::{ParameterSpec, Problem};
 use crate::problem::{ParameterRange, VectorFn, VectorObjective};
 use std::sync::Arc;
 
+#[must_use]
 #[derive(Clone)]
 pub struct VectorProblemBuilder {
     function: Option<VectorFn>,

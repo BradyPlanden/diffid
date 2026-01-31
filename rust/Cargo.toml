@@ -12,6 +12,9 @@ keywords = ["optimisation", "time-series", "differential-equations", "sampler", 
 categories = ["algorithms", "science", "simulation"]
 include = ["src/**", "benches/**", "Cargo.toml", "../README.md", "../LICENSE"]
 
+[lints]
+workspace = true
+
 [dependencies]
 diffsol = { version = "0.10.1" }
 nalgebra.workspace = true

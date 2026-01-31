@@ -12,6 +12,7 @@ use std::cmp::Ordering;
 use std::time::{Duration, Instant};
 
 /// Configuration for the CMA-ES optimiser
+#[must_use]
 #[derive(Clone, Debug)]
 pub struct CMAES {
     max_iter: usize,
@@ -69,7 +70,7 @@ impl CMAES {
     fn compute_population_size(&self, dim: usize) -> usize {
         self.population_size.unwrap_or_else(|| {
             if dim > 0 {
-                let suggested = (4.0 + (3.0 * (dim as f64).ln())).floor() as usize;
+                let suggested = 3.0f64.mul_add((dim as f64).ln(), 4.0).floor() as usize;
                 suggested.max(4).max(2 * dim)
             } else {
                 4
@@ -146,9 +147,9 @@ impl StrategyParameters {
         let c_sigma = (mu_eff + 2.0) / (dim_f + mu_eff + 5.0);
         let d_sigma = Self::compute_d_sigma(mu_eff, dim_f, c_sigma);
         let c_c = (4.0 + mu_eff / dim_f) / (dim_f + 4.0 + 2.0 * mu_eff / dim_f);
-        let c1 = 2.0 / ((dim_f + 1.3).powi(2) + mu_eff);
+        let c1 = 2.0 / (dim_f + 1.3).mul_add(dim_f + 1.3, mu_eff);
         let c_mu = ((1.0 - c1)
-            .min(2.0 * (mu_eff - 2.0 + 1.0 / mu_eff) / ((dim_f + 2.0).powi(2) + mu_eff)))
+            .min(2.0 * (mu_eff - 2.0 + 1.0 / mu_eff) / (dim_f + 2.0).mul_add(dim_f + 2.0, mu_eff)))
         .max(0.0);
         let chi_n = dim_f.sqrt() * (1.0 - 1.0 / (4.0 * dim_f) + 1.0 / (21.0 * dim_f.powi(2)));
 
@@ -168,7 +169,7 @@ impl StrategyParameters {
 
     pub fn compute_d_sigma(mu_eff: f64, dim_f: f64, c_sigma: f64) -> f64 {
         let sqrt_term = ((mu_eff - 1.0) / (dim_f + 1.0)).max(0.0).sqrt();
-        1.0 + c_sigma + 2.0 * (sqrt_term - 1.0).max(0.0)
+        2.0f64.mul_add((sqrt_term - 1.0).max(0.0), 1.0 + c_sigma)
     }
 }
 
@@ -301,7 +302,7 @@ impl CMAESState {
         // We collect into a Result<Vec<f64>> first to handle errors early
         let values: Vec<f64> = results
             .into_iter()
-            .map(|r| r.try_into())
+            .map(std::convert::TryInto::try_into)
             .map(|res| {
                 match res {
                     Ok(eval) => eval.value(),
@@ -505,7 +506,7 @@ impl CMAESState {
 
             let step = &self.distribution.eigenvectors * (&step_matrix * &z);
             let candidate_vec = &self.distribution.mean + step * self.distribution.sigma;
-            let mut candidate: Point = candidate_vec.iter().cloned().collect();
+            let mut candidate: Point = candidate_vec.iter().copied().collect();
 
             // Apply bounds
             self.bounds.clamp(&mut candidate);
@@ -715,7 +716,7 @@ impl CMAES {
     {
         let (mut state, first_point) = self.init(initial, bounds);
 
-        let mut results = objective(&vec![first_point]);
+        let mut results = objective(&[first_point]);
 
         loop {
             if state.tell(results).is_err() {

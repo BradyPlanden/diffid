@@ -161,10 +161,10 @@ class AlreadyTerminated(TellError):
 
 
 __all__ = [
+    "AlreadyTerminated",
+    "BuildError",
     "DiffidError",
     "EvaluationError",
-    "BuildError",
-    "TellError",
     "ResultCountMismatch",
-    "AlreadyTerminated",
+    "TellError",
 ]

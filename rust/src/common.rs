@@ -180,7 +180,7 @@ impl Bounds {
                     let width = hi - lo;
                     let sigma = width * scale;
                     let draw = rng.sample::<f64, _>(StandardNormal);
-                    (base + draw * sigma).clamp(lo, hi)
+                    draw.mul_add(sigma, base).clamp(lo, hi)
                 } else {
                     // At least one bound is non-finite
                     let base = if lo.is_finite() {
@@ -192,7 +192,7 @@ impl Bounds {
                     };
                     let sigma = scale;
                     let offset = rng.sample::<f64, _>(StandardNormal);
-                    base + offset * sigma
+                    offset.mul_add(sigma, base)
                 }
             })
             .collect()

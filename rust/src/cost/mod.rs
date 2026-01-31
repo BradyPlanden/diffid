@@ -197,8 +197,7 @@ impl GaussianNll {
     pub fn new(weight: Option<f64>, variance: f64) -> Self {
         assert!(
             variance > 0.0 && variance.is_finite(),
-            "Variance must be positive and finite, got {}",
-            variance
+            "Variance must be positive and finite, got {variance}"
         );
 
         let log_term = (2.0 * PI * variance).ln();
@@ -227,7 +226,7 @@ impl CostMetric for GaussianNll {
         let sse: f64 = residuals.iter().map(|&r| r * r).sum();
 
         // NLL = (n/2) * ln(2πσ²) + (1/2σ²) * Σr²
-        (0.5 * n * self.log_term + 0.5 * sse / self.variance) * self.weight
+        (0.5 * n).mul_add(self.log_term, 0.5 * sse / self.variance) * self.weight
     }
 
     fn name(&self) -> &'static str {
@@ -246,7 +245,7 @@ impl CostMetric for GaussianNll {
         let n = residuals.len() as f64;
         let sse: f64 = residuals.iter().map(|&r| r * r).sum();
 
-        let cost = (0.5 * n * self.log_term + 0.5 * sse / self.variance) * self.weight;
+        let cost = (0.5 * n).mul_add(self.log_term, 0.5 * sse / self.variance) * self.weight;
 
         if sensitivities.is_empty() {
             return Some((cost, Vec::new()));

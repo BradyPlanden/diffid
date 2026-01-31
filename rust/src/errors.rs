@@ -34,7 +34,7 @@ impl EvaluationError {
 impl fmt::Display for EvaluationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::User(e) => write!(f, "Evaluation failed:: {}", e),
+            Self::User(e) => write!(f, "Evaluation failed:: {e}"),
             Self::NonFiniteValue => write!(f, "Evaluation failed::NonFiniteValue"),
             Self::NonFiniteGradient => write!(f, "Evaluation failed::NonFiniteGradient"),
         }
@@ -78,7 +78,7 @@ pub enum TellError {
     ResultCountMismatch { expected: usize, got: usize },
     /// Gradient dimension doesn't match point dimension
     GradientDimensionMismatch { expected: usize, got: usize },
-    /// Wrapper for EvaluationError
+    /// Wrapper for `EvaluationError`
     EvaluationFailed(EvaluationError),
 }
 
@@ -89,12 +89,12 @@ impl fmt::Display for TellError {
         match self {
             TellError::AlreadyTerminated => write!(f, "Algorithm already terminated"),
             TellError::ResultCountMismatch { expected, got } => {
-                write!(f, "Expected {} results, got {}", expected, got)
+                write!(f, "Expected {expected} results, got {got}")
             }
             TellError::GradientDimensionMismatch { expected, got } => {
-                write!(f, "Expected gradient dimension {}, got {}", expected, got)
+                write!(f, "Expected gradient dimension {expected}, got {got}")
             }
-            TellError::EvaluationFailed(e) => write!(f, "Evaluation failed {:?}", e),
+            TellError::EvaluationFailed(e) => write!(f, "Evaluation failed {e:?}"),
         }
     }
 }

@@ -7,6 +7,7 @@ use std::cmp::Ordering;
 use std::time::{Duration, Instant};
 
 /// Configuration for the Nelder-Mead optimiser
+#[must_use]
 #[derive(Clone, Debug)]
 pub struct NelderMead {
     max_iter: usize,
@@ -246,7 +247,7 @@ impl NelderMeadState {
             Err(e) => {
                 let err: EvaluationError = e.into();
                 self.phase = NelderMeadPhase::Terminated(
-                    TerminationReason::FunctionEvaluationFailed(format!("{}", err)),
+                    TerminationReason::FunctionEvaluationFailed(format!("{err}")),
                 );
                 return Ok(());
             }
@@ -543,10 +544,10 @@ impl NelderMeadState {
     fn compute_simplex_vertex(&self, dim: usize) -> Point {
         let mut point = self.initial_point.clone();
 
-        if point[dim] != 0.0 {
-            point[dim] *= 1.0 + self.config.step_size;
-        } else {
+        if point[dim] == 0.0 {
             point[dim] = self.config.step_size;
+        } else {
+            point[dim] *= 1.0 + self.config.step_size;
         }
 
         // Ensure the point differs from the initial point

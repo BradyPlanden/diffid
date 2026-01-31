@@ -65,6 +65,7 @@ pub struct DynamicNestedSamplerState {
 }
 
 /// Configurable Dynamic Nested Sampling engine
+#[must_use]
 #[derive(Clone, Debug)]
 pub struct DynamicNestedSampler {
     live_points: usize,
@@ -151,7 +152,7 @@ impl DynamicNestedSampler {
     /// * `bounds` - Parameter bounds for sampling
     ///
     /// # Returns
-    /// Tuple of (state, initial_candidates) where candidates should be evaluated
+    /// Tuple of (state, `initial_candidates`) where candidates should be evaluated
     pub fn init(&self, _initial: Point, bounds: Bounds) -> (DynamicNestedSamplerState, Vec<Point>) {
         let mut rng = match self.seed {
             Some(seed) => StdRng::seed_from_u64(seed),
@@ -243,7 +244,7 @@ impl DynamicNestedSamplerState {
     /// Errors are treated as infinite values (rejected).
     ///
     /// # Arguments
-    /// * `results` - Evaluation results matching the last ask() request
+    /// * `results` - Evaluation results matching the last `ask()` request
     ///
     /// # Returns
     /// `Ok(())` on success, or `TellError` if already terminated or result count mismatch

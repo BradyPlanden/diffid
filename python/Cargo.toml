@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 readme = "../README.md"
 
+[lints]
+workspace = true
+
 [package.metadata.maturin]
 name = "diffid"
 python-source = "src"

@@ -89,7 +89,7 @@ impl DiffsolObjective {
                     .rtol(self.config.rtol)
                     .build_from_diffsl(&self.dsl)
                     .map_err(|e| {
-                        ProblemError::BuildFailed(format!("Failed to build ODE model: {}", e))
+                        ProblemError::BuildFailed(format!("Failed to build ODE model: {e}"))
                     })?;
                 Ok(DiffsolSimulator::Dense(Box::new(diff_system)))
             }
@@ -99,7 +99,7 @@ impl DiffsolObjective {
                     .rtol(self.config.rtol)
                     .build_from_diffsl(&self.dsl)
                     .map_err(|e| {
-                        ProblemError::BuildFailed(format!("Failed to build ODE model: {}", e))
+                        ProblemError::BuildFailed(format!("Failed to build ODE model: {e}"))
                     })?;
                 Ok(DiffsolSimulator::Sparse(Box::new(diff_system)))
             }

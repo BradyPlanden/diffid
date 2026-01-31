@@ -49,7 +49,7 @@ def test_python_builder_gradient_with_jax():
 
 
 @pytest.mark.parametrize(
-    "test_point,description",
+    ("test_point", "description"),
     [
         (np.array([0.0, 0.0, 0.0], dtype=np.float32), "origin"),
         (np.array([1.0, 1.0, 1.0], dtype=np.float32), "all ones"),

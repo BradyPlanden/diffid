@@ -7,6 +7,7 @@ use rand::{Rng, SeedableRng};
 use rand_distr::StandardNormal;
 use std::time::Instant;
 
+#[must_use]
 #[derive(Clone, Debug)]
 pub struct MetropolisHastings {
     num_chains: usize,
@@ -101,7 +102,7 @@ impl MetropolisHastings {
         let initial_point = initial;
         let mut state = self.init(initial_point.clone(), bounds); // ToDo: performance improvement, remove clone
 
-        let mut results = objective(&vec![initial_point]);
+        let mut results = objective(&[initial_point]);
 
         loop {
             // Call ask and break if an error is encountered

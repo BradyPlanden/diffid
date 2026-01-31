@@ -27,7 +27,7 @@ pub enum ProblemError {
 
 impl From<DiffsolError> for ProblemError {
     fn from(e: DiffsolError) -> Self {
-        ProblemError::BuildFailed(format!("{}", e))
+        ProblemError::BuildFailed(format!("{e}"))
     }
 }
 
@@ -40,13 +40,13 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for ProblemError {
 impl std::fmt::Display for ProblemError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EvaluationFailed(msg) => write!(f, "evaluation failed: {}", msg),
-            Self::SolverError(msg) => write!(f, "solver failed: {}", msg),
+            Self::EvaluationFailed(msg) => write!(f, "evaluation failed: {msg}"),
+            Self::SolverError(msg) => write!(f, "solver failed: {msg}"),
             Self::DimensionMismatch { expected, got } => {
-                write!(f, "expected {} elements, got {}", expected, got)
+                write!(f, "expected {expected} elements, got {got}")
             }
-            Self::BuildFailed(msg) => write!(f, "build failed: {}", msg),
-            Self::External(err) => write!(f, "external error: {}", err),
+            Self::BuildFailed(msg) => write!(f, "build failed: {msg}"),
+            Self::External(err) => write!(f, "external error: {err}"),
         }
     }
 }
@@ -111,11 +111,11 @@ impl ParameterSet {
     }
 
     pub fn push(&mut self, spec: ParameterSpec) {
-        self.0.push(spec)
+        self.0.push(spec);
     }
 
     pub fn clear(&mut self) {
-        self.0.clear()
+        self.0.clear();
     }
 
     pub fn take(&mut self) -> Vec<ParameterSpec> {
@@ -191,7 +191,7 @@ impl From<Unbounded> for ParameterRange {
     }
 }
 
-/// Implement for RangeInclusive
+/// Implement for `RangeInclusive`
 impl From<RangeInclusive<f64>> for ParameterRange {
     fn from(range: RangeInclusive<f64>) -> Self {
         Self(range)

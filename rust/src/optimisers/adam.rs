@@ -7,6 +7,7 @@ use std::error::Error as StdError;
 use std::time::{Duration, Instant};
 
 /// Configuration for the Adam optimiser
+#[must_use]
 #[derive(Clone, Debug)]
 pub struct Adam {
     max_iter: usize,
@@ -152,9 +153,9 @@ impl MomentumState {
 
         for (i, g) in gradient.iter().enumerate() {
             // Update biased first moment estimate
-            self.m[i] = beta1 * self.m[i] + (1.0 - beta1) * g;
+            self.m[i] = beta1.mul_add(self.m[i], (1.0 - beta1) * g);
             // Update biased second moment estimate
-            self.v[i] = beta2 * self.v[i] + (1.0 - beta2) * g * g;
+            self.v[i] = beta2.mul_add(self.v[i], (1.0 - beta2) * g * g);
 
             // Compute bias-corrected estimates
             let m_hat = self.m[i] / bias_correction1;
@@ -241,7 +242,7 @@ impl AdamState {
                 self.history
                     .push(EvaluatedPoint::new(self.x.clone(), f64::NAN));
                 self.phase = AdamPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
-                    format!("{}", err),
+                    format!("{err}"),
                 ));
                 return Ok(());
             }

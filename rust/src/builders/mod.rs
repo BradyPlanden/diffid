@@ -20,11 +20,11 @@ impl std::fmt::Display for ProblemBuilderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::MissingData => write!(f, "Missing data"),
-            Self::BuildFailed(msg) => write!(f, "build failed: {}", msg),
+            Self::BuildFailed(msg) => write!(f, "build failed: {msg}"),
             Self::MissingSystem => write!(f, "Missing system"),
             Self::MissingVectorFn => write!(f, "Missing vector function"),
             Self::DimensionMismatch { expected, got } => {
-                write!(f, "expected {} elements, got {}", expected, got)
+                write!(f, "expected {expected} elements, got {got}")
             }
         }
     }

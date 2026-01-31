@@ -11,3 +11,32 @@ license = "BSD-3-Clause"
 [workspace.dependencies]
 nalgebra = "0.34.1"
 pyo3 = { version = "0.27.1", default-features = false, features = ["macros"] }
+
+[workspace.lints.clippy]
+# Enable pedantic lints for higher code quality standards
+pedantic = { level = "warn", priority = -1 }
+
+# Specific allows to reduce noise from pedantic
+module_name_repetitions = "allow"      # Common in large codebases
+similar_names = "allow"                # Scientific code often has x, y, z, etc.
+must_use_candidate = "allow"           # Too noisy for mathematical functions
+
+# Additional strict lints
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+missing_safety_doc = "warn"
+undocumented_unsafe_blocks = "warn"
+
+# Performance and correctness
+inefficient_to_string = "warn"
+manual_ok_or = "warn"
+redundant_closure_for_method_calls = "warn"
+unnecessary_wraps = "warn"
+
+# Complexity and style
+cognitive_complexity = "warn"
+too_many_lines = "warn"
+
+# Selected nursery lints (experimental but useful)
+option_if_let_else = "warn"
+suboptimal_flops = "warn"              # Useful for numerical code

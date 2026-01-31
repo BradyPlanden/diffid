@@ -111,7 +111,7 @@ impl ScalarOptimiser {
             ScalarOptimiser::CMAES(cm) => cm.run_batch(objective, initial, bounds),
             ScalarOptimiser::NelderMead(nm) => nm.run(
                 |x| {
-                    let result = objective(&vec![x.to_vec()]);
+                    let result = objective(&[x.to_vec()]);
                     result.into_iter().next().unwrap() // ToDO: This needs proper error integration
                 },
                 initial,
@@ -450,7 +450,7 @@ impl fmt::Display for TerminationReason {
                 write!(f, "Patience elapsed")
             }
             TerminationReason::FunctionEvaluationFailed(msg) => {
-                write!(f, "Function evaluation failed: {}", msg)
+                write!(f, "Function evaluation failed: {msg}")
             }
         }
     }

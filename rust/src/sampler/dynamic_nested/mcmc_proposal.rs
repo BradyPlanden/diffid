@@ -86,7 +86,7 @@ impl MCMCProposalGenerator {
     /// Compute per-dimension step sizes based on bounds width
     ///
     /// For each dimension i, calculates:
-    ///   scale[i] = step_size_factor × (upper[i] - lower[i])
+    ///   scale[i] = `step_size_factor` × (upper[i] - lower[i])
     ///
     /// For unbounded dimensions, uses a default scale of 1.0.
     /// This makes step sizes adaptive to the natural scale of each parameter.

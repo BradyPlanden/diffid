@@ -69,10 +69,7 @@ impl RemovedPoint {
 impl SamplerState {
     /// Initialise state from an initial live set, inferring problem dimension.
     pub fn new(live_points: Vec<LivePoint>) -> Self {
-        let dimension = live_points
-            .first()
-            .map(|point| point.position.len())
-            .unwrap_or(0);
+        let dimension = live_points.first().map_or(0, |point| point.position.len());
         Self {
             live_points,
             posterior: Vec::new(),

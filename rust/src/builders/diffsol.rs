@@ -16,6 +16,7 @@ pub enum DiffsolBackend {
     Sparse,
 }
 
+#[must_use]
 #[derive(Debug, Clone)]
 pub struct DiffsolConfig {
     pub rtol: f64,
@@ -76,6 +77,7 @@ impl DiffsolConfig {
     }
 }
 
+#[must_use]
 #[derive(Clone)]
 pub struct DiffsolProblemBuilder {
     equations: Option<String>,
@@ -109,7 +111,7 @@ impl DiffsolProblemBuilder {
         self
     }
 
-    /// Registers the DiffSL differential equation system.
+    /// Registers the `DiffSL` differential equation system.
     pub fn with_diffsl(mut self, equations: String) -> Self {
         self.equations = Some(equations);
         self
@@ -202,7 +204,7 @@ impl DiffsolProblemBuilder {
                 got: data_with_t.ncols(),
             });
         }
-        let t_span: Vec<f64> = data_with_t.column(0).iter().cloned().collect();
+        let t_span: Vec<f64> = data_with_t.column(0).iter().copied().collect();
         let data = data_with_t.columns(1, data_with_t.ncols() - 1).into_owned();
 
         // Check costs and provide default if empty

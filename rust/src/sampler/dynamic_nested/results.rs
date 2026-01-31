@@ -239,7 +239,7 @@ fn information_from_samples(log_z: f64, samples: &[NestedSample]) -> f64 {
     }
 
     // Shift by the maximum log-weight to maintain numerical stability.
-    let max_delta = deltas.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let max_delta = deltas.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 
     if !max_delta.is_finite() {
         return 0.0;

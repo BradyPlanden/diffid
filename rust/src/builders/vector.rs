@@ -5,6 +5,7 @@ use crate::prelude::{ParameterSpec, Problem};
 use crate::problem::{ParameterRange, VectorFn, VectorObjective};
 use std::sync::Arc;
 
+#[must_use]
 #[derive(Clone)]
 pub struct VectorProblemBuilder {
     function: Option<VectorFn>,
@@ -96,6 +97,13 @@ impl VectorProblemBuilder {
     }
 
     /// Build the problem
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No function has been provided via `with_function`
+    /// - No data has been provided via `with_data`
+    /// - The objective fails to build (e.g., dimension mismatches)
     pub fn build(self) -> Result<Problem<VectorObjective>, ProblemBuilderError> {
         // Default costs
         let mut costs = self.costs;

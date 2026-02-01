@@ -18,6 +18,13 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use crate::optimisers::Optimiser;
 use crate::{DynProblem, PyCostMetric, PyProblem};
 
+// Type aliases
+type BoxedScalarFn = Box<dyn Fn(&[f64]) -> f64 + Send + Sync>;
+type BoxedGradientFn = Box<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync>;
+type ParameterSpec = (String, f64, Option<(f64, f64)>);
+type ScalarBuilderWithFn = ScalarProblemBuilder<BoxedScalarFn, NoGradient>;
+type ScalarBuilderWithGrad = ScalarProblemBuilder<BoxedScalarFn, BoxedGradientFn>;
+
 // Python Objective Function Wrapper
 pub(crate) struct PyObjectiveFn {
     callable: Py<PyAny>,
@@ -39,8 +46,7 @@ impl PyObjectiveFn {
                 return match array.len() {
                     1 => Ok(array[0]),
                     n => Err(PyValueError::new_err(format!(
-                        "Objective array must contain exactly one element, got {}",
-                        n
+                        "Objective array must contain exactly one element, got {n}"
                     ))),
                 };
             }
@@ -49,8 +55,7 @@ impl PyObjectiveFn {
                 return match values.len() {
                     1 => Ok(values[0]),
                     n => Err(PyValueError::new_err(format!(
-                        "Objective sequence must contain exactly one element, got {}",
-                        n
+                        "Objective sequence must contain exactly one element, got {n}"
                     ))),
                 };
             }
@@ -62,12 +67,10 @@ impl PyObjectiveFn {
             let ty_name = result
                 .get_type()
                 .name()
-                .map(|n| n.to_string())
-                .unwrap_or_else(|_| "unknown".to_string());
+                .map_or_else(|_| "unknown".to_string(), |n| n.to_string());
 
             Err(PyTypeError::new_err(format!(
-                "Objective callable must return a float, numpy array, or single-element sequence; got {}",
-                ty_name
+                "Objective callable must return a float, numpy array, or single-element sequence; got {ty_name}"
             )))
         })
     }
@@ -102,14 +105,11 @@ impl PyGradientFn {
 enum ScalarBuilderState {
     Empty(ScalarProblemBuilder<NoFunction, NoGradient>),
     WithFunction {
-        builder: ScalarProblemBuilder<Box<dyn Fn(&[f64]) -> f64 + Send + Sync>, NoGradient>,
+        builder: ScalarBuilderWithFn,
         py_callable: Arc<PyObjectiveFn>,
     },
     WithGradient {
-        builder: ScalarProblemBuilder<
-            Box<dyn Fn(&[f64]) -> f64 + Send + Sync>,
-            Box<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync>,
-        >,
+        builder: ScalarBuilderWithGrad,
         py_callable: Arc<PyObjectiveFn>,
         py_gradient: Arc<PyGradientFn>,
     },
@@ -121,8 +121,14 @@ enum ScalarBuilderState {
 pub struct PyScalarBuilder {
     state: ScalarBuilderState,
     pub(crate) default_optimiser: Option<Optimiser>,
-    parameter_specs: Vec<(String, f64, Option<(f64, f64)>)>,
+    parameter_specs: Vec<ParameterSpec>,
     config: HashMap<String, f64>,
+}
+
+impl Default for PyScalarBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg_attr(feature = "stubgen", gen_stub_pymethods)]
@@ -148,7 +154,7 @@ impl PyScalarBuilder {
                 ScalarBuilderState::WithFunction { py_callable, .. } => {
                     // Recreate the builder with a new closure from the Arc
                     let objective = Arc::clone(py_callable);
-                    let boxed_fn: Box<dyn Fn(&[f64]) -> f64 + Send + Sync> =
+                    let boxed_fn: BoxedScalarFn =
                         Box::new(move |x: &[f64]| objective.call(x).unwrap_or(f64::INFINITY));
 
                     let mut builder = ScalarProblemBuilder::new().with_function(boxed_fn);
@@ -174,14 +180,13 @@ impl PyScalarBuilder {
                 } => {
                     // Recreate both closures
                     let objective = Arc::clone(py_callable);
-                    let boxed_fn: Box<dyn Fn(&[f64]) -> f64 + Send + Sync> =
+                    let boxed_fn: BoxedScalarFn =
                         Box::new(move |x: &[f64]| objective.call(x).unwrap_or(f64::INFINITY));
 
                     let grad = Arc::clone(py_gradient);
-                    let boxed_grad: Box<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync> =
-                        Box::new(move |x: &[f64]| {
-                            grad.call(x).unwrap_or_else(|_| vec![f64::NAN; x.len()])
-                        });
+                    let boxed_grad: BoxedGradientFn = Box::new(move |x: &[f64]| {
+                        grad.call(x).unwrap_or_else(|_| vec![f64::NAN; x.len()])
+                    });
 
                     let mut builder = ScalarProblemBuilder::new()
                         .with_function(boxed_fn)
@@ -255,7 +260,7 @@ impl PyScalarBuilder {
 
         let py_fn = Arc::new(PyObjectiveFn::new(obj));
         let objective = Arc::clone(&py_fn);
-        let boxed_fn: Box<dyn Fn(&[f64]) -> f64 + Send + Sync> =
+        let boxed_fn: BoxedScalarFn =
             Box::new(move |x: &[f64]| objective.call(x).unwrap_or(f64::INFINITY));
 
         slf.state = match std::mem::replace(
@@ -283,7 +288,7 @@ impl PyScalarBuilder {
 
         let py_grad = Arc::new(PyGradientFn::new(obj));
         let grad = Arc::clone(&py_grad);
-        let boxed_grad: Box<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync> =
+        let boxed_grad: BoxedGradientFn =
             Box::new(move |x: &[f64]| grad.call(x).unwrap_or_else(|_| vec![f64::NAN; x.len()]));
 
         slf.state = match std::mem::replace(
@@ -316,14 +321,12 @@ impl PyScalarBuilder {
         if let Some((lower, upper)) = bounds {
             if lower >= upper {
                 return Err(PyValueError::new_err(format!(
-                    "Invalid bounds for parameter '{}': lower bound ({}) must be less than upper bound ({})",
-                    name, lower, upper
+                    "Invalid bounds for parameter '{name}': lower bound ({lower}) must be less than upper bound ({upper})"
                 )));
             }
             if !initial_value.is_finite() {
                 return Err(PyValueError::new_err(format!(
-                    "Invalid initial value for parameter '{}': must be finite, got {}",
-                    name, initial_value
+                    "Invalid initial value for parameter '{name}': must be finite, got {initial_value}"
                 )));
             }
         }
@@ -334,7 +337,7 @@ impl PyScalarBuilder {
 
         // Convert Option<(f64, f64)> to ParameterRange
         let range: diffid_core::problem::ParameterRange =
-            bounds.map(|b| b.into()).unwrap_or_else(|| Unbounded.into());
+            bounds.map_or_else(|| Unbounded.into(), std::convert::Into::into);
 
         slf.state = match std::mem::replace(
             &mut slf.state,
@@ -373,7 +376,7 @@ impl PyScalarBuilder {
             ScalarBuilderState::WithFunction { py_callable, .. } => {
                 // Recreate a fresh builder from the Arc
                 let objective = Arc::clone(py_callable);
-                let boxed_fn: Box<dyn Fn(&[f64]) -> f64 + Send + Sync> =
+                let boxed_fn: BoxedScalarFn =
                     Box::new(move |x: &[f64]| objective.call(x).unwrap_or(f64::INFINITY));
 
                 let mut builder = ScalarProblemBuilder::new().with_function(boxed_fn);
@@ -397,14 +400,13 @@ impl PyScalarBuilder {
             } => {
                 // Recreate fresh builder with both function and gradient
                 let objective = Arc::clone(py_callable);
-                let boxed_fn: Box<dyn Fn(&[f64]) -> f64 + Send + Sync> =
+                let boxed_fn: BoxedScalarFn =
                     Box::new(move |x: &[f64]| objective.call(x).unwrap_or(f64::INFINITY));
 
                 let grad = Arc::clone(py_gradient);
-                let boxed_grad: Box<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync> =
-                    Box::new(move |x: &[f64]| {
-                        grad.call(x).unwrap_or_else(|_| vec![f64::NAN; x.len()])
-                    });
+                let boxed_grad: BoxedGradientFn = Box::new(move |x: &[f64]| {
+                    grad.call(x).unwrap_or_else(|_| vec![f64::NAN; x.len()])
+                });
 
                 let mut builder = ScalarProblemBuilder::new()
                     .with_function(boxed_fn)
@@ -463,7 +465,7 @@ fn convert_array_to_dmatrix(data: &PyReadonlyArrayDyn<'_, f64>) -> PyResult<DMat
 pub struct PyDiffsolBuilder {
     inner: DiffsolProblemBuilder,
     pub(crate) default_optimiser: Option<Optimiser>,
-    parameter_specs: Vec<(String, f64, Option<(f64, f64)>)>,
+    parameter_specs: Vec<ParameterSpec>,
     config: HashMap<String, f64>,
 }
 
@@ -494,7 +496,7 @@ impl PyDiffsolBuilder {
         self.__copy__()
     }
 
-    /// Register the DiffSL program describing the system dynamics.
+    /// Register the `DiffSL` program describing the system dynamics.
     fn with_diffsl(mut slf: PyRefMut<'_, Self>, dsl: String) -> PyRefMut<'_, Self> {
         slf.inner = std::mem::take(&mut slf.inner).with_diffsl(dsl);
         slf
@@ -502,7 +504,7 @@ impl PyDiffsolBuilder {
 
     /// Attach observed data used to fit the differential equation.
     ///
-    /// The first column must contain the time samples (t_span) and the remaining
+    /// The first column must contain the time samples (`t_span`) and the remaining
     /// columns the observed trajectories.
     fn with_data<'py>(
         mut slf: PyRefMut<'py, Self>,
@@ -531,8 +533,7 @@ impl PyDiffsolBuilder {
             "sparse" => DiffsolBackend::Sparse,
             other => {
                 return Err(PyValueError::new_err(format!(
-                    "Unknown backend '{}'. Expected 'dense' or 'sparse'",
-                    other
+                    "Unknown backend '{other}'. Expected 'dense' or 'sparse'"
                 )))
             }
         };
@@ -647,7 +648,7 @@ impl PyDiffsolBuilder {
 pub struct PyVectorBuilder {
     inner: VectorProblemBuilder,
     pub(crate) default_optimiser: Option<Optimiser>,
-    parameter_specs: Vec<(String, f64, Option<(f64, f64)>)>,
+    parameter_specs: Vec<ParameterSpec>,
     config: HashMap<String, f64>,
 }
 
@@ -692,19 +693,15 @@ impl PyVectorBuilder {
                     let params_array = PyArray1::from_slice(py, params);
                     let result = objective.call1(py, (params_array,)).map_err(
                         |e| -> Box<dyn std::error::Error + Send + Sync> {
-                            Box::new(std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("Objective call failed: {}", e),
-                            ))
+                            Box::new(std::io::Error::other(format!("Objective call failed: {e}")))
                         },
                     )?;
 
                     let array: PyReadonlyArray1<f64> = result.extract(py).map_err(
                         |e| -> Box<dyn std::error::Error + Send + Sync> {
-                            Box::new(std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("Failed to extract array: {}", e),
-                            ))
+                            Box::new(std::io::Error::other(format!(
+                                "Failed to extract array: {e}"
+                            )))
                         },
                     )?;
 
@@ -753,14 +750,12 @@ impl PyVectorBuilder {
         if let Some((lower, upper)) = bounds {
             if lower >= upper {
                 return Err(PyValueError::new_err(format!(
-                    "Invalid bounds for parameter '{}': lower bound ({}) must be less than upper bound ({})",
-                    name, lower, upper
+                    "Invalid bounds for parameter '{name}': lower bound ({lower}) must be less than upper bound ({upper})"
                 )));
             }
             if !initial_value.is_finite() {
                 return Err(PyValueError::new_err(format!(
-                    "Invalid initial value for parameter '{}': must be finite, got {}",
-                    name, initial_value
+                    "Invalid initial value for parameter '{name}': must be finite, got {initial_value}"
                 )));
             }
         }

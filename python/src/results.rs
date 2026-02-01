@@ -70,7 +70,7 @@ pub struct PyDone {
 impl PyDone {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let result_repr = self.result.bind(py).repr()?.to_string();
-        Ok(format!("Done(result={})", result_repr))
+        Ok(format!("Done(result={result_repr})"))
     }
 
     fn __str__(&self) -> String {
@@ -79,7 +79,7 @@ impl PyDone {
 }
 
 impl PyDone {
-    /// Create a Done variant with OptimisationResults
+    /// Create a Done variant with `OptimisationResults`
     pub fn with_optimisation_results(py: Python<'_>, results: OptimisationResults) -> Self {
         let py_results = PyOptimisationResults { inner: results };
         Self {
@@ -94,7 +94,7 @@ impl PyDone {
         }
     }
 
-    /// Create a Done variant with NestedSamples
+    /// Create a Done variant with `NestedSamples`
     pub fn with_nested_samples(py: Python<'_>, samples: PyNestedSamples) -> Self {
         Self {
             result: Py::new(py, samples).unwrap().into_any(),
@@ -117,7 +117,7 @@ impl PyOptimisationResults {
     /// Returns
     /// -------
     /// numpy.ndarray
-    ///     Best parameter vector as a NumPy array
+    ///     Best parameter vector as a `NumPy` array
     #[getter]
     fn x<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
         self.inner.x.to_pyarray(py)

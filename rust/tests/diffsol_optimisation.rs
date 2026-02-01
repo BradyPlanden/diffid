@@ -3,16 +3,16 @@ use nalgebra::DMatrix;
 
 #[test]
 fn diffsol_builder_supports_end_to_end_optimisation() {
-    let dsl = r#"
+    let dsl = r"
 in_i { a = 1 }
 u_i { y = 0.1 }
 F_i { a * y }
-"#;
+";
 
     let true_param = 1.2_f64;
     let y0 = 0.1_f64;
 
-    let t_span: Vec<f64> = (0..20).map(|i| i as f64 * 0.05).collect();
+    let t_span: Vec<f64> = (0..20).map(|i| f64::from(i) * 0.05).collect();
     let data_values: Vec<f64> = t_span.iter().map(|t| y0 * (true_param * t).exp()).collect();
 
     let mut data = Vec::with_capacity(t_span.len() * 2);

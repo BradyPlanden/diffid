@@ -63,6 +63,7 @@ examples = [
 
     # Non-JAX dependencies
     "matplotlib>=3.8",
+    "scipy>=1.16.2",
     "diffeqpy",
 ]
 
@@ -74,22 +75,39 @@ fix = true
 [tool.ruff.lint]
 select = [
     "A",    # flake8-builtins: Check for Python builtins being used as variables or parameters
+    "ARG",  # flake8-unused-arguments: Check for unused function arguments
     "B",    # flake8-bugbear: Find likely bugs and design problems
+    "C90",  # mccabe: Check for code complexity
     "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
     "F",    # pyflakes: Detect various errors by parsing the source file
+    "FURB", # refurb: Modernization suggestions
     "I",    # isort: Check and enforce import ordering
     "ISC",  # flake8-implicit-str-concat: Check for implicit string concatenation
+    "PERF", # Perflint: Performance anti-patterns
+    "PLE",  # Pylint errors
+    "PLR",  # Pylint refactor: Check for code smells and complexity
+    "PLW",  # Pylint warnings
+    "PT",   # flake8-pytest-style: Check pytest best practices
+    "PTH",  # flake8-use-pathlib: Prefer pathlib over os.path
+    "RET",  # flake8-return: Check return statement consistency
+    "RUF",  # Ruff-specific rules
+    "SIM",  # flake8-simplify: Suggestions for simplifying code
     "TID",  # flake8-tidy-imports: Validate import hygiene
     "UP",   # pyupgrade: Automatically upgrade syntax for newer versions of Python
+    "W",    # pycodestyle warnings
     "SLF001",  # flake8-string-format: Check for private object name access
 ]
 
-ignore = ["E501","E741"]
+ignore = [
+    "E501",    # Line too long (handled by formatter)
+    "E741",    # Ambiguous variable name
+    "PLR0913", # Too many arguments to function call
+    "PLR2004", # Magic value used in comparison
+]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["SLF001"]
-"**.ipynb" = ["E402", "E703"]
+"tests/*" = ["SLF001", "ARG001", "PLR2004", "RUF001", "RUF002"]  # Allow private access, unused fixtures, magic values, and Greek letters in tests
+"**.ipynb" = ["E402", "E703", "PLR2004", "ARG001", "RUF001"]  # Relax some rules for notebooks
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"

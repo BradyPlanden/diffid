@@ -81,6 +81,11 @@ impl ScalarOptimiser {
     /// * `initial` - Initial point (will be auto-expanded if needed)
     /// * `bounds` - Optional parameter bounds
     ///
+    /// # Panics
+    ///
+    /// May panic when using Nelder-Mead if the objective function returns an empty vector.
+    /// This should not occur under normal operation.
+    ///
     /// # Returns
     /// Optimisation results including best point, value, and diagnostics
     ///
@@ -111,7 +116,7 @@ impl ScalarOptimiser {
             ScalarOptimiser::CMAES(cm) => cm.run_batch(objective, initial, bounds),
             ScalarOptimiser::NelderMead(nm) => nm.run(
                 |x| {
-                    let result = objective(&vec![x.to_vec()]);
+                    let result = objective(&[x.to_vec()]);
                     result.into_iter().next().unwrap() // ToDO: This needs proper error integration
                 },
                 initial,
@@ -203,7 +208,7 @@ impl Optimiser {
     pub fn as_scalar(&self) -> Option<&ScalarOptimiser> {
         match self {
             Optimiser::Scalar(opt) => Some(opt),
-            _ => None,
+            Optimiser::Gradient(_) => None,
         }
     }
 
@@ -211,7 +216,7 @@ impl Optimiser {
     pub fn as_scalar_mut(&mut self) -> Option<&mut ScalarOptimiser> {
         match self {
             Optimiser::Scalar(opt) => Some(opt),
-            _ => None,
+            Optimiser::Gradient(_) => None,
         }
     }
 
@@ -221,7 +226,7 @@ impl Optimiser {
     pub fn as_gradient(&self) -> Option<&GradientOptimiser> {
         match self {
             Optimiser::Gradient(opt) => Some(opt),
-            _ => None,
+            Optimiser::Scalar(_) => None,
         }
     }
 
@@ -229,7 +234,7 @@ impl Optimiser {
     pub fn as_gradient_mut(&mut self) -> Option<&mut GradientOptimiser> {
         match self {
             Optimiser::Gradient(opt) => Some(opt),
-            _ => None,
+            Optimiser::Scalar(_) => None,
         }
     }
 
@@ -237,10 +242,14 @@ impl Optimiser {
     ///
     /// Returns `Ok(ScalarOptimiser)` on success, or `Err(self)` if this is not
     /// a scalar optimiser.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(self)` if this optimiser is a gradient optimiser, not a scalar optimiser.
     pub fn into_scalar(self) -> Result<ScalarOptimiser, Self> {
         match self {
             Optimiser::Scalar(opt) => Ok(opt),
-            other => Err(other),
+            other @ Optimiser::Gradient(_) => Err(other),
         }
     }
 
@@ -248,10 +257,14 @@ impl Optimiser {
     ///
     /// Returns `Ok(GradientOptimiser)` on success, or `Err(self)` if this is not
     /// a gradient optimiser.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(self)` if this optimiser is a scalar optimiser, not a gradient optimiser.
     pub fn into_gradient(self) -> Result<GradientOptimiser, Self> {
         match self {
             Optimiser::Gradient(opt) => Ok(opt),
-            other => Err(other),
+            other @ Optimiser::Scalar(_) => Err(other),
         }
     }
 
@@ -450,7 +463,7 @@ impl fmt::Display for TerminationReason {
                 write!(f, "Patience elapsed")
             }
             TerminationReason::FunctionEvaluationFailed(msg) => {
-                write!(f, "Function evaluation failed: {}", msg)
+                write!(f, "Function evaluation failed: {msg}")
             }
         }
     }
@@ -565,12 +578,12 @@ mod tests {
 
         match nm {
             ScalarOptimiser::NelderMead(_) => (),
-            _ => panic!("Expected NelderMead variant"),
+            ScalarOptimiser::CMAES(_) => panic!("Expected NelderMead variant"),
         }
 
         match cm {
             ScalarOptimiser::CMAES(_) => (),
-            _ => panic!("Expected CMAES variant"),
+            ScalarOptimiser::NelderMead(_) => panic!("Expected CMAES variant"),
         }
     }
 
@@ -890,12 +903,14 @@ mod tests {
         let result = optimiser.run(
             |x| -> Result<(f64, Vec<f64>), ProblemError> {
                 let (value, gradient_opt) = problem.evaluate_with_gradient(x)?;
-                match gradient_opt {
-                    Some(g) => Ok((value, g)),
-                    None => Err(ProblemError::EvaluationFailed(
-                        "Adam optimiser requires an available gradient".to_string(),
-                    )),
-                }
+                gradient_opt.map_or_else(
+                    || {
+                        Err(ProblemError::EvaluationFailed(
+                            "Adam optimiser requires an available gradient".to_string(),
+                        ))
+                    },
+                    |g| Ok((value, g)),
+                )
             },
             vec![1.0, 2.0],
             Bounds::unbounded(2),
@@ -906,7 +921,7 @@ mod tests {
             TerminationReason::FunctionEvaluationFailed(ref msg) => {
                 assert!(msg.contains("requires an available gradient"));
             }
-            other => panic!("expected FunctionEvaluationFailed, got {:?}", other),
+            other => panic!("expected FunctionEvaluationFailed, got {other:?}"),
         }
     }
 
@@ -1023,9 +1038,7 @@ mod tests {
         for (x1, x2) in result_one.x.iter().zip(result_two.x.iter()) {
             assert!(
                 (x1 - x2).abs() < 1e-10,
-                "expected identical optima: {} vs {}",
-                x1,
-                x2
+                "expected identical optima: {x1} vs {x2}"
             );
         }
         assert_eq!(result_one.covariance, result_two.covariance);
@@ -1121,7 +1134,7 @@ mod tests {
             .zip(&covariance)
             .for_each(|(row_i, row_j)| {
                 row_i.iter().zip(row_j).for_each(|(a, b)| {
-                    assert!((a - b).abs() < 1e-12, "covariance matrix must be symmetric")
+                    assert!((a - b).abs() < 1e-12, "covariance matrix must be symmetric");
                 });
             });
 
@@ -1134,8 +1147,7 @@ mod tests {
 
         assert!(
             eigenvalues.iter().all(|&eig| eig >= -1e-10),
-            "covariance must be positive semi-definite: {:?}",
-            eigenvalues
+            "covariance must be positive semi-definite: {eigenvalues:?}"
         );
     }
 
@@ -1156,9 +1168,7 @@ mod tests {
 
         assert!(
             (computed - expected).abs() < 1e-12,
-            "d_sigma mismatch: expected {}, got {}",
-            expected,
-            computed
+            "d_sigma mismatch: expected {expected}, got {computed}"
         );
 
         // For this case, the sqrt term is less than 1, so it should clamp to 0
@@ -1198,7 +1208,7 @@ mod tests {
         let updated = CMAESState::update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
 
         for (exp, got) in expected.iter().zip(updated.iter()) {
-            assert!((exp - got).abs() < 1e-12, "expected {} got {}", exp, got);
+            assert!((exp - got).abs() < 1e-12, "expected {exp} got {got}");
         }
     }
 
@@ -1220,7 +1230,7 @@ mod tests {
         let updated = CMAESState::update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
 
         for (exp, got) in expected.iter().zip(updated.iter()) {
-            assert!((exp - got).abs() < 1e-12, "expected {} got {}", exp, got);
+            assert!((exp - got).abs() < 1e-12, "expected {exp} got {got}");
         }
     }
 }

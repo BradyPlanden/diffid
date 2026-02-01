@@ -88,7 +88,7 @@ def make_cmaes() -> diffid.CMAES:
     ],
 )
 @pytest.mark.parametrize(
-    "objective, dimension, initial, expected, position_tol, fun_tol",
+    ("objective", "dimension", "initial", "expected", "position_tol", "fun_tol"),
     [
         pytest.param(
             sphere,

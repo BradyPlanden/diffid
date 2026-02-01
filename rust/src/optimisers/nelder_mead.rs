@@ -7,6 +7,7 @@ use std::cmp::Ordering;
 use std::time::{Duration, Instant};
 
 /// Configuration for the Nelder-Mead optimiser
+#[must_use]
 #[derive(Clone, Debug)]
 pub struct NelderMead {
     max_iter: usize,
@@ -101,6 +102,11 @@ impl NelderMead {
     /// Run optimisation using a closure for evaluation
     ///
     /// This is a convenience wrapper around the ask/tell interface
+    ///
+    /// # Panics
+    ///
+    /// Panics if the optimisation state machine enters an unexpected state after
+    /// a tell error. This should not occur under normal operation.
     pub fn run<F, R, E>(
         &self,
         mut objective: F,
@@ -133,7 +139,7 @@ impl NelderMead {
         // Should not reach here normally
         match state.ask() {
             AskResult::Done(results) => results,
-            _ => panic!("Unexpected state after tell error"),
+            AskResult::Evaluate(_) => panic!("Unexpected state after tell error"),
         }
     }
 }
@@ -211,7 +217,8 @@ impl NelderMeadState {
             NelderMeadPhase::EvaluatingInitial => {
                 AskResult::Evaluate(vec![self.initial_point.clone()])
             }
-            NelderMeadPhase::BuildingSimplex { pending_point, .. } => {
+            NelderMeadPhase::BuildingSimplex { pending_point, .. }
+            | NelderMeadPhase::Shrinking { pending_point, .. } => {
                 AskResult::Evaluate(vec![pending_point.clone()])
             }
             NelderMeadPhase::AwaitingReflection {
@@ -223,15 +230,16 @@ impl NelderMeadState {
             NelderMeadPhase::AwaitingContraction { contract_point, .. } => {
                 AskResult::Evaluate(vec![contract_point.clone()])
             }
-            NelderMeadPhase::Shrinking { pending_point, .. } => {
-                AskResult::Evaluate(vec![pending_point.clone()])
-            }
         }
     }
 
     /// Report the evaluation result for the last point from `ask()`
     ///
     /// Pass `Err` if the objective function failed to evaluate
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the optimiser has already terminated.
     pub fn tell<T, E>(&mut self, result: T) -> Result<(), TellError>
     where
         T: TryInto<ScalarEvaluation, Error = E>,
@@ -246,7 +254,7 @@ impl NelderMeadState {
             Err(e) => {
                 let err: EvaluationError = e.into();
                 self.phase = NelderMeadPhase::Terminated(
-                    TerminationReason::FunctionEvaluationFailed(format!("{}", err)),
+                    TerminationReason::FunctionEvaluationFailed(format!("{err}")),
                 );
                 return Ok(());
             }
@@ -543,10 +551,10 @@ impl NelderMeadState {
     fn compute_simplex_vertex(&self, dim: usize) -> Point {
         let mut point = self.initial_point.clone();
 
-        if point[dim] != 0.0 {
-            point[dim] *= 1.0 + self.config.step_size;
-        } else {
+        if point[dim] == 0.0 {
             point[dim] = self.config.step_size;
+        } else {
+            point[dim] *= 1.0 + self.config.step_size;
         }
 
         // Ensure the point differs from the initial point
@@ -691,6 +699,7 @@ mod tests {
     use super::*;
     use std::convert::Infallible;
 
+    #[allow(clippy::unnecessary_wraps)]
     fn rosenbrock(x: &[f64]) -> Result<f64, Infallible> {
         let a = 1.0;
         let b = 100.0;
@@ -712,8 +721,7 @@ mod tests {
         loop {
             match state.tell(current_value) {
                 Ok(()) => {}
-                Err(TellError::AlreadyTerminated) => break,
-                _ => break,
+                Err(_) => break,
             }
 
             match state.ask() {
@@ -740,6 +748,7 @@ mod tests {
         assert!(results.value < 1e-6);
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn sphere(x: &[f64]) -> Result<f64, std::io::Error> {
         Ok(x.iter().map(|xi| xi * xi).sum())
     }
@@ -928,8 +937,7 @@ mod tests {
                         for &val in point {
                             assert!(
                                 (-1.0..=1.0).contains(&val),
-                                "Point {:?} violates bounds",
-                                point
+                                "Point {point:?} violates bounds"
                             );
                         }
                     }

@@ -484,6 +484,7 @@ examples = [
     { name = "jax", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'" },
     { name = "jaxlib", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'" },
     { name = "matplotlib" },
+    { name = "scipy" },
 ]
 
 [package.metadata]
@@ -520,6 +521,7 @@ examples = [
     { name = "jax", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "==0.4.38" },
     { name = "jaxlib", marker = "python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "==0.4.38" },
     { name = "matplotlib", specifier = ">=3.8" },
+    { name = "scipy", specifier = ">=1.16.2" },
 ]
 
 [[package]]

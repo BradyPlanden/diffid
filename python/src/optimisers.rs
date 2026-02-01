@@ -161,7 +161,7 @@ impl PyNelderMead {
 
     /// Initialize ask-tell optimisation state.
     ///
-    /// Returns a NelderMeadState object that can be used for incremental optimisation
+    /// Returns a `NelderMeadState` object that can be used for incremental optimisation
     /// via the ask-tell interface.
     ///
     /// Parameters
@@ -192,9 +192,7 @@ impl PyNelderMead {
         initial: Vec<f64>,
         bounds: Option<Vec<(f64, f64)>>,
     ) -> PyResult<PyNelderMeadState> {
-        let bounds = bounds
-            .map(Bounds::new)
-            .unwrap_or_else(|| Bounds::unbounded_like(&initial));
+        let bounds = bounds.map_or_else(|| Bounds::unbounded_like(&initial), Bounds::new);
 
         let (state, _initial_point) = self.inner.init(initial, bounds);
         Ok(PyNelderMeadState { inner: state })
@@ -288,7 +286,7 @@ impl PyCMAES {
 
     /// Initialize ask-tell optimisation state.
     ///
-    /// Returns a CMAESState object that can be used for incremental optimisation
+    /// Returns a `CMAESState` object that can be used for incremental optimisation
     /// via the ask-tell interface.
     ///
     /// Parameters
@@ -315,9 +313,7 @@ impl PyCMAES {
     /// ...     state.tell(values)
     #[pyo3(signature = (initial, bounds=None))]
     fn init(&self, initial: Vec<f64>, bounds: Option<Vec<(f64, f64)>>) -> PyResult<PyCMAESState> {
-        let bounds = bounds
-            .map(Bounds::new)
-            .unwrap_or_else(|| Bounds::unbounded_like(&initial));
+        let bounds = bounds.map_or_else(|| Bounds::unbounded_like(&initial), Bounds::new);
 
         let (state, _initial_point) = self.inner.init(initial, bounds);
         Ok(PyCMAESState { inner: state })
@@ -406,7 +402,7 @@ impl PyAdam {
 
     /// Initialize ask-tell optimisation state.
     ///
-    /// Returns an AdamState object that can be used for incremental optimisation
+    /// Returns an `AdamState` object that can be used for incremental optimisation
     /// via the ask-tell interface.
     ///
     /// Parameters
@@ -433,9 +429,7 @@ impl PyAdam {
     /// ...     state.tell(values)
     #[pyo3(signature = (initial, bounds=None))]
     fn init(&self, initial: Vec<f64>, bounds: Option<Vec<(f64, f64)>>) -> PyResult<PyAdamState> {
-        let bounds = bounds
-            .map(Bounds::new)
-            .unwrap_or_else(|| Bounds::unbounded_like(&initial));
+        let bounds = bounds.map_or_else(|| Bounds::unbounded_like(&initial), Bounds::new);
 
         let (state, _initial_point) = self.inner.init(initial, bounds);
         Ok(PyAdamState { inner: state })
@@ -503,9 +497,9 @@ impl PyAdamState {
     ///
     /// Raises
     /// ------
-    /// TellError
+    /// `TellError`
     ///     If called after optimisation has terminated or if result format is invalid
-    /// EvaluationError
+    /// `EvaluationError`
     ///     If the evaluation failed or contained invalid values
     ///
     /// Examples
@@ -546,7 +540,7 @@ impl PyAdamState {
     /// Returns
     /// -------
     /// tuple[list[float], float] | None
-    ///     (best_point, best_value) or None if no valid evaluations yet
+    ///     (`best_point`, `best_value`) or None if no valid evaluations yet
     fn best(&self) -> Option<(Vec<f64>, f64)> {
         self.inner
             .best()
@@ -569,7 +563,7 @@ impl PyAdamState {
             self.inner.iterations(),
             self.inner.evaluations(),
             match self.inner.best() {
-                Some((_, value)) => format!("{:.6}", value),
+                Some((_, value)) => format!("{value:.6}"),
                 None => "None".to_string(),
             }
         )
@@ -631,9 +625,9 @@ impl PyNelderMeadState {
     ///
     /// Raises
     /// ------
-    /// TellError
+    /// `TellError`
     ///     If called after optimisation has terminated
-    /// EvaluationError
+    /// `EvaluationError`
     ///     If the evaluation failed or contained invalid values
     fn tell(&mut self, result: f64) -> PyResult<()> {
         self.inner.tell(result).map_err(tell_error_to_py)
@@ -664,7 +658,7 @@ impl PyNelderMeadState {
     /// Returns
     /// -------
     /// tuple[list[float], float] | None
-    ///     (best_point, best_value) or None if no valid evaluations yet
+    ///     (`best_point`, `best_value`) or None if no valid evaluations yet
     fn best(&self) -> Option<(Vec<f64>, f64)> {
         self.inner
             .best()
@@ -677,7 +671,7 @@ impl PyNelderMeadState {
             self.inner.iterations(),
             self.inner.evaluations(),
             match self.inner.best() {
-                Some((_, value)) => format!("{:.6}", value),
+                Some((_, value)) => format!("{value:.6}"),
                 None => "None".to_string(),
             }
         )
@@ -728,7 +722,7 @@ impl PyCMAESState {
     /// Notes
     /// -----
     /// CMA-ES evaluates a population of points each iteration. The number
-    /// of points returned depends on the population_size setting.
+    /// of points returned depends on the `population_size` setting.
     fn ask(&self, py: Python<'_>) -> Py<PyAny> {
         match self.inner.ask() {
             AskResult::Evaluate(points) => Py::new(py, PyEvaluate { points }).unwrap().into_any(),
@@ -744,14 +738,14 @@ impl PyCMAESState {
     /// ----------
     /// results : list[float]
     ///     List of objective function values corresponding to the points
-    ///     from the last ask() call. Must match the number of points.
+    ///     from the last `ask()` call. Must match the number of points.
     ///
     /// Raises
     /// ------
-    /// TellError
+    /// `TellError`
     ///     If called after optimisation has terminated or if wrong number
     ///     of results provided
-    /// EvaluationError
+    /// `EvaluationError`
     ///     If evaluations failed or contained invalid values
     fn tell(&mut self, results: Vec<f64>) -> PyResult<()> {
         self.inner.tell(results).map_err(tell_error_to_py)
@@ -782,7 +776,7 @@ impl PyCMAESState {
     /// Returns
     /// -------
     /// tuple[list[float], float] | None
-    ///     (best_point, best_value) or None if no valid evaluations yet
+    ///     (`best_point`, `best_value`) or None if no valid evaluations yet
     fn best(&self) -> Option<(Vec<f64>, f64)> {
         self.inner
             .best()
@@ -815,7 +809,7 @@ impl PyCMAESState {
             self.inner.iterations(),
             self.inner.evaluations(),
             match self.inner.best() {
-                Some((_, value)) => format!("{:.6}", value),
+                Some((_, value)) => format!("{value:.6}"),
                 None => "None".to_string(),
             },
             self.inner.sigma()

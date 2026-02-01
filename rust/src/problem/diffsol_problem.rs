@@ -89,7 +89,7 @@ impl DiffsolObjective {
                     .rtol(self.config.rtol)
                     .build_from_diffsl(&self.dsl)
                     .map_err(|e| {
-                        ProblemError::BuildFailed(format!("Failed to build ODE model: {}", e))
+                        ProblemError::BuildFailed(format!("Failed to build ODE model: {e}"))
                     })?;
                 Ok(DiffsolSimulator::Dense(Box::new(diff_system)))
             }
@@ -99,7 +99,7 @@ impl DiffsolObjective {
                     .rtol(self.config.rtol)
                     .build_from_diffsl(&self.dsl)
                     .map_err(|e| {
-                        ProblemError::BuildFailed(format!("Failed to build ODE model: {}", e))
+                        ProblemError::BuildFailed(format!("Failed to build ODE model: {e}"))
                     })?;
                 Ok(DiffsolSimulator::Sparse(Box::new(diff_system)))
             }
@@ -228,27 +228,25 @@ impl Objective for DiffsolObjective {
         self.with_simulator_cached(x, |problem| match problem {
             DiffsolSimulator::Dense(p) => {
                 let solver_result = p.bdf::<DenseSolver>();
-                let mut solver = match solver_result {
-                    Ok(s) => s,
-                    Err(_) => return Ok(FAILED_SOLVE_PENALTY),
+                let Ok(mut solver) = solver_result else {
+                    return Ok(FAILED_SOLVE_PENALTY);
                 };
 
-                match Self::solve_safely(|| solver.solve_dense(&self.t_span)) {
-                    Ok(solution) => self.calculate_cost(&solution),
-                    Err(_) => Ok(FAILED_SOLVE_PENALTY),
-                }
+                Self::solve_safely(|| solver.solve_dense(&self.t_span)).map_or_else(
+                    |_| Ok(FAILED_SOLVE_PENALTY),
+                    |solution| self.calculate_cost(&solution),
+                )
             }
             DiffsolSimulator::Sparse(p) => {
                 let solver_result = p.bdf::<SparseSolver>();
-                let mut solver = match solver_result {
-                    Ok(s) => s,
-                    Err(_) => return Ok(FAILED_SOLVE_PENALTY),
+                let Ok(mut solver) = solver_result else {
+                    return Ok(FAILED_SOLVE_PENALTY);
                 };
 
-                match Self::solve_safely(|| solver.solve_dense(&self.t_span)) {
-                    Ok(solution) => self.calculate_cost(&solution),
-                    Err(_) => Ok(FAILED_SOLVE_PENALTY),
-                }
+                Self::solve_safely(|| solver.solve_dense(&self.t_span)).map_or_else(
+                    |_| Ok(FAILED_SOLVE_PENALTY),
+                    |solution| self.calculate_cost(&solution),
+                )
             }
         })
     }
@@ -305,13 +303,12 @@ mod tests {
     use super::*;
     use crate::cost::{GaussianNll, SumSquaredError};
 
-    #[allow(dead_code)]
     fn build_logistic_problem(backend: DiffsolBackend) -> DiffsolObjective {
-        let dsl = r#"
+        let dsl = r"
 in_i {r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
-"#;
+";
 
         let t_span: Vec<f64> = (0..6).map(|i| i as f64 * 0.2).collect();
         let data_values: Vec<f64> = t_span.iter().map(|t| 0.1 * (*t).exp()).collect();
@@ -364,7 +361,7 @@ F_i { (r * y) * (1 - (y / k)) }
         // Build a 2x1 sensitivity matrix (2 elements) which mismatches the 3 residuals
         let triplets = vec![(0, 0, 0.5), (1, 0, 0.5)];
         let wrong_size_sens: NalgebraMat<f64> =
-            Matrix::try_from_triplets(2, 1, triplets, Default::default()).unwrap();
+            Matrix::try_from_triplets(2, 1, triplets, diffsol::NalgebraContext).unwrap();
 
         let result = std::panic::catch_unwind(|| {
             metric
@@ -384,7 +381,7 @@ F_i { (r * y) * (1 - (y / k)) }
         let sensitivities: Vec<NalgebraMat<f64>> = (0..3)
             .map(|param_idx| {
                 let triplets = vec![(param_idx, 0, 1.0)];
-                Matrix::try_from_triplets(3, 1, triplets, Default::default()).unwrap()
+                Matrix::try_from_triplets(3, 1, triplets, diffsol::NalgebraContext).unwrap()
             })
             .collect();
 
@@ -415,6 +412,7 @@ F_i { (r * y) * (1 - (y / k)) }
         let eps = 1e-5_f64;
 
         // Compare against finite-difference approximation of problem.evaluate
+        #[allow(clippy::needless_range_loop)]
         for i in 0..params.len() {
             let mut params_fd = params;
             let fd = finite_difference(&mut params_fd, i, eps, |p| {
@@ -427,11 +425,7 @@ F_i { (r * y) * (1 - (y / k)) }
             let diff = (fd - g).abs();
             assert!(
                 diff < 1e-6,
-                "gradient mismatch for param {}: fd={} grad={} diff={}",
-                i,
-                fd,
-                g,
-                diff
+                "gradient mismatch for param {i}: fd={fd} grad={g} diff={diff}"
             );
         }
     }

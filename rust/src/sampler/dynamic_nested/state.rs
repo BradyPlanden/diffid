@@ -69,10 +69,7 @@ impl RemovedPoint {
 impl SamplerState {
     /// Initialise state from an initial live set, inferring problem dimension.
     pub fn new(live_points: Vec<LivePoint>) -> Self {
-        let dimension = live_points
-            .first()
-            .map(|point| point.position.len())
-            .unwrap_or(0);
+        let dimension = live_points.first().map_or(0, |point| point.position.len());
         Self {
             live_points,
             posterior: Vec::new(),
@@ -112,15 +109,6 @@ impl SamplerState {
             .iter()
             .map(|p| p.log_likelihood)
             .fold(f64::NEG_INFINITY, f64::max)
-    }
-
-    /// Worst log-likelihood among the current live points.
-    #[allow(dead_code)]
-    pub fn min_log_likelihood(&self) -> f64 {
-        self.live_points
-            .iter()
-            .map(|p| p.log_likelihood)
-            .fold(f64::INFINITY, f64::min)
     }
 
     /// Index of the live point with the lowest likelihood.

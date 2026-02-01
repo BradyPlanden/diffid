@@ -6,13 +6,13 @@ use std::time::Duration;
 
 macro_rules! build_logistic_problem {
     ($backend:expr, $parallel:expr) => {{
-        let dsl = r#"
+        let dsl = r"
 in_i { r = 1, k = 1 }
 r { 1 }
 k { 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
-"#;
+";
 
         let t_span: Vec<f64> = (0..20).map(|i| i as f64 * 0.1).collect();
         let data_values: Vec<f64> = t_span.iter().map(|t| 0.1 * (*t).exp()).collect();
@@ -41,7 +41,7 @@ fn bench_diffsol_single_eval(c: &mut Criterion) {
     for backend in [DiffsolBackend::Dense, DiffsolBackend::Sparse] {
         let problem = build_logistic_problem!(backend, false);
         group.bench_with_input(
-            BenchmarkId::new("evaluate", format!("{:?}", backend)),
+            BenchmarkId::new("evaluate", format!("{backend:?}")),
             &problem,
             |b, problem| {
                 b.iter(|| {
@@ -62,14 +62,14 @@ fn bench_diffsol_population_eval(c: &mut Criterion) {
 
     let population: Vec<Vec<f64>> = (0..64)
         .map(|i| {
-            let scale = 0.8 + (i as f64) * 0.01;
+            let scale = f64::from(i).mul_add(0.01, 0.8);
             vec![1.0 * scale, 1.0 / scale]
         })
         .collect();
 
     for backend in [DiffsolBackend::Dense, DiffsolBackend::Sparse] {
         for &parallel in &[false, true] {
-            let label = format!("{:?}_parallel={}", backend, parallel);
+            let label = format!("{backend:?}_parallel={parallel}");
             let problem = build_logistic_problem!(backend, parallel);
 
             group.bench_with_input(

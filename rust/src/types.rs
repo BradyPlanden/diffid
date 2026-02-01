@@ -19,7 +19,7 @@ impl ScalarEvaluation {
     }
 }
 
-/// TryFrom f64 with validation
+/// `TryFrom` f64 with validation
 impl TryFrom<f64> for ScalarEvaluation {
     type Error = EvaluationError;
 
@@ -60,7 +60,7 @@ impl GradientEvaluation {
     }
 }
 
-/// TryFrom (f64, Vec<f64>) with validation
+/// `TryFrom` (f64, Vec<f64>) with validation
 impl TryFrom<(f64, Vec<f64>)> for GradientEvaluation {
     type Error = EvaluationError;
 

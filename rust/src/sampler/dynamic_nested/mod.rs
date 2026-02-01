@@ -65,6 +65,7 @@ pub struct DynamicNestedSamplerState {
 }
 
 /// Configurable Dynamic Nested Sampling engine
+#[must_use]
 #[derive(Clone, Debug)]
 pub struct DynamicNestedSampler {
     live_points: usize,
@@ -151,12 +152,11 @@ impl DynamicNestedSampler {
     /// * `bounds` - Parameter bounds for sampling
     ///
     /// # Returns
-    /// Tuple of (state, initial_candidates) where candidates should be evaluated
+    /// Tuple of (state, `initial_candidates`) where candidates should be evaluated
     pub fn init(&self, _initial: Point, bounds: Bounds) -> (DynamicNestedSamplerState, Vec<Point>) {
-        let mut rng = match self.seed {
-            Some(seed) => StdRng::seed_from_u64(seed),
-            None => StdRng::from_rng(&mut rand::rng()),
-        };
+        let mut rng = self
+            .seed
+            .map_or_else(|| StdRng::from_rng(&mut rand::rng()), StdRng::seed_from_u64);
 
         let dimension = bounds.dimension();
 
@@ -230,8 +230,8 @@ impl DynamicNestedSamplerState {
             }
             DNSPhase::AwaitingReplacementBatch {
                 pending_positions, ..
-            } => AskResult::Evaluate(pending_positions.clone()),
-            DNSPhase::AwaitingExpansion {
+            }
+            | DNSPhase::AwaitingExpansion {
                 pending_positions, ..
             } => AskResult::Evaluate(pending_positions.clone()),
         }
@@ -243,7 +243,13 @@ impl DynamicNestedSamplerState {
     /// Errors are treated as infinite values (rejected).
     ///
     /// # Arguments
-    /// * `results` - Evaluation results matching the last ask() request
+    /// * `results` - Evaluation results matching the last `ask()` request
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The sampler has already terminated
+    /// - The number of results doesn't match the expected count
     ///
     /// # Returns
     /// `Ok(())` on success, or `TellError` if already terminated or result count mismatch
@@ -267,16 +273,13 @@ impl DynamicNestedSamplerState {
         // Convert results to Vec<f64>, treating errors as INFINITY
         let values: Vec<f64> = results
             .into_iter()
-            .map(|r| match r.try_into() {
-                Ok(eval) => eval.value(),
-                Err(_) => f64::INFINITY,
-            })
+            .map(|r| r.try_into().map_or(f64::INFINITY, |eval| eval.value()))
             .collect();
 
         // Dispatch to phase handler
         match &self.phase {
             DNSPhase::InitialisingLivePoints { .. } => self.handle_initialisation(values),
-            DNSPhase::AwaitingReplacementBatch { .. } => self.handle_replacement_batch(values),
+            DNSPhase::AwaitingReplacementBatch { .. } => self.handle_replacement_batch(&values),
             DNSPhase::AwaitingExpansion { .. } => self.handle_expansion(values),
             DNSPhase::Terminated(_) => unreachable!("Already checked above"),
         }
@@ -358,7 +361,7 @@ impl DynamicNestedSamplerState {
     ///
     /// Evaluates a batch of MCMC proposals and selects the best valid one (likelihood > threshold).
     /// If all proposals are rejected, the removed point is restored.
-    fn handle_replacement_batch(&mut self, values: Vec<f64>) -> Result<(), TellError> {
+    fn handle_replacement_batch(&mut self, values: &[f64]) -> Result<(), TellError> {
         // Extract phase data
         let (positions, removed, threshold) = match &self.phase {
             DNSPhase::AwaitingReplacementBatch {
@@ -439,6 +442,11 @@ impl DynamicNestedSamplerState {
     }
 
     /// Start next iteration of the main sampling loop
+    ///
+    /// Note: Returns Result for API consistency across sampler methods,
+    /// though this function currently never errors. Maintains uniform
+    /// interface for potential future error cases.
+    #[allow(clippy::unnecessary_wraps)]
     fn start_next_iteration(&mut self) -> Result<(), TellError> {
         // Check termination conditions
         if self.sampler_state.live_points().is_empty() {
@@ -568,6 +576,10 @@ impl DynamicNestedSampler {
     ///   nested sampling calculations.
     /// * `initial` - Initial point (currently unused, reserved for future)
     /// * `bounds` - Parameter bounds
+    ///
+    /// # Panics
+    ///
+    /// Panics if `tell()` fails during the sampling loop, which indicates a bug in the sampler.
     pub fn run<F, R, E>(&self, mut objective: F, initial: Point, bounds: Bounds) -> NestedSamples
     where
         F: FnMut(&[f64]) -> R,
@@ -586,7 +598,9 @@ impl DynamicNestedSampler {
                     results = points.iter().map(|p| objective(p)).collect();
                 }
                 AskResult::Done(SamplingResults::Nested(samples)) => return samples,
-                _ => unreachable!("DynamicNestedSampler always returns Nested results"),
+                AskResult::Done(_) => {
+                    unreachable!("DynamicNestedSampler always returns Nested results")
+                }
             }
         }
     }
@@ -602,6 +616,11 @@ impl DynamicNestedSampler {
     ///   nested sampling calculations.
     /// * `initial` - Initial point (currently unused, reserved for future)
     /// * `bounds` - Parameter bounds
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sampling state machine enters an unexpected state after a tell error.
+    /// This should not occur under normal operation.
     pub fn run_batch<F, R, E>(&self, objective: F, initial: Point, bounds: Bounds) -> NestedSamples
     where
         F: Fn(&[Vec<f64>]) -> Vec<R>,
@@ -622,7 +641,9 @@ impl DynamicNestedSampler {
                     results = objective(&points);
                 }
                 AskResult::Done(SamplingResults::Nested(samples)) => return samples,
-                _ => unreachable!("DynamicNestedSampler always returns Nested results"),
+                AskResult::Done(_) => {
+                    unreachable!("DynamicNestedSampler always returns Nested results")
+                }
             }
         }
 
@@ -702,8 +723,7 @@ mod tests {
         let mean = nested.mean()[0];
         assert!(
             mean.is_finite(),
-            "posterior mean must be finite, got {:.4}",
-            mean
+            "posterior mean must be finite, got {mean:.4}"
         );
 
         // The posterior should be concentrated within the prior bounds supplied in the builder.
@@ -718,7 +738,7 @@ mod tests {
         let evidence_sum: f64 = nested
             .posterior()
             .iter()
-            .map(|sample| sample.evidence_weight())
+            .map(super::results::NestedSample::evidence_weight)
             .sum();
         assert!(evidence_sum.is_finite() && evidence_sum > 0.0);
     }
@@ -922,7 +942,7 @@ mod tests {
         state.tell(results).unwrap();
 
         let mut iterations = 0;
-        let max_allowed = 100000; // Safety limit to prevent infinite loop
+        let max_allowed = 100_000; // Safety limit to prevent infinite loop
 
         loop {
             match state.ask() {
@@ -934,9 +954,10 @@ mod tests {
                     state.tell(results).unwrap();
                     iterations += 1;
 
-                    if iterations > max_allowed {
-                        panic!("Exceeded safety limit - sampler not terminating");
-                    }
+                    assert!(
+                        iterations <= max_allowed,
+                        "Exceeded safety limit - sampler not terminating"
+                    );
                 }
                 AskResult::Done(SamplingResults::Nested(samples)) => {
                     // Should terminate eventually
@@ -953,15 +974,15 @@ mod tests {
                             | SamplerTermination::InsufficientLivePoints => {
                                 // Expected termination reasons
                             }
-                            other => {
+                            other @ SamplerTermination::EvaluationFailed(_) => {
                                 // Other reasons are also ok, just document what we see
-                                eprintln!("Terminated with reason: {:?}", other);
+                                eprintln!("Terminated with reason: {other:?}");
                             }
                         }
                     }
                     break;
                 }
-                _ => panic!("Unexpected result"),
+                AskResult::Done(_) => panic!("Unexpected result"),
             }
         }
     }

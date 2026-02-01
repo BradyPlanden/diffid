@@ -20,7 +20,7 @@ impl Scheduler {
         let baseline = baseline_live.max(MIN_LIVE_POINTS);
         let expansion = expansion_factor.max(0.0);
         let tol = termination_tol.abs().max(1e-10);
-        let max_live = ((baseline as f64) * (1.0 + 4.0 * expansion)).ceil() as usize;
+        let max_live = ((baseline as f64) * 4.0f64.mul_add(expansion, 1.0)).ceil() as usize;
 
         Self {
             baseline_live: baseline,
@@ -35,7 +35,7 @@ impl Scheduler {
     /// Compute the desired live-set size given the estimated information gain.
     pub fn target(&mut self, information: f64, current_live: usize) -> usize {
         let info = information.max(0.0);
-        let scale = 1.0 + self.expansion_factor * info.sqrt();
+        let scale = self.expansion_factor.mul_add(info.sqrt(), 1.0);
         let mut desired = (self.baseline_live as f64 * scale).round() as usize;
         desired = desired.clamp(MIN_LIVE_POINTS, self.max_live);
 

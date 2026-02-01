@@ -17,7 +17,7 @@ NOISE_STD = 0.05
 SEED = 8
 
 
-def lotka_volterra(t, state, params):
+def lotka_volterra(_t, state, params):
     x, y = state
     alpha, beta, delta, gamma = params
     return jnp.array([alpha * x - beta * x * y, delta * x * y - gamma * y])

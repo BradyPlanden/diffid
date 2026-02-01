@@ -58,7 +58,8 @@ if not data_path.exists():
     gen_path = pathlib.Path(__file__).with_name("generate_data_diffrax.py")
     spec = importlib.util.spec_from_file_location("pp_gen", gen_path)
     module = importlib.util.module_from_spec(spec)
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     spec.loader.exec_module(module)
     module.main(data_path)
 data = np.load(str(data_path))

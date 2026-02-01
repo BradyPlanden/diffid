@@ -16,7 +16,8 @@ pub enum DiffsolBackend {
     Sparse,
 }
 
-#[derive(Debug, Clone)]
+#[must_use]
+#[derive(Debug, Clone, Copy)]
 pub struct DiffsolConfig {
     pub rtol: f64,
     pub atol: f64,
@@ -76,6 +77,7 @@ impl DiffsolConfig {
     }
 }
 
+#[must_use]
 #[derive(Clone)]
 pub struct DiffsolProblemBuilder {
     equations: Option<String>,
@@ -109,7 +111,7 @@ impl DiffsolProblemBuilder {
         self
     }
 
-    /// Registers the DiffSL differential equation system.
+    /// Registers the `DiffSL` differential equation system.
     pub fn with_diffsl(mut self, equations: String) -> Self {
         self.equations = Some(equations);
         self
@@ -193,6 +195,13 @@ impl DiffsolProblemBuilder {
     }
 
     /// Build the problem
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No data has been provided via `with_data`
+    /// - Data has fewer than 2 columns (needs time + at least one observation)
+    /// - No differential equations have been provided via `with_diffsl`
     pub fn build(self) -> Result<Problem<DiffsolObjective>, ProblemBuilderError> {
         // Unpack data and verify
         let data_with_t = self.data.as_ref().ok_or(ProblemBuilderError::MissingData)?;
@@ -202,7 +211,7 @@ impl DiffsolProblemBuilder {
                 got: data_with_t.ncols(),
             });
         }
-        let t_span: Vec<f64> = data_with_t.column(0).iter().cloned().collect();
+        let t_span: Vec<f64> = data_with_t.column(0).iter().copied().collect();
         let data = data_with_t.columns(1, data_with_t.ncols() - 1).into_owned();
 
         // Check costs and provide default if empty

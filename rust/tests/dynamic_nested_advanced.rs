@@ -16,8 +16,8 @@ fn gaussian_evidence_accuracy() {
 
     let problem = ScalarProblemBuilder::new()
         .with_function(move |x: &[f64]| {
-            let log_norm = sigma.ln() + 0.5 * (2.0 * std::f64::consts::PI).ln();
-            0.5 * (x[0] / sigma).powi(2) + log_norm
+            let log_norm = 0.5f64.mul_add((2.0 * std::f64::consts::PI).ln(), sigma.ln());
+            0.5f64.mul_add((x[0] / sigma).powi(2), log_norm)
         })
         .with_parameter("x", 0.0, (prior_lower, prior_upper))
         .build()
@@ -67,7 +67,10 @@ fn bimodal_distribution_samples_both_modes() {
             let max_log = log_p1.max(log_p2);
             let log_sum = max_log + ((log_p1 - max_log).exp() + (log_p2 - max_log).exp()).ln();
             // Return negative log likelihood
-            -(log_sum - 2.0_f64.ln() - sigma.ln() - 0.5 * (2.0 * std::f64::consts::PI).ln())
+            -0.5f64.mul_add(
+                -(2.0 * std::f64::consts::PI).ln(),
+                log_sum - 2.0_f64.ln() - sigma.ln(),
+            )
         })
         .with_parameter("x", 0.0, (-10.0, 10.0))
         .build()
@@ -97,12 +100,8 @@ fn bimodal_distribution_samples_both_modes() {
         }
     }
 
-    assert!(near_mode1 > 0, "should sample from first mode at x={}", mu1);
-    assert!(
-        near_mode2 > 0,
-        "should sample from second mode at x={}",
-        mu2
-    );
+    assert!(near_mode1 > 0, "should sample from first mode at x={mu1}");
+    assert!(near_mode2 > 0, "should sample from second mode at x={mu2}");
 }
 
 /// Test that infinite likelihoods are handled gracefully.
@@ -185,8 +184,8 @@ fn high_dimensional_problem() {
     );
 
     for (i, &m) in nested.mean().iter().enumerate() {
-        assert!(m.is_finite(), "mean[{}] should be finite", i);
-        assert!(m.abs() < 0.5, "mean[{}] = {} should be near origin", i, m);
+        assert!(m.is_finite(), "mean[{i}] should be finite");
+        assert!(m.abs() < 0.5, "mean[{i}] = {m} should be near origin");
     }
 }
 
@@ -231,7 +230,7 @@ fn very_small_evidence() {
     let offset: f64 = 100.0;
 
     let problem = ScalarProblemBuilder::new()
-        .with_function(move |x: &[f64]| offset + 0.5 * x[0].powi(2))
+        .with_function(move |x: &[f64]| 0.5f64.mul_add(x[0].powi(2), offset))
         .with_parameter("x", 0.0, (-5.0, 5.0))
         .build()
         .expect("failed to build problem");
@@ -289,8 +288,7 @@ fn posterior_weights_normalize() {
 
     assert!(
         (weight_sum - 1.0).abs() < 0.05,
-        "weights should sum to ~1.0, got {}",
-        weight_sum
+        "weights should sum to ~1.0, got {weight_sum}"
     );
 }
 
@@ -330,9 +328,7 @@ fn mean_matches_weighted_average() {
 
     assert!(
         (manual_mean - reported_mean).abs() < 1e-6,
-        "manual mean {} should match reported mean {}",
-        manual_mean,
-        reported_mean
+        "manual mean {manual_mean} should match reported mean {reported_mean}"
     );
 }
 
@@ -400,10 +396,7 @@ fn respects_parameter_bounds() {
         let x = sample.position[0];
         assert!(
             x >= lower && x <= upper,
-            "sample {} should be within bounds [{}, {}]",
-            x,
-            lower,
-            upper
+            "sample {x} should be within bounds [{lower}, {upper}]"
         );
     }
 }
@@ -445,8 +438,8 @@ fn information_increases_with_constraint() {
     let make_problem = |sigma: f64| {
         ScalarProblemBuilder::new()
             .with_function(move |x: &[f64]| {
-                let log_norm = sigma.ln() + 0.5 * (2.0 * std::f64::consts::PI).ln();
-                0.5 * (x[0] / sigma).powi(2) + log_norm
+                let log_norm = 0.5f64.mul_add((2.0 * std::f64::consts::PI).ln(), sigma.ln());
+                0.5f64.mul_add((x[0] / sigma).powi(2), log_norm)
             })
             .with_parameter("x", 0.0, (-10.0, 10.0))
             .build()
@@ -490,8 +483,8 @@ fn terminates_with_high_information() {
 
     let problem = ScalarProblemBuilder::new()
         .with_function(move |x: &[f64]| {
-            let log_norm = sigma.ln() + 0.5 * (2.0 * std::f64::consts::PI).ln();
-            0.5 * (x[0] / sigma).powi(2) + log_norm
+            let log_norm = 0.5f64.mul_add((2.0 * std::f64::consts::PI).ln(), sigma.ln());
+            0.5f64.mul_add((x[0] / sigma).powi(2), log_norm)
         })
         .with_parameter("x", 0.0, ParameterRange::from((-5.0, 5.0)))
         .build()

@@ -27,7 +27,7 @@ pub enum ProblemError {
 
 impl From<DiffsolError> for ProblemError {
     fn from(e: DiffsolError) -> Self {
-        ProblemError::BuildFailed(format!("{}", e))
+        ProblemError::BuildFailed(format!("{e}"))
     }
 }
 
@@ -40,13 +40,13 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for ProblemError {
 impl std::fmt::Display for ProblemError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EvaluationFailed(msg) => write!(f, "evaluation failed: {}", msg),
-            Self::SolverError(msg) => write!(f, "solver failed: {}", msg),
+            Self::EvaluationFailed(msg) => write!(f, "evaluation failed: {msg}"),
+            Self::SolverError(msg) => write!(f, "solver failed: {msg}"),
             Self::DimensionMismatch { expected, got } => {
-                write!(f, "expected {} elements, got {}", expected, got)
+                write!(f, "expected {expected} elements, got {got}")
             }
-            Self::BuildFailed(msg) => write!(f, "build failed: {}", msg),
-            Self::External(err) => write!(f, "external error: {}", err),
+            Self::BuildFailed(msg) => write!(f, "build failed: {msg}"),
+            Self::External(err) => write!(f, "external error: {err}"),
         }
     }
 }
@@ -111,11 +111,11 @@ impl ParameterSet {
     }
 
     pub fn push(&mut self, spec: ParameterSpec) {
-        self.0.push(spec)
+        self.0.push(spec);
     }
 
     pub fn clear(&mut self) {
-        self.0.clear()
+        self.0.clear();
     }
 
     pub fn take(&mut self) -> Vec<ParameterSpec> {
@@ -145,6 +145,15 @@ impl ParameterSet {
             return vec![];
         }
         self.0.iter().map(|spec| spec.initial_value).collect()
+    }
+}
+
+impl<'a> IntoIterator for &'a ParameterSet {
+    type Item = &'a ParameterSpec;
+    type IntoIter = std::slice::Iter<'a, ParameterSpec>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -191,7 +200,7 @@ impl From<Unbounded> for ParameterRange {
     }
 }
 
-/// Implement for RangeInclusive
+/// Implement for `RangeInclusive`
 impl From<RangeInclusive<f64>> for ParameterRange {
     fn from(range: RangeInclusive<f64>) -> Self {
         Self(range)
@@ -201,6 +210,15 @@ impl From<RangeInclusive<f64>> for ParameterRange {
 /// An Objective trait, used to define the core
 /// evaluation of a `problem`.
 pub trait Objective: Send + Sync {
+    /// Evaluate the objective function at point `x`
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProblemError`] if evaluation fails:
+    /// - [`ProblemError::EvaluationFailed`]: Objective function computation fails
+    /// - [`ProblemError::SolverError`]: ODE/DAE solver fails to converge
+    /// - [`ProblemError::DimensionMismatch`]: Input or output dimensions are incorrect
+    /// - [`ProblemError::External`]: External function propagates an error
     fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError>;
 
     fn gradient(&self, _x: &[f64]) -> Option<Vec<f64>> {
@@ -212,6 +230,15 @@ pub trait Objective: Send + Sync {
         false
     }
 
+    /// Evaluate the objective function and its gradient at point `x`
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProblemError`] if evaluation fails:
+    /// - [`ProblemError::EvaluationFailed`]: Objective or gradient computation fails
+    /// - [`ProblemError::SolverError`]: ODE/DAE solver fails to converge
+    /// - [`ProblemError::DimensionMismatch`]: Input or output dimensions are incorrect
+    /// - [`ProblemError::External`]: External function propagates an error
     fn evaluate_with_gradient(&self, x: &[f64]) -> Result<(f64, Option<Vec<f64>>), ProblemError> {
         Ok((self.evaluate(x)?, self.gradient(x)))
     }
@@ -296,6 +323,11 @@ pub struct VectorObjective {
 }
 
 impl VectorObjective {
+    /// Create a new vector objective
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProblemError::BuildFailed`] if the data vector is empty.
     pub fn new(
         f: VectorFn,
         data: Vec<f64>,
@@ -352,10 +384,20 @@ impl<O: Objective> Problem<O> {
         self.objective.has_gradient()
     }
 
+    /// Evaluate the problem at point `x`
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProblemError`] if evaluation fails. See [`Objective::evaluate`] for details.
     pub fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
         self.objective.evaluate(x)
     }
 
+    /// Evaluate the problem and its gradient at point `x`
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProblemError`] if evaluation fails. See [`Objective::evaluate_with_gradient`] for details.
     pub fn evaluate_with_gradient(
         &self,
         x: &[f64],
@@ -418,12 +460,14 @@ impl<O: Objective> Problem<O> {
                     grad_opt.run(
                         |x| {
                             let (value, grad) = self.evaluate_with_gradient(x)?;
-                            match grad {
-                                Some(grad) => Ok((value, grad)),
-                                None => Err(ProblemError::EvaluationFailed(
-                                    "Gradient optimiser requires gradient".to_string(),
-                                )),
-                            }
+                            grad.map_or_else(
+                                || {
+                                    Err(ProblemError::EvaluationFailed(
+                                        "Gradient optimiser requires gradient".to_string(),
+                                    ))
+                                },
+                                |grad| Ok((value, grad)),
+                            )
                         },
                         x0,
                         self.parameters.bounds(),
@@ -510,8 +554,7 @@ mod tests {
             .expect("evaluation failed");
         assert!(
             cost.abs() < 1e-10,
-            "expected near-zero cost with true params, got {}",
-            cost
+            "expected near-zero cost with true params, got {cost}"
         );
 
         // Test with wrong parameters
@@ -613,8 +656,7 @@ mod tests {
         let cost = problem.evaluate(&[1.0]).expect("evaluation failed");
         assert!(
             (cost - 1.0).abs() < 1e-10,
-            "expected RMSE of 1.0, got {}",
-            cost
+            "expected RMSE of 1.0, got {cost}"
         );
     }
 

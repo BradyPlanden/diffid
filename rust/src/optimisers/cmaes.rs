@@ -1,5 +1,3 @@
-#![allow(unexpected_cfgs)]
-
 use crate::common::{AskResult, Bounds, Point};
 use crate::errors::{EvaluationError, TellError};
 use crate::optimisers::{
@@ -12,6 +10,7 @@ use std::cmp::Ordering;
 use std::time::{Duration, Instant};
 
 /// Configuration for the CMA-ES optimiser
+#[must_use]
 #[derive(Clone, Debug)]
 pub struct CMAES {
     max_iter: usize,
@@ -69,7 +68,7 @@ impl CMAES {
     fn compute_population_size(&self, dim: usize) -> usize {
         self.population_size.unwrap_or_else(|| {
             if dim > 0 {
-                let suggested = (4.0 + (3.0 * (dim as f64).ln())).floor() as usize;
+                let suggested = 3.0f64.mul_add((dim as f64).ln(), 4.0).floor() as usize;
                 suggested.max(4).max(2 * dim)
             } else {
                 4
@@ -146,9 +145,9 @@ impl StrategyParameters {
         let c_sigma = (mu_eff + 2.0) / (dim_f + mu_eff + 5.0);
         let d_sigma = Self::compute_d_sigma(mu_eff, dim_f, c_sigma);
         let c_c = (4.0 + mu_eff / dim_f) / (dim_f + 4.0 + 2.0 * mu_eff / dim_f);
-        let c1 = 2.0 / ((dim_f + 1.3).powi(2) + mu_eff);
+        let c1 = 2.0 / (dim_f + 1.3).mul_add(dim_f + 1.3, mu_eff);
         let c_mu = ((1.0 - c1)
-            .min(2.0 * (mu_eff - 2.0 + 1.0 / mu_eff) / ((dim_f + 2.0).powi(2) + mu_eff)))
+            .min(2.0 * (mu_eff - 2.0 + 1.0 / mu_eff) / (dim_f + 2.0).mul_add(dim_f + 2.0, mu_eff)))
         .max(0.0);
         let chi_n = dim_f.sqrt() * (1.0 - 1.0 / (4.0 * dim_f) + 1.0 / (21.0 * dim_f.powi(2)));
 
@@ -168,7 +167,7 @@ impl StrategyParameters {
 
     pub fn compute_d_sigma(mu_eff: f64, dim_f: f64, c_sigma: f64) -> f64 {
         let sqrt_term = ((mu_eff - 1.0) / (dim_f + 1.0)).max(0.0).sqrt();
-        1.0 + c_sigma + 2.0 * (sqrt_term - 1.0).max(0.0)
+        2.0f64.mul_add((sqrt_term - 1.0).max(0.0), 1.0 + c_sigma)
     }
 }
 
@@ -253,10 +252,9 @@ impl CMAESState {
         let mut distribution = DistributionState::new(&initial_point);
         distribution.sigma = config.step_size.max(1e-12);
 
-        let rng = match config.seed {
-            Some(seed) => StdRng::seed_from_u64(seed),
-            None => StdRng::from_os_rng(),
-        };
+        let rng = config
+            .seed
+            .map_or_else(StdRng::from_os_rng, StdRng::seed_from_u64);
 
         Self {
             config,
@@ -288,6 +286,12 @@ impl CMAESState {
     }
 
     /// Report the evaluation results for the points from `ask()`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The optimiser has already terminated
+    /// - The number of results doesn't match the expected population size
     pub fn tell<I, T, E>(&mut self, results: I) -> Result<(), TellError>
     where
         I: IntoIterator<Item = T>,
@@ -301,13 +305,8 @@ impl CMAESState {
         // We collect into a Result<Vec<f64>> first to handle errors early
         let values: Vec<f64> = results
             .into_iter()
-            .map(|r| r.try_into())
-            .map(|res| {
-                match res {
-                    Ok(eval) => eval.value(),
-                    Err(_) => f64::INFINITY, // Error as infinite cost
-                }
-            })
+            .map(std::convert::TryInto::try_into)
+            .map(|res| res.map_or(f64::INFINITY, |eval| eval.value()))
             .collect();
 
         // Take ownership of current phase
@@ -320,14 +319,14 @@ impl CMAESState {
 
         match phase {
             CMAESPhase::EvaluatingInitial { initial_point } => {
-                self.handle_initial_evaluated(initial_point, values)?;
+                self.handle_initial_evaluated(&initial_point, &values)?;
             }
             CMAESPhase::AwaitingPopulation {
                 candidates,
                 z_vectors,
                 old_mean,
             } => {
-                self.handle_population_evaluated(candidates, z_vectors, old_mean, values)?;
+                self.handle_population_evaluated(candidates, z_vectors, &old_mean, values)?;
             }
             CMAESPhase::Terminated(_) => unreachable!(),
         }
@@ -370,8 +369,8 @@ impl CMAESState {
     // Phase Handlers
     fn handle_initial_evaluated(
         &mut self,
-        initial_point: Point,
-        results: Vec<f64>,
+        initial_point: &Point,
+        results: &[f64],
     ) -> Result<(), TellError> {
         if results.len() != 1 {
             return Err(TellError::ResultCountMismatch {
@@ -400,7 +399,7 @@ impl CMAESState {
         &mut self,
         candidates: Vec<Point>,
         z_vectors: Vec<DVector<f64>>,
-        old_mean: DVector<f64>,
+        old_mean: &DVector<f64>,
         results: Vec<f64>,
     ) -> Result<(), TellError> {
         let expected = candidates.len();
@@ -441,7 +440,7 @@ impl CMAESState {
         }
 
         // Update CMA-ES state
-        let termination_reason = self.update_distribution(&population, &old_mean);
+        let termination_reason = self.update_distribution(&population, old_mean);
 
         // Update final population
         self.final_population = population.iter().map(|(pt, _)| pt.clone()).collect();
@@ -505,7 +504,7 @@ impl CMAESState {
 
             let step = &self.distribution.eigenvectors * (&step_matrix * &z);
             let candidate_vec = &self.distribution.mean + step * self.distribution.sigma;
-            let mut candidate: Point = candidate_vec.iter().cloned().collect();
+            let mut candidate: Point = candidate_vec.iter().copied().collect();
 
             // Apply bounds
             self.bounds.clamp(&mut candidate);
@@ -666,6 +665,11 @@ impl CMAES {
     /// Run optimisation using a closure for evaluation
     ///
     /// This is a convenience wrapper around the ask/tell interface
+    ///
+    /// # Panics
+    ///
+    /// Panics if the optimisation state machine enters an unexpected state after
+    /// a tell error. This should not occur under normal operation.
     pub fn run<F, R, E>(
         &self,
         mut objective: F,
@@ -698,10 +702,18 @@ impl CMAES {
 
         match state.ask() {
             AskResult::Done(opt_results) => opt_results,
-            _ => panic!("Unexpected state after tell error"),
+            AskResult::Evaluate(_) => panic!("Unexpected state after tell error"),
         }
     }
 
+    /// Run optimisation using batch evaluation
+    ///
+    /// Similar to `run`, but evaluates all population points in a single call
+    ///
+    /// # Panics
+    ///
+    /// Panics if the optimisation state machine enters an unexpected state after
+    /// a tell error. This should not occur under normal operation.
     pub fn run_batch<F, R, E>(
         &self,
         objective: F,
@@ -715,7 +727,7 @@ impl CMAES {
     {
         let (mut state, first_point) = self.init(initial, bounds);
 
-        let mut results = objective(&vec![first_point]);
+        let mut results = objective(&[first_point]);
 
         loop {
             if state.tell(results).is_err() {
@@ -734,7 +746,7 @@ impl CMAES {
 
         match state.ask() {
             AskResult::Done(opt_results) => opt_results,
-            _ => panic!("Unexpected state after tell error"),
+            AskResult::Evaluate(_) => panic!("Unexpected state after tell error"),
         }
     }
 }
@@ -745,6 +757,7 @@ mod tests {
     use crate::builders::ScalarProblemBuilder;
     use std::convert::Infallible;
 
+    #[allow(clippy::unnecessary_wraps)]
     fn sphere(x: &[f64]) -> Result<f64, Infallible> {
         Ok(x.iter().map(|xi| xi * xi).sum())
     }
@@ -762,7 +775,7 @@ mod tests {
             match state.tell(current_results) {
                 Ok(()) => {}
                 Err(TellError::AlreadyTerminated) => break,
-                Err(e) => panic!("Unexpected error: {:?}", e),
+                Err(e) => panic!("Unexpected error: {e:?}"),
             }
 
             match state.ask() {
@@ -869,7 +882,7 @@ mod tests {
             .zip(&covariance)
             .for_each(|(row_i, row_j)| {
                 row_i.iter().zip(row_j).for_each(|(a, b)| {
-                    assert!((a - b).abs() < 1e-12, "covariance matrix must be symmetric")
+                    assert!((a - b).abs() < 1e-12, "covariance matrix must be symmetric");
                 });
             });
 
@@ -882,8 +895,7 @@ mod tests {
 
         assert!(
             eigenvalues.iter().all(|&eig| eig >= -1e-10),
-            "covariance must be positive semi-definite: {:?}",
-            eigenvalues
+            "covariance must be positive semi-definite: {eigenvalues:?}"
         );
     }
 
@@ -904,9 +916,7 @@ mod tests {
 
         assert!(
             (computed - expected).abs() < 1e-12,
-            "d_sigma mismatch: expected {}, got {}",
-            expected,
-            computed
+            "d_sigma mismatch: expected {expected}, got {computed}"
         );
 
         // For this case, the sqrt term is less than 1, so it should clamp to 0
@@ -946,7 +956,7 @@ mod tests {
         let updated = CMAESState::update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
 
         for (exp, got) in expected.iter().zip(updated.iter()) {
-            assert!((exp - got).abs() < 1e-12, "expected {} got {}", exp, got);
+            assert!((exp - got).abs() < 1e-12, "expected {exp} got {got}");
         }
     }
 
@@ -968,10 +978,11 @@ mod tests {
         let updated = CMAESState::update_covariance(&cov, c1, c_mu, &p_c, h_sigma, c_c, &rank_mu);
 
         for (exp, got) in expected.iter().zip(updated.iter()) {
-            assert!((exp - got).abs() < 1e-12, "expected {} got {}", exp, got);
+            assert!((exp - got).abs() < 1e-12, "expected {exp} got {got}");
         }
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn sphere_cmaes(x: &[f64]) -> Result<f64, std::io::Error> {
         Ok(x.iter().map(|xi| xi * xi).sum())
     }
@@ -1183,8 +1194,7 @@ mod tests {
         for &val in &first_point[..] {
             assert!(
                 (-2.0..=2.0).contains(&val),
-                "Initial point {:?} violates bounds",
-                first_point
+                "Initial point {first_point:?} violates bounds"
             );
         }
 
@@ -1200,8 +1210,7 @@ mod tests {
                         for &val in point {
                             assert!(
                                 (-2.0..=2.0).contains(&val),
-                                "Point {:?} violates bounds",
-                                point
+                                "Point {point:?} violates bounds"
                             );
                         }
                     }
@@ -1375,6 +1384,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn rosenbrock_cmaes(x: &[f64]) -> Result<f64, std::io::Error> {
         let a = 1.0;
         let b = 100.0;

@@ -30,6 +30,7 @@ class TestDocumentationBuild:
         """
         result = subprocess.run(
             ["mkdocs", "build", "--strict"],
+            check=False,
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -50,7 +51,7 @@ class TestNotebookStructure:
         assert len(notebooks) > 0, "No notebooks found"
 
         for notebook_path in notebooks:
-            with open(notebook_path, encoding="utf-8") as f:
+            with notebook_path.open(encoding="utf-8") as f:
                 nb_data = json.load(f)
 
             # Validate basic notebook structure

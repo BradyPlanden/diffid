@@ -442,6 +442,10 @@ impl DynamicNestedSamplerState {
     }
 
     /// Start next iteration of the main sampling loop
+    ///
+    /// Note: Returns Result for API consistency across sampler methods,
+    /// though this function currently never errors. Maintains uniform
+    /// interface for potential future error cases.
     #[allow(clippy::unnecessary_wraps)]
     fn start_next_iteration(&mut self) -> Result<(), TellError> {
         // Check termination conditions

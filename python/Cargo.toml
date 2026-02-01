@@ -24,10 +24,6 @@ cast_possible_truncation = "allow"
 cast_sign_loss = "allow"
 cast_possible_wrap = "allow"
 float_cmp = "allow"
-uninlined_format_args = "allow"
-default_trait_access = "allow"
-needless_raw_string_hashes = "allow"
-unseparated_literal_suffix = "allow"
 
 [package.metadata.maturin]
 name = "diffid"

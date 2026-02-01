@@ -324,6 +324,7 @@ F_i { (r * y) * (1 - (y / k)) }
         )
     }
 
+    #[allow(dead_code)]
     fn finite_difference<F>(x: &mut [f64], idx: usize, eps: f64, f: F) -> f64
     where
         F: Fn(&[f64]) -> f64,

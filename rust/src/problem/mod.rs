@@ -214,8 +214,11 @@ pub trait Objective: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns an error if the objective function fails to evaluate at the given point.
-    /// Common causes include invalid parameters, solver failures, or numerical issues.
+    /// Returns [`ProblemError`] if evaluation fails:
+    /// - [`ProblemError::EvaluationFailed`]: Objective function computation fails
+    /// - [`ProblemError::SolverError`]: ODE/DAE solver fails to converge
+    /// - [`ProblemError::DimensionMismatch`]: Input or output dimensions are incorrect
+    /// - [`ProblemError::External`]: External function propagates an error
     fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError>;
 
     fn gradient(&self, _x: &[f64]) -> Option<Vec<f64>> {
@@ -231,8 +234,11 @@ pub trait Objective: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns an error if the objective function fails to evaluate at the given point.
-    /// Common causes include invalid parameters, solver failures, or numerical issues.
+    /// Returns [`ProblemError`] if evaluation fails:
+    /// - [`ProblemError::EvaluationFailed`]: Objective or gradient computation fails
+    /// - [`ProblemError::SolverError`]: ODE/DAE solver fails to converge
+    /// - [`ProblemError::DimensionMismatch`]: Input or output dimensions are incorrect
+    /// - [`ProblemError::External`]: External function propagates an error
     fn evaluate_with_gradient(&self, x: &[f64]) -> Result<(f64, Option<Vec<f64>>), ProblemError> {
         Ok((self.evaluate(x)?, self.gradient(x)))
     }
@@ -321,7 +327,7 @@ impl VectorObjective {
     ///
     /// # Errors
     ///
-    /// Returns an error if the data vector is empty.
+    /// Returns [`ProblemError::BuildFailed`] if the data vector is empty.
     pub fn new(
         f: VectorFn,
         data: Vec<f64>,
@@ -382,7 +388,7 @@ impl<O: Objective> Problem<O> {
     ///
     /// # Errors
     ///
-    /// Returns an error if the objective function fails to evaluate at the given point.
+    /// Returns [`ProblemError`] if evaluation fails. See [`Objective::evaluate`] for details.
     pub fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
         self.objective.evaluate(x)
     }
@@ -391,7 +397,7 @@ impl<O: Objective> Problem<O> {
     ///
     /// # Errors
     ///
-    /// Returns an error if the objective function fails to evaluate at the given point.
+    /// Returns [`ProblemError`] if evaluation fails. See [`Objective::evaluate_with_gradient`] for details.
     pub fn evaluate_with_gradient(
         &self,
         x: &[f64],

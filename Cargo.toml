@@ -14,12 +14,16 @@ pyo3 = { version = "0.27.1", default-features = false, features = ["macros"] }
 
 [workspace.lints.clippy]
 # Enable pedantic lints for higher code quality standards
-pedantic = { level = "warn", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
 
 # Specific allows to reduce noise from pedantic
 module_name_repetitions = "allow"      # Common in large codebases
 similar_names = "allow"                # Scientific code often has x, y, z, etc.
 must_use_candidate = "allow"           # Too noisy for mathematical functions
+cast_precision_loss = "allow"          # Acceptable in numerical code (usize to f64)
+cast_possible_truncation = "allow"     # Acceptable when converting calculated values
+cast_sign_loss = "allow"               # Acceptable in constrained numerical contexts
+cast_possible_wrap = "allow"           # Acceptable in controlled numerical contexts
 
 # Additional strict lints
 missing_errors_doc = "warn"
@@ -31,12 +35,15 @@ undocumented_unsafe_blocks = "warn"
 inefficient_to_string = "warn"
 manual_ok_or = "warn"
 redundant_closure_for_method_calls = "warn"
-unnecessary_wraps = "warn"
 
 # Complexity and style
 cognitive_complexity = "warn"
 too_many_lines = "warn"
 
-# Selected nursery lints (experimental but useful)
+# Selected nursery lints
 option_if_let_else = "warn"
-suboptimal_flops = "warn"              # Useful for numerical code
+suboptimal_flops = "allow"             # Suggested optimisations often reduce readability in tests
+
+# Test-specific allows
+float_cmp = "allow"                    # Exact float equality is standard in tests
+cast_lossless = "allow"                # i32 to f64 conversions in tests/benchmarks

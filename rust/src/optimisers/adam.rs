@@ -225,6 +225,12 @@ impl AdamState {
     /// Report the evaluation result (value and gradient) for the last point from `ask()`
     ///
     /// Pass `Err` if the objective function failed to evaluate
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The optimizer has already terminated
+    /// - The gradient dimension doesn't match the problem dimension
     pub fn tell<T, E>(&mut self, result: T) -> Result<(), TellError>
     where
         T: TryInto<GradientEvaluation, Error = E>,
@@ -285,6 +291,12 @@ impl AdamState {
     }
 
     /// Get the current best point and value
+    ///
+    /// # Panics
+    ///
+    /// This method will not panic in practice, as it only compares finite values.
+    /// The `unwrap()` is safe because `partial_cmp` only returns `None` for NaN comparisons,
+    /// which are filtered out by the `is_finite()` check.
     pub fn best(&self) -> Option<(&[f64], f64)> {
         self.history
             .iter()
@@ -404,6 +416,11 @@ impl Adam {
     /// Run optimisation using a closure for evaluation
     ///
     /// The closure should return `(value, gradient)` for a given point
+    ///
+    /// # Panics
+    ///
+    /// Panics if the optimisation state machine enters an unexpected state after
+    /// a tell error. This should not occur under normal operation.
     pub fn run<F, R, E>(
         &self,
         mut objective: F,
@@ -435,7 +452,7 @@ impl Adam {
 
         match state.ask() {
             AskResult::Done(results) => results,
-            _ => panic!("Unexpected state after tell error"),
+            AskResult::Evaluate(_) => panic!("Unexpected state after tell error"),
         }
     }
 
@@ -510,6 +527,7 @@ mod tests {
     }
 
     /// fallible sphere function
+    #[allow(clippy::unnecessary_wraps)]
     fn sphere_fallible(x: &[f64]) -> Result<(f64, Vec<f64>), std::io::Error> {
         let value: f64 = x.iter().map(|xi| xi * xi).sum();
         let grad: Vec<f64> = x.iter().map(|xi| 2.0 * xi).collect();
@@ -857,7 +875,7 @@ mod tests {
                     "Tell after termination should return AlreadyTerminated error"
                 );
             }
-            _ => panic!("Should have terminated after max_iter=1"),
+            AskResult::Evaluate(_) => panic!("Should have terminated after max_iter=1"),
         }
     }
 
@@ -887,7 +905,9 @@ mod tests {
                             TerminationReason::FunctionEvaluationFailed(_)
                         ));
                     }
-                    _ => panic!("Should have terminated due to non-finite gradient"),
+                    AskResult::Evaluate(_) => {
+                        panic!("Should have terminated due to non-finite gradient")
+                    }
                 }
             }
             AskResult::Done(_) => panic!("Should not terminate after first evaluation"),
@@ -1040,8 +1060,7 @@ mod tests {
                     for val in &points[0] {
                         assert!(
                             *val >= -2.0 && *val <= 2.0,
-                            "Point {} violates bounds [-2.0, 2.0]",
-                            val
+                            "Point {val} violates bounds [-2.0, 2.0]"
                         );
                     }
                     result = sphere_infallible(&points[0]);
@@ -1110,7 +1129,7 @@ mod tests {
                             TerminationReason::FunctionEvaluationFailed(_)
                         ));
                     }
-                    _ => panic!("Should terminate after evaluation error"),
+                    AskResult::Evaluate(_) => panic!("Should terminate after evaluation error"),
                 }
             }
             AskResult::Done(_) => panic!("Should not terminate after first evaluation"),

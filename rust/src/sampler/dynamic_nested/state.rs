@@ -111,15 +111,6 @@ impl SamplerState {
             .fold(f64::NEG_INFINITY, f64::max)
     }
 
-    /// Worst log-likelihood among the current live points.
-    #[allow(dead_code)]
-    pub fn min_log_likelihood(&self) -> f64 {
-        self.live_points
-            .iter()
-            .map(|p| p.log_likelihood)
-            .fold(f64::INFINITY, f64::min)
-    }
-
     /// Index of the live point with the lowest likelihood.
     pub fn worst_index(&self) -> Option<usize> {
         self.live_points

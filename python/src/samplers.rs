@@ -171,7 +171,7 @@ impl PySamples {
     /// Parameters
     /// ----------
     /// idx : int
-    ///     Chain index (0 to num_chains - 1)
+    ///     Chain index (0 to `num_chains` - 1)
     ///
     /// Returns
     /// -------
@@ -305,7 +305,7 @@ impl PyNestedSamples {
 
     /// Iterate over posterior samples.
     ///
-    /// Yields tuples of (position, log_likelihood, log_weight).
+    /// Yields tuples of (position, `log_likelihood`, `log_weight`).
     fn __iter__(slf: PyRef<'_, Self>) -> PyResult<NestedSamplesIterator> {
         let posterior: Vec<_> = slf
             .inner
@@ -331,12 +331,12 @@ impl PyNestedSamples {
     /// Parameters
     /// ----------
     /// idx : int
-    ///     Sample index (0 to num_samples - 1)
+    ///     Sample index (0 to `num_samples` - 1)
     ///
     /// Returns
     /// -------
     /// tuple[list[float], float, float]
-    ///     Tuple of (position, log_likelihood, log_weight)
+    ///     Tuple of (position, `log_likelihood`, `log_weight`)
     fn __getitem__(&self, idx: isize) -> PyResult<(Vec<f64>, f64, f64)> {
         let posterior = self.inner.posterior();
         let len = posterior.len() as isize;
@@ -366,7 +366,7 @@ impl PyNestedSamples {
     }
 }
 
-/// Iterator for NestedSamples posterior
+/// Iterator for `NestedSamples` posterior
 #[cfg_attr(feature = "stubgen", gen_stub_pyclass)]
 #[pyclass]
 struct NestedSamplesIterator {
@@ -440,7 +440,7 @@ impl PyMetropolisHastings {
 
     /// Initialize ask-tell sampling state.
     ///
-    /// Returns a MetropolisHastingsState object that can be used for incremental
+    /// Returns a `MetropolisHastingsState` object that can be used for incremental
     /// sampling via the ask-tell interface.
     ///
     /// Parameters
@@ -471,9 +471,7 @@ impl PyMetropolisHastings {
         initial: Vec<f64>,
         bounds: Option<Vec<(f64, f64)>>,
     ) -> PyResult<PyMetropolisHastingsState> {
-        let bounds = bounds
-            .map(Bounds::new)
-            .unwrap_or_else(|| Bounds::unbounded_like(&initial));
+        let bounds = bounds.map_or_else(|| Bounds::unbounded_like(&initial), Bounds::new);
 
         let state = self.inner.init(initial, bounds);
         Ok(PyMetropolisHastingsState { inner: state })
@@ -536,7 +534,7 @@ impl PyDynamicNestedSampler {
 
     /// Initialize ask-tell sampling state.
     ///
-    /// Returns a DynamicNestedSamplerState object that can be used for incremental
+    /// Returns a `DynamicNestedSamplerState` object that can be used for incremental
     /// sampling via the ask-tell interface.
     ///
     /// Parameters
@@ -567,9 +565,7 @@ impl PyDynamicNestedSampler {
         initial: Vec<f64>,
         bounds: Option<Vec<(f64, f64)>>,
     ) -> PyResult<PyDynamicNestedSamplerState> {
-        let bounds = bounds
-            .map(Bounds::new)
-            .unwrap_or_else(|| Bounds::unbounded_like(&initial));
+        let bounds = bounds.map_or_else(|| Bounds::unbounded_like(&initial), Bounds::new);
 
         let (state, _initial_points) = self.inner.init(initial, bounds);
         Ok(PyDynamicNestedSamplerState { inner: state })
@@ -634,7 +630,7 @@ impl PyMetropolisHastingsState {
     ///
     /// Raises
     /// ------
-    /// TellError
+    /// `TellError`
     ///     If called after sampling has terminated or if wrong number
     ///     of results provided
     fn tell(&mut self, results: Vec<f64>) -> PyResult<()> {
@@ -709,7 +705,7 @@ impl PyDynamicNestedSamplerState {
     /// -------
     /// Evaluate | Done
     ///     Either Evaluate(points) requiring function evaluations,
-    ///     or Done(result) indicating completion with NestedSamples.
+    ///     or Done(result) indicating completion with `NestedSamples`.
     fn ask(&self, py: Python<'_>) -> Py<PyAny> {
         match self.inner.ask() {
             AskResult::Evaluate(points) => Py::new(py, PyEvaluate { points }).unwrap().into_any(),
@@ -732,7 +728,7 @@ impl PyDynamicNestedSamplerState {
     ///
     /// Raises
     /// ------
-    /// TellError
+    /// `TellError`
     ///     If called after sampling has terminated or if wrong number
     ///     of results provided
     fn tell(&mut self, results: Vec<f64>) -> PyResult<()> {

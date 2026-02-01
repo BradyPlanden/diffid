@@ -45,8 +45,7 @@ impl std::error::Error for EvaluationError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::User(e) => Some(e.as_ref()),
-            Self::NonFiniteValue => None,
-            Self::NonFiniteGradient => None,
+            Self::NonFiniteValue | Self::NonFiniteGradient => None,
         }
     }
 }

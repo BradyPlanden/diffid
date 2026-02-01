@@ -136,7 +136,7 @@ impl Sampler {
     pub fn as_scalar(&self) -> Option<&ScalarSampler> {
         match self {
             Sampler::Scalar(s) => Some(s),
-            _ => None,
+            Sampler::Gradient(_) => None,
         }
     }
 
@@ -144,7 +144,7 @@ impl Sampler {
     pub fn as_scalar_mut(&mut self) -> Option<&mut ScalarSampler> {
         match self {
             Sampler::Scalar(s) => Some(s),
-            _ => None,
+            Sampler::Gradient(_) => None,
         }
     }
 
@@ -152,7 +152,7 @@ impl Sampler {
     pub fn as_gradient(&self) -> Option<&GradientSampler> {
         match self {
             Sampler::Gradient(g) => Some(g),
-            _ => None,
+            Sampler::Scalar(_) => None,
         }
     }
 
@@ -160,25 +160,33 @@ impl Sampler {
     pub fn as_gradient_mut(&mut self) -> Option<&mut GradientSampler> {
         match self {
             Sampler::Gradient(g) => Some(g),
-            _ => None,
+            Sampler::Scalar(_) => None,
         }
     }
 
     // ─── Type extraction - consuming ─────────────────────────────────────────
 
     /// Try to convert into a scalar sampler
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(self)` if this sampler is a gradient sampler, not a scalar sampler.
     pub fn into_scalar(self) -> Result<ScalarSampler, Self> {
         match self {
             Sampler::Scalar(s) => Ok(s),
-            other => Err(other),
+            other @ Sampler::Gradient(_) => Err(other),
         }
     }
 
     /// Try to convert into a gradient sampler
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(self)` if this sampler is a scalar sampler, not a gradient sampler.
     pub fn into_gradient(self) -> Result<GradientSampler, Self> {
         match self {
             Sampler::Gradient(g) => Ok(g),
-            other => Err(other),
+            other @ Sampler::Scalar(_) => Err(other),
         }
     }
 
@@ -367,7 +375,7 @@ impl SamplingResults {
     pub fn as_mcmc(&self) -> Option<&Samples> {
         match self {
             SamplingResults::MCMC(s) => Some(s),
-            _ => None,
+            SamplingResults::Nested(_) => None,
         }
     }
 
@@ -375,7 +383,7 @@ impl SamplingResults {
     pub fn as_mcmc_mut(&mut self) -> Option<&mut Samples> {
         match self {
             SamplingResults::MCMC(s) => Some(s),
-            _ => None,
+            SamplingResults::Nested(_) => None,
         }
     }
 
@@ -383,7 +391,7 @@ impl SamplingResults {
     pub fn as_nested(&self) -> Option<&NestedSamples> {
         match self {
             SamplingResults::Nested(s) => Some(s),
-            _ => None,
+            SamplingResults::MCMC(_) => None,
         }
     }
 
@@ -391,7 +399,7 @@ impl SamplingResults {
     pub fn as_nested_mut(&mut self) -> Option<&mut NestedSamples> {
         match self {
             SamplingResults::Nested(s) => Some(s),
-            _ => None,
+            SamplingResults::MCMC(_) => None,
         }
     }
 
@@ -569,7 +577,7 @@ mod tests {
                     }
                     break;
                 }
-                _ => panic!("Expected MCMC results"),
+                AskResult::Done(_) => panic!("Expected MCMC results"),
             }
         }
     }
@@ -596,7 +604,7 @@ mod tests {
                     state.tell(results).unwrap();
                 }
                 AskResult::Done(SamplingResults::MCMC(samples)) => break samples,
-                _ => panic!("Expected MCMC results"),
+                AskResult::Done(_) => panic!("Expected MCMC results"),
             }
         };
 
@@ -624,7 +632,7 @@ mod tests {
                 let err = state.tell(results).unwrap_err();
                 assert!(matches!(err, TellError::ResultCountMismatch { .. }));
             }
-            _ => panic!("Expected Evaluate"),
+            AskResult::Done(_) => panic!("Expected Evaluate"),
         }
     }
 
@@ -644,13 +652,13 @@ mod tests {
                     .tell(points.into_iter().map(|_| Ok::<f64, std::io::Error>(1.0)))
                     .expect("tell should succeed");
             }
-            _ => panic!("Expected Evaluate on first ask"),
+            AskResult::Done(_) => panic!("Expected Evaluate on first ask"),
         }
 
         // Now should be Done
         match state.ask() {
             AskResult::Done(_) => (),
-            _ => panic!("Expected Done after iteration 0"),
+            AskResult::Evaluate(_) => panic!("Expected Done after iteration 0"),
         }
 
         // Trying to tell again should fail
@@ -693,7 +701,7 @@ mod tests {
                     );
                     break;
                 }
-                _ => panic!("Expected MCMC results"),
+                AskResult::Done(_) => panic!("Expected MCMC results"),
             }
         }
     }
@@ -732,7 +740,7 @@ mod tests {
                     assert_eq!(iteration, 5);
                     break;
                 }
-                _ => panic!("Expected MCMC results"),
+                AskResult::Done(_) => panic!("Expected MCMC results"),
             }
         }
     }
@@ -774,7 +782,7 @@ mod tests {
                     assert!(eval_count > 0, "Should have evaluated some points");
                     break;
                 }
-                _ => panic!("Expected Nested results"),
+                AskResult::Done(_) => panic!("Expected Nested results"),
             }
         }
     }
@@ -804,7 +812,7 @@ mod tests {
                     state.tell(results).unwrap();
                 }
                 AskResult::Done(SamplingResults::Nested(samples)) => break samples,
-                _ => panic!("Expected Nested results"),
+                AskResult::Done(_) => panic!("Expected Nested results"),
             }
         };
 
@@ -866,14 +874,13 @@ mod tests {
                             .collect();
                         state.tell(results).unwrap();
                         return; // Test complete
-                    } else {
-                        // Still in initialization or expansion phase, provide correct results
-                        let results: Vec<_> = points
-                            .iter()
-                            .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
-                            .collect();
-                        state.tell(results).unwrap();
                     }
+                    // Still in initialisation or expansion phase, provide correct results
+                    let results: Vec<_> = points
+                        .iter()
+                        .map(|x| Ok::<f64, std::io::Error>(0.5 * x[0].powi(2)))
+                        .collect();
+                    state.tell(results).unwrap();
                 }
                 AskResult::Done(_) => {
                     panic!("Should not complete before testing error handling");
@@ -923,7 +930,7 @@ mod tests {
                     assert!(samples.draws() > 0);
                     break;
                 }
-                _ => panic!("Expected Nested results"),
+                AskResult::Done(_) => panic!("Expected Nested results"),
             }
         }
     }
@@ -958,7 +965,7 @@ mod tests {
                 DNSPhase::AwaitingReplacementBatch { .. } => seen_single_replacement = true,
                 DNSPhase::AwaitingExpansion { .. } => seen_expansion = true,
                 DNSPhase::Terminated(_) => break,
-                _ => {}
+                DNSPhase::InitialisingLivePoints { .. } => {}
             }
 
             match state.ask() {

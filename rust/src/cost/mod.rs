@@ -312,7 +312,7 @@ mod tests {
         // Create a 2x1 sensitivity matrix with values [0.5, 0.5]
         let triplets = vec![(0, 0, 0.5), (1, 0, 0.5)];
         let sens_matrix: NalgebraMat<f64> =
-            Matrix::try_from_triplets(2, 1, triplets, Default::default()).unwrap();
+            Matrix::try_from_triplets(2, 1, triplets, diffsol::NalgebraContext).unwrap();
 
         let (cost, grad) = metric
             .evaluate_with_sensitivities(&residuals, &[sens_matrix])
@@ -346,7 +346,7 @@ mod tests {
         // Create a 2x1 sensitivity matrix with values [0.5, 0.5]
         let triplets = vec![(0, 0, 0.5), (1, 0, 0.5)];
         let sens_matrix: NalgebraMat<f64> =
-            Matrix::try_from_triplets(2, 1, triplets, Default::default()).unwrap();
+            Matrix::try_from_triplets(2, 1, triplets, diffsol::NalgebraContext).unwrap();
 
         let (cost, grad) = metric
             .evaluate_with_sensitivities(&residuals, &[sens_matrix])
@@ -394,7 +394,7 @@ mod tests {
         // Create a 2x1 sensitivity matrix with values [0.5, 0.5]
         let triplets = vec![(0, 0, 0.5), (1, 0, 0.5)];
         let sens_matrix: NalgebraMat<f64> =
-            Matrix::try_from_triplets(2, 1, triplets, Default::default()).unwrap();
+            Matrix::try_from_triplets(2, 1, triplets, diffsol::NalgebraContext).unwrap();
 
         let (cost, grad) = metric
             .evaluate_with_sensitivities(&residuals, &[sens_matrix])

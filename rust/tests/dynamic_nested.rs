@@ -28,8 +28,7 @@ fn dynamic_nested_sampler_integration() {
     // Relax tolerance - nested sampling with limited live points has variability
     assert!(
         (posterior_mean - 0.5).abs() < 0.2,
-        "Posterior mean {} should be close to 0.5",
-        posterior_mean
+        "Posterior mean {posterior_mean} should be close to 0.5"
     );
 
     // Verify posterior samples are valid
@@ -47,13 +46,13 @@ fn build_logistic_objective(
     backend: DiffsolBackend,
     parallel: bool,
 ) -> (impl Fn(&[f64]) -> f64, Bounds) {
-    let dsl = r#"
+    let dsl = r"
 in_i { r = 1, k = 1 }
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
-"#;
+";
 
-    let t_span: Vec<f64> = (0..20).map(|i| i as f64 * 0.1).collect();
+    let t_span: Vec<f64> = (0..20).map(|i| f64::from(i) * 0.1).collect();
     let data_values: Vec<f64> = t_span.iter().map(|t| 0.1 * (*t).exp()).collect();
 
     // Data matrix: column-major format with t_span first, then data_values
@@ -142,11 +141,7 @@ fn dynamic_nested_sampler_parallel_vs_sequential_consistency() {
             let mean_diff = (p - s).abs();
             assert!(
                 mean_diff < 0.5,
-                "Parameter {} means should be similar: parallel={}, sequential={}, diff={}",
-                i,
-                p,
-                s,
-                mean_diff
+                "Parameter {i} means should be similar: parallel={p}, sequential={s}, diff={mean_diff}"
             );
         }
     }

@@ -17,7 +17,7 @@ pub enum DiffsolBackend {
 }
 
 #[must_use]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct DiffsolConfig {
     pub rtol: f64,
     pub atol: f64,
@@ -195,6 +195,13 @@ impl DiffsolProblemBuilder {
     }
 
     /// Build the problem
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No data has been provided via `with_data`
+    /// - Data has fewer than 2 columns (needs time + at least one observation)
+    /// - No differential equations have been provided via `with_diffsl`
     pub fn build(self) -> Result<Problem<DiffsolObjective>, ProblemBuilderError> {
         // Unpack data and verify
         let data_with_t = self.data.as_ref().ok_or(ProblemBuilderError::MissingData)?;

@@ -36,11 +36,11 @@ impl From<ProblemError> for ProblemBuilderError {
             ProblemError::DimensionMismatch { expected, got } => {
                 ProblemBuilderError::DimensionMismatch { expected, got }
             }
-            ProblemError::BuildFailed(msg) => ProblemBuilderError::BuildFailed(msg),
+            ProblemError::BuildFailed(msg)
+            | ProblemError::EvaluationFailed(msg)
+            | ProblemError::SolverError(msg) => ProblemBuilderError::BuildFailed(msg),
             // For other variants, wrap them in BuildFailed
             ProblemError::External(e) => ProblemBuilderError::BuildFailed(e.to_string()),
-            ProblemError::EvaluationFailed(msg) => ProblemBuilderError::BuildFailed(msg),
-            ProblemError::SolverError(msg) => ProblemBuilderError::BuildFailed(msg),
         }
     }
 }
@@ -56,11 +56,11 @@ mod tests {
 
     #[test]
     fn test_diffsol_builder() {
-        let dsl = r#"
+        let dsl = r"
 in_i { r = 1, k = 1}
 u_i { y = 0.1 }
 F_i { (r * y) * (1 - (y / k)) }
-"#;
+";
 
         let t_span: Vec<f64> = (0..5).map(|i| i as f64 * 0.1).collect();
         let data_values = vec![0.1, 0.2, 0.3, 0.4, 0.5];
@@ -130,10 +130,10 @@ F_i { (r * y) * (1 - (y / k)) }
 
         // Perfect fit should have zero cost (a=1, b=1 gives [1,2,3,4,5])
         let cost = problem.evaluate(&[1.0, 1.0]).expect("evaluation failed");
-        assert!(cost.abs() < 1e-10, "expected near-zero cost, got {}", cost);
+        assert!(cost.abs() < 1e-10, "expected near-zero cost, got {cost}");
 
         // Non-perfect fit should have positive cost
         let cost = problem.evaluate(&[0.5, 0.5]).expect("evaluation failed");
-        assert!(cost > 0.0, "expected positive cost, got {}", cost);
+        assert!(cost > 0.0, "expected positive cost, got {cost}");
     }
 }

@@ -88,6 +88,11 @@ where
     F: Fn(&[f64]) -> f64 + Send + Sync + 'static,
 {
     /// Build the problem
+    ///
+    /// # Errors
+    ///
+    /// Currently this method always succeeds, but returns `Result` for consistency
+    /// with other builder `build` methods that may fail.
     pub fn build(self) -> Result<Problem<ScalarObjective<F>>, ProblemBuilderError> {
         // Build objective
         let objective = ScalarObjective::new(self.f);
@@ -103,6 +108,12 @@ where
     F: Fn(&[f64]) -> f64 + Send + Sync + 'static,
     G: Fn(&[f64]) -> Vec<f64> + Send + Sync + 'static,
 {
+    /// Build the problem
+    ///
+    /// # Errors
+    ///
+    /// Currently this method always succeeds, but returns `Result` for consistency
+    /// with other builder `build` methods that may fail.
     pub fn build(self) -> Result<Problem<ScalarObjective<F, G>>, ProblemBuilderError> {
         // Build objective
         let objective = ScalarObjective::with_gradient(self.f, self.gradient);

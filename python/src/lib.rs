@@ -41,17 +41,16 @@ type ParameterSpecEntry = (String, f64, Option<(f64, f64)>);
 // Import objective types for the problem enum
 use diffid_core::problem::{DiffsolObjective, ScalarObjective, VectorObjective};
 
+// Type aliases to reduce complexity warnings
+type BoxedScalarFn = Box<dyn Fn(&[f64]) -> f64 + Send + Sync>;
+type BoxedGradientFn = Box<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync>;
+type ScalarProblemType = Problem<ScalarObjective<BoxedScalarFn>>;
+type ScalarGradientProblemType = Problem<ScalarObjective<BoxedScalarFn, BoxedGradientFn>>;
+
 // Enum to hold different Problem types internally
 pub(crate) enum DynProblem {
-    Scalar(Problem<ScalarObjective<Box<dyn Fn(&[f64]) -> f64 + Send + Sync>>>),
-    ScalarWithGradient(
-        Problem<
-            ScalarObjective<
-                Box<dyn Fn(&[f64]) -> f64 + Send + Sync>,
-                Box<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync>,
-            >,
-        >,
-    ),
+    Scalar(ScalarProblemType),
+    ScalarWithGradient(ScalarGradientProblemType),
     Vector(Problem<VectorObjective>),
     Diffsol(Problem<DiffsolObjective>),
 }
@@ -228,7 +227,7 @@ impl PyProblem {
     fn evaluate(&self, x: Vec<f64>) -> PyResult<f64> {
         self.inner.evaluate(&x).map_err(|e| {
             crate::errors::evaluation_error_to_py(diffid_core::errors::EvaluationError::message(
-                format!("{}", e),
+                format!("{e}"),
             ))
         })
     }
@@ -239,7 +238,7 @@ impl PyProblem {
             DynProblem::ScalarWithGradient(p) => match p.evaluate_with_gradient(&x) {
                 Ok((_val, grad_opt)) => Ok(grad_opt),
                 Err(e) => Err(crate::errors::evaluation_error_to_py(
-                    diffid_core::errors::EvaluationError::message(format!("{}", e)),
+                    diffid_core::errors::EvaluationError::message(format!("{e}")),
                 )),
             },
             _ => Ok(None),
@@ -346,13 +345,13 @@ impl PyProblem {
     /// Return a detailed string representation of the problem.
     fn __repr__(&self) -> String {
         let dim = self.inner.dimension();
-        format!("Problem(dimension={})", dim)
+        format!("Problem(dimension={dim})")
     }
 
     /// Return a concise string representation of the problem.
     fn __str__(&self) -> String {
         let dim = self.inner.dimension();
-        format!("{}-dimensional problem", dim)
+        format!("{dim}-dimensional problem")
     }
 }
 

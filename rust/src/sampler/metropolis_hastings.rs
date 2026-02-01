@@ -61,6 +61,10 @@ impl MetropolisHastings {
     ///
     /// Internally uses the ask/tell interface for consistency. For external
     /// control of the evaluation loop, use `init()`, `ask()`, and `tell()` directly.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `tell()` fails during the sampling loop, which indicates a bug in the sampler.
     pub fn run<F, R, E>(&self, mut objective: F, initial: Point, bounds: Bounds) -> Samples
     where
         F: FnMut(&[f64]) -> R,
@@ -81,7 +85,9 @@ impl MetropolisHastings {
                 AskResult::Done(SamplingResults::MCMC(samples)) => {
                     return samples;
                 }
-                _ => unreachable!("MetropolisHastings always returns MCMC results"),
+                AskResult::Done(_) => {
+                    unreachable!("MetropolisHastings always returns MCMC results")
+                }
             }
         }
     }
@@ -93,6 +99,11 @@ impl MetropolisHastings {
     ///
     /// Internally uses the ask/tell interface for consistency. For external
     /// control of the evaluation loop, use `init()`, `ask()`, and `tell()` directly.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sampling state machine enters an unexpected state after a tell error.
+    /// This should not occur under normal operation.
     pub fn run_batch<F, R, E>(&self, objective: F, initial: Point, bounds: Bounds) -> Samples
     where
         F: Fn(&[Vec<f64>]) -> Vec<R>,
@@ -117,7 +128,9 @@ impl MetropolisHastings {
                 AskResult::Done(SamplingResults::MCMC(samples)) => {
                     return samples;
                 }
-                _ => unreachable!("MetropolisHastings always returns MCMC results"),
+                AskResult::Done(_) => {
+                    unreachable!("MetropolisHastings always returns MCMC results")
+                }
             }
         }
 
@@ -186,10 +199,9 @@ impl MetropolisHastings {
     /// }
     /// ```
     pub fn init(&self, initial: Vec<f64>, bounds: Bounds) -> MetropolisHastingsState {
-        let mut seed_rng = match self.seed {
-            Some(s) => StdRng::seed_from_u64(s),
-            None => StdRng::from_os_rng(),
-        };
+        let mut seed_rng = self
+            .seed
+            .map_or_else(StdRng::from_os_rng, StdRng::seed_from_u64);
 
         // Move initial and clamp it
         let mut initial_point = initial;
@@ -278,6 +290,12 @@ impl MetropolisHastingsState {
     ///     AskResult::Done(results) => { /* done */ }
     /// }
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The sampler has already terminated
+    /// - The number of results doesn't match the expected count
     pub fn tell<I, T, E>(&mut self, results: I) -> Result<(), TellError>
     where
         I: IntoIterator<Item = T>,
@@ -290,10 +308,7 @@ impl MetropolisHastingsState {
 
         let values: Vec<f64> = results
             .into_iter()
-            .map(|r| match r.try_into() {
-                Ok(eval) => eval.value(),
-                Err(_) => f64::INFINITY,
-            })
+            .map(|r| r.try_into().map_or(f64::INFINITY, |eval| eval.value()))
             .collect();
 
         if values.len() != self.chains.len() {

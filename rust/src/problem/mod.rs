@@ -148,6 +148,15 @@ impl ParameterSet {
     }
 }
 
+impl<'a> IntoIterator for &'a ParameterSet {
+    type Item = &'a ParameterSpec;
+    type IntoIter = std::slice::Iter<'a, ParameterSpec>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParameterRange(RangeInclusive<f64>);
 
@@ -201,6 +210,12 @@ impl From<RangeInclusive<f64>> for ParameterRange {
 /// An Objective trait, used to define the core
 /// evaluation of a `problem`.
 pub trait Objective: Send + Sync {
+    /// Evaluate the objective function at point `x`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the objective function fails to evaluate at the given point.
+    /// Common causes include invalid parameters, solver failures, or numerical issues.
     fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError>;
 
     fn gradient(&self, _x: &[f64]) -> Option<Vec<f64>> {
@@ -212,6 +227,12 @@ pub trait Objective: Send + Sync {
         false
     }
 
+    /// Evaluate the objective function and its gradient at point `x`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the objective function fails to evaluate at the given point.
+    /// Common causes include invalid parameters, solver failures, or numerical issues.
     fn evaluate_with_gradient(&self, x: &[f64]) -> Result<(f64, Option<Vec<f64>>), ProblemError> {
         Ok((self.evaluate(x)?, self.gradient(x)))
     }
@@ -296,6 +317,11 @@ pub struct VectorObjective {
 }
 
 impl VectorObjective {
+    /// Create a new vector objective
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data vector is empty.
     pub fn new(
         f: VectorFn,
         data: Vec<f64>,
@@ -352,10 +378,20 @@ impl<O: Objective> Problem<O> {
         self.objective.has_gradient()
     }
 
+    /// Evaluate the problem at point `x`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the objective function fails to evaluate at the given point.
     pub fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
         self.objective.evaluate(x)
     }
 
+    /// Evaluate the problem and its gradient at point `x`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the objective function fails to evaluate at the given point.
     pub fn evaluate_with_gradient(
         &self,
         x: &[f64],
@@ -418,12 +454,14 @@ impl<O: Objective> Problem<O> {
                     grad_opt.run(
                         |x| {
                             let (value, grad) = self.evaluate_with_gradient(x)?;
-                            match grad {
-                                Some(grad) => Ok((value, grad)),
-                                None => Err(ProblemError::EvaluationFailed(
-                                    "Gradient optimiser requires gradient".to_string(),
-                                )),
-                            }
+                            grad.map_or_else(
+                                || {
+                                    Err(ProblemError::EvaluationFailed(
+                                        "Gradient optimiser requires gradient".to_string(),
+                                    ))
+                                },
+                                |grad| Ok((value, grad)),
+                            )
                         },
                         x0,
                         self.parameters.bounds(),
@@ -510,8 +548,7 @@ mod tests {
             .expect("evaluation failed");
         assert!(
             cost.abs() < 1e-10,
-            "expected near-zero cost with true params, got {}",
-            cost
+            "expected near-zero cost with true params, got {cost}"
         );
 
         // Test with wrong parameters
@@ -613,8 +650,7 @@ mod tests {
         let cost = problem.evaluate(&[1.0]).expect("evaluation failed");
         assert!(
             (cost - 1.0).abs() < 1e-10,
-            "expected RMSE of 1.0, got {}",
-            cost
+            "expected RMSE of 1.0, got {cost}"
         );
     }
 

@@ -227,6 +227,6 @@ impl DiffsolProblemBuilder {
         let objective = DiffsolObjective::new(equations, t_span, data, self.config, costs);
 
         // Build problem
-        Ok(Problem::new(objective, self.parameters))
+        Ok(Problem::new(objective, self.parameters).with_optimiser(self.optimiser))
     }
 }

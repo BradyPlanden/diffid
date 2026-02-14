@@ -88,6 +88,14 @@ impl Adam {
     pub fn init(&self, initial: Point, bounds: Bounds) -> (AdamState, Point) {
         let dim = initial.len();
         let mut initial_point = initial;
+
+        if let Err(err) = bounds.validate_dimension(dim) {
+            let mut state = AdamState::new(self.clone(), initial_point.clone(), bounds, dim);
+            state.phase =
+                AdamPhase::Terminated(TerminationReason::FunctionEvaluationFailed(err.to_string()));
+            return (state, initial_point);
+        }
+
         bounds.clamp(&mut initial_point);
 
         let state = AdamState::new(self.clone(), initial_point.clone(), bounds, dim);
@@ -433,6 +441,17 @@ impl Adam {
         R: TryInto<GradientEvaluation, Error = E>,
         E: Into<EvaluationError>,
     {
+        if let Err(err) = bounds.validate_dimension(initial.len()) {
+            return build_results(
+                &[EvaluatedPoint::new(initial, f64::NAN)],
+                0,
+                0,
+                Duration::ZERO,
+                TerminationReason::FunctionEvaluationFailed(err.to_string()),
+                None,
+            );
+        }
+
         let (mut state, first_point) = self.init(initial, bounds);
         let mut result = objective(&first_point);
 

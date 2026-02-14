@@ -1096,7 +1096,7 @@ mod tests {
 
         let initial_value = initial.iter().map(|x| x * x).sum::<f64>();
 
-        let result = optimiser.run(|x| problem.evaluate(x), initial, Bounds::unbounded(2));
+        let result = optimiser.run(|x| problem.evaluate(x), initial, Bounds::unbounded(dim));
 
         // Should still work with lazy updates and improve from initial
         assert!(result.evaluations > 0);

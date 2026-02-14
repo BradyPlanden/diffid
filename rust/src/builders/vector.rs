@@ -119,6 +119,6 @@ impl VectorProblemBuilder {
         let objective = VectorObjective::new(function, data, costs)?;
 
         // Build problem
-        Ok(Problem::new(objective, self.parameters))
+        Ok(Problem::new(objective, self.parameters).with_optimiser(self.optimiser))
     }
 }

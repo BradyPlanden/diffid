@@ -83,6 +83,15 @@ impl CMAES {
     pub fn init(&self, initial: Point, bounds: Bounds) -> (CMAESState, Point) {
         let dim = initial.len();
         let mut initial_point = initial;
+
+        if let Err(err) = bounds.validate_dimension(dim) {
+            let mut state = CMAESState::new(self.clone(), initial_point.clone(), bounds, dim);
+            state.phase = CMAESPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
+                err.to_string(),
+            ));
+            return (state, initial_point);
+        }
+
         bounds.clamp(&mut initial_point);
 
         let state = CMAESState::new(self.clone(), initial_point.clone(), bounds, dim);
@@ -718,6 +727,17 @@ impl CMAES {
         R: TryInto<ScalarEvaluation, Error = E>,
         E: Into<EvaluationError>,
     {
+        if let Err(err) = bounds.validate_dimension(initial.len()) {
+            return build_results(
+                &[EvaluatedPoint::new(initial, f64::NAN)],
+                0,
+                0,
+                Duration::ZERO,
+                TerminationReason::FunctionEvaluationFailed(err.to_string()),
+                None,
+            );
+        }
+
         let (mut state, first_point) = self.init(initial, bounds);
 
         let mut results = vec![objective(&first_point)];
@@ -762,6 +782,17 @@ impl CMAES {
         R: TryInto<ScalarEvaluation, Error = E>,
         E: Into<EvaluationError>,
     {
+        if let Err(err) = bounds.validate_dimension(initial.len()) {
+            return build_results(
+                &[EvaluatedPoint::new(initial, f64::NAN)],
+                0,
+                0,
+                Duration::ZERO,
+                TerminationReason::FunctionEvaluationFailed(err.to_string()),
+                None,
+            );
+        }
+
         let (mut state, first_point) = self.init(initial, bounds);
 
         let mut results = objective(&[first_point]);
@@ -869,7 +900,7 @@ mod tests {
 
         let initial_value = initial.iter().map(|x| x * x).sum::<f64>();
 
-        let result = optimiser.run(|x| problem.evaluate(x), initial, Bounds::unbounded(2));
+        let result = optimiser.run(|x| problem.evaluate(x), initial, Bounds::unbounded(dim));
 
         // Should still work with lazy updates and improve from initial
         assert!(result.evaluations > 0);

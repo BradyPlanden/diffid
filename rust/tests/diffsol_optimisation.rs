@@ -23,10 +23,11 @@ F_i { a * y }
 
     let data_matrix = DMatrix::from_row_slice(t_span.len(), 2, &data);
 
-    let optimiser = NelderMead::new()
+    let optimiser = CMAES::new()
         .with_max_iter(400)
         .with_threshold(1e-12)
-        .with_step_size(0.25);
+        .with_step_size(0.25)
+        .with_seed(42);
 
     let builder = DiffsolProblemBuilder::new()
         .with_diffsl(dsl.to_string())
@@ -57,6 +58,10 @@ F_i { a * y }
         result.success,
         "optimisation should succeed: {}",
         result.message
+    );
+    assert!(
+        result.covariance.is_some(),
+        "configured CMA-ES should be used by problem.optimise(...)"
     );
     assert!(
         result.value < initial_cost,

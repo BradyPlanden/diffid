@@ -83,12 +83,20 @@ impl NelderMead {
     pub fn init(&self, initial: Point, bounds: Bounds) -> (NelderMeadState, Vec<Point>) {
         let dim = initial.len();
         let mut initial_point = initial;
-        bounds.clamp(&mut initial_point);
+
+        let phase = if let Err(err) = bounds.validate_dimension(dim) {
+            NelderMeadPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
+                err.to_string(),
+            ))
+        } else {
+            bounds.clamp(&mut initial_point);
+            NelderMeadPhase::EvaluatingInitial
+        };
 
         let state = NelderMeadState {
             config: self.clone(),
             simplex: Vec::with_capacity(dim + 1),
-            phase: NelderMeadPhase::EvaluatingInitial,
+            phase,
             bounds,
             dim,
             initial_point: initial_point.clone(),
@@ -119,6 +127,17 @@ impl NelderMead {
         R: TryInto<ScalarEvaluation, Error = E>,
         E: Into<EvaluationError>,
     {
+        if let Err(err) = bounds.validate_dimension(initial.len()) {
+            return build_results(
+                &[EvaluatedPoint::new(initial, f64::NAN)],
+                0,
+                0,
+                Duration::ZERO,
+                TerminationReason::FunctionEvaluationFailed(err.to_string()),
+                None,
+            );
+        }
+
         let (mut state, first_point) = self.init(initial, bounds);
         let mut result = objective(&first_point[0]);
 

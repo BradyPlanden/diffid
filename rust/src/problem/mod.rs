@@ -380,6 +380,12 @@ impl<O: Objective> Problem<O> {
         }
     }
 
+    #[must_use]
+    pub fn with_optimiser(mut self, optimiser: impl Into<Optimiser>) -> Self {
+        self.optimiser = optimiser.into();
+        self
+    }
+
     pub fn has_gradient(&self) -> bool {
         self.objective.has_gradient()
     }

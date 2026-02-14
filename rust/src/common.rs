@@ -1,6 +1,7 @@
 use rand::prelude::StdRng;
 use rand::Rng;
 use rand_distr::StandardNormal;
+use std::fmt;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
@@ -46,6 +47,34 @@ pub struct Unbounded;
 pub struct Bounds {
     pub(crate) limits: Vec<RangeInclusive<f64>>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoundsDimensionError {
+    expected: usize,
+    got: usize,
+}
+
+impl BoundsDimensionError {
+    pub fn expected(&self) -> usize {
+        self.expected
+    }
+
+    pub fn got(&self) -> usize {
+        self.got
+    }
+}
+
+impl fmt::Display for BoundsDimensionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "bounds dimension mismatch: expected {}, got {}",
+            self.expected, self.got
+        )
+    }
+}
+
+impl std::error::Error for BoundsDimensionError {}
 
 impl Bounds {
     /// Creates a new `Bounds` from a vector of (lower, upper) tuples.
@@ -110,6 +139,20 @@ impl Bounds {
     /// Returns a reference to the inner limits as a slice
     pub fn limits(&self) -> &[RangeInclusive<f64>] {
         &self.limits
+    }
+
+    /// Validate that bounds dimensionality matches an expected parameter dimension.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BoundsDimensionError`] when `expected` differs from `self.dimension()`.
+    pub fn validate_dimension(&self, expected: usize) -> Result<(), BoundsDimensionError> {
+        let got = self.dimension();
+        if got == expected {
+            Ok(())
+        } else {
+            Err(BoundsDimensionError { expected, got })
+        }
     }
 
     /// Clamps a vector of positions in-place to remain within the bounds.

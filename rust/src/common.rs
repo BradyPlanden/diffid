@@ -23,6 +23,18 @@ pub enum AskResult<R> {
     Done(R),
 }
 
+/// Result of calling a single-point `ask()` path on an optimiser state.
+///
+/// This avoids wrapping one point in `Arc<[Point]>` while preserving the
+/// existing batch-oriented [`AskResult`] API for backwards compatibility.
+#[derive(Clone, Debug)]
+pub enum SingleAskResult<R> {
+    /// Evaluate this point and call `tell()` with the result.
+    Evaluate(Point),
+    /// Algorithm has finished - contains final results.
+    Done(R),
+}
+
 #[derive(Debug, Clone)]
 pub struct Unbounded;
 

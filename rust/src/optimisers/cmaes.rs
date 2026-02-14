@@ -342,12 +342,21 @@ impl CMAESState {
             return Err(TellError::AlreadyTerminated);
         }
 
-        // We collect into a Result<Vec<f64>> first to handle errors early
-        let values: Vec<f64> = results
-            .into_iter()
-            .map(std::convert::TryInto::try_into)
-            .map(|res| res.map_or(f64::INFINITY, |eval| eval.value()))
-            .collect();
+        // Strict failure policy: any objective-evaluation error terminates the run.
+        let mut results_iter = results.into_iter();
+        let mut values = Vec::with_capacity(results_iter.size_hint().0);
+        for result in results_iter.by_ref() {
+            match result.try_into() {
+                Ok(eval) => values.push(eval.value()),
+                Err(err) => {
+                    let err: EvaluationError = err.into();
+                    self.phase = CMAESPhase::Terminated(
+                        TerminationReason::FunctionEvaluationFailed(format!("{err}")),
+                    );
+                    return Ok(());
+                }
+            }
+        }
 
         // Take ownership of current phase
         // Placeholder MaxIters is set, will be replaced
@@ -1243,8 +1252,10 @@ mod tests {
                     generation += 1;
                 }
                 AskResult::Done(final_results) => {
-                    // Should complete despite errors
-                    assert!(final_results.iterations > 3, "Should continue past error");
+                    assert!(matches!(
+                        final_results.termination,
+                        TerminationReason::FunctionEvaluationFailed(_)
+                    ));
                     break;
                 }
             }

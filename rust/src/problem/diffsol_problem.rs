@@ -36,7 +36,6 @@ type SparseVector = FaerVec<f64>;
 type DenseSolver = NalgebraLU<f64>;
 type SparseSolver = FaerSparseLU<f64>;
 
-const FAILED_SOLVE_PENALTY: f64 = 1e5;
 const MAX_SIMULATOR_CACHE_ENTRIES: usize = 32;
 
 // Global ID counter for unique objective identification
@@ -254,26 +253,18 @@ impl Objective for DiffsolObjective {
     fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
         self.with_simulator_cached(x, |problem, residuals| match problem {
             DiffsolSimulator::Dense(p) => {
-                let solver_result = p.bdf::<DenseSolver>();
-                let Ok(mut solver) = solver_result else {
-                    return Ok(FAILED_SOLVE_PENALTY);
-                };
-
-                Self::solve_safely(|| solver.solve_dense(&self.t_span)).map_or_else(
-                    |_| Ok(FAILED_SOLVE_PENALTY),
-                    |solution| self.calculate_cost(&solution, residuals),
-                )
+                let mut solver = p
+                    .bdf::<DenseSolver>()
+                    .map_err(|e| ProblemError::SolverError(e.to_string()))?;
+                let solution = Self::solve_safely(|| solver.solve_dense(&self.t_span))?;
+                self.calculate_cost(&solution, residuals)
             }
             DiffsolSimulator::Sparse(p) => {
-                let solver_result = p.bdf::<SparseSolver>();
-                let Ok(mut solver) = solver_result else {
-                    return Ok(FAILED_SOLVE_PENALTY);
-                };
-
-                Self::solve_safely(|| solver.solve_dense(&self.t_span)).map_or_else(
-                    |_| Ok(FAILED_SOLVE_PENALTY),
-                    |solution| self.calculate_cost(&solution, residuals),
-                )
+                let mut solver = p
+                    .bdf::<SparseSolver>()
+                    .map_err(|e| ProblemError::SolverError(e.to_string()))?;
+                let solution = Self::solve_safely(|| solver.solve_dense(&self.t_span))?;
+                self.calculate_cost(&solution, residuals)
             }
         })
     }
@@ -514,6 +505,36 @@ F_i { (r * y) * (1 - (y / k)) }
         assert!(
             !other_thread_has_cache,
             "Other thread should not have cache entry initially"
+        );
+    }
+
+    #[test]
+    fn diffsol_solver_failure_returns_error() {
+        let dsl = r"
+in_i { a = 1 }
+u_i { y = 0.1 }
+F_i { a * y }
+";
+
+        let t_span = vec![0.0, 0.2, 0.1];
+        let data = DMatrix::from_vec(t_span.len(), 1, vec![0.10, 0.12, 0.11]);
+        let problem = DiffsolObjective::new(
+            dsl.to_string(),
+            t_span,
+            data,
+            DiffsolConfig::default().with_backend(DiffsolBackend::Dense),
+            vec![Arc::new(SumSquaredError::default())],
+        );
+
+        let err = problem
+            .evaluate(&[1.0])
+            .expect_err("non-monotonic time grid should fail solver evaluation");
+        assert!(
+            matches!(
+                err,
+                ProblemError::SolverError(_) | ProblemError::EvaluationFailed(_)
+            ),
+            "expected solver-related failure, got: {err}"
         );
     }
 

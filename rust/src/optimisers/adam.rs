@@ -1,4 +1,4 @@
-use crate::common::{AskResult, Bounds, Point};
+use crate::common::{AskResult, Bounds, Point, SingleAskResult};
 use crate::errors::{EvaluationError, TellError};
 use crate::optimisers::{
     build_results, EvaluatedPoint, GradientEvaluation, OptimisationResults, TerminationReason,
@@ -221,13 +221,27 @@ impl AdamState {
         }
     }
 
-    /// Get the next point to evaluate, or the final result if optimisation is complete
-    pub fn ask(&self) -> AskResult<OptimisationResults> {
+    /// Get the next point to evaluate, or the final result if optimisation is complete.
+    ///
+    /// This single-point path avoids wrapping each point in `Arc<[Point]>`.
+    pub fn ask_single(&self) -> SingleAskResult<OptimisationResults> {
         match &self.phase {
-            AdamPhase::Terminated(reason) => AskResult::Done(self.build_results(reason.clone())),
-            AdamPhase::AwaitingEvaluation { pending_point } => {
-                AskResult::Evaluate(Arc::from(vec![pending_point.clone()]))
+            AdamPhase::Terminated(reason) => {
+                SingleAskResult::Done(self.build_results(reason.clone()))
             }
+            AdamPhase::AwaitingEvaluation { pending_point } => {
+                SingleAskResult::Evaluate(pending_point.clone())
+            }
+        }
+    }
+
+    /// Get the next point to evaluate, or the final result if optimisation is complete.
+    ///
+    /// Backwards-compatible batch-shaped wrapper around [`Self::ask_single`].
+    pub fn ask(&self) -> AskResult<OptimisationResults> {
+        match self.ask_single() {
+            SingleAskResult::Evaluate(point) => AskResult::Evaluate(Arc::from([point])),
+            SingleAskResult::Done(results) => AskResult::Done(results),
         }
     }
 
@@ -460,19 +474,19 @@ impl Adam {
                 break;
             }
 
-            match state.ask() {
-                AskResult::Evaluate(point) => {
-                    result = objective(&point[0]);
+            match state.ask_single() {
+                SingleAskResult::Evaluate(point) => {
+                    result = objective(&point);
                 }
-                AskResult::Done(results) => {
+                SingleAskResult::Done(results) => {
                     return results;
                 }
             }
         }
 
-        match state.ask() {
-            AskResult::Done(results) => results,
-            AskResult::Evaluate(_) => panic!("Unexpected state after tell error"),
+        match state.ask_single() {
+            SingleAskResult::Done(results) => results,
+            SingleAskResult::Evaluate(_) => panic!("Unexpected state after tell error"),
         }
     }
 

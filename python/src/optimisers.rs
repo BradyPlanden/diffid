@@ -2,7 +2,7 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use std::time::Duration;
 
-use diffid_core::common::{AskResult, Bounds};
+use diffid_core::common::{AskResult, Bounds, SingleAskResult};
 use diffid_core::optimisers::{AdamState, CMAESState, NelderMeadState};
 use diffid_core::prelude::*;
 
@@ -479,18 +479,20 @@ impl PyAdamState {
     /// >>> elif isinstance(result, diffid.Done):
     /// ...     print(f"optimisation complete: {result.result}")
     fn ask(&self, py: Python<'_>) -> Py<PyAny> {
-        match self.inner.ask() {
-            AskResult::Evaluate(points) => Py::new(
+        match self.inner.ask_single() {
+            SingleAskResult::Evaluate(point) => Py::new(
                 py,
                 PyEvaluate {
-                    points: points.to_vec(),
+                    points: vec![point],
                 },
             )
             .unwrap()
             .into_any(),
-            AskResult::Done(results) => Py::new(py, PyDone::with_optimisation_results(py, results))
-                .unwrap()
-                .into_any(),
+            SingleAskResult::Done(results) => {
+                Py::new(py, PyDone::with_optimisation_results(py, results))
+                    .unwrap()
+                    .into_any()
+            }
         }
     }
 
@@ -615,18 +617,20 @@ impl PyNelderMeadState {
     ///     Either Evaluate(points) requiring function evaluations,
     ///     or Done(result) indicating completion.
     fn ask(&self, py: Python<'_>) -> Py<PyAny> {
-        match self.inner.ask() {
-            AskResult::Evaluate(points) => Py::new(
+        match self.inner.ask_single() {
+            SingleAskResult::Evaluate(point) => Py::new(
                 py,
                 PyEvaluate {
-                    points: points.to_vec(),
+                    points: vec![point],
                 },
             )
             .unwrap()
             .into_any(),
-            AskResult::Done(results) => Py::new(py, PyDone::with_optimisation_results(py, results))
-                .unwrap()
-                .into_any(),
+            SingleAskResult::Done(results) => {
+                Py::new(py, PyDone::with_optimisation_results(py, results))
+                    .unwrap()
+                    .into_any()
+            }
         }
     }
 

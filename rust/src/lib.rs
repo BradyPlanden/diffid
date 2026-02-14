@@ -13,7 +13,7 @@ pub mod prelude {
     pub use crate::builders::{
         DiffsolConfig, DiffsolProblemBuilder, ScalarProblemBuilder, VectorProblemBuilder,
     };
-    pub use crate::common::{AskResult, Bounds, Unbounded};
+    pub use crate::common::{AskResult, Bounds, SingleAskResult, Unbounded};
     pub use crate::errors::{EvaluationError, TellError};
     pub use crate::optimisers::{Adam, NelderMead, OptimisationResults, Optimiser, CMAES};
     pub use crate::problem::{Objective, ParameterSet, ParameterSpec, Problem};

@@ -37,14 +37,19 @@ type DenseSolver = NalgebraLU<f64>;
 type SparseSolver = FaerSparseLU<f64>;
 
 const FAILED_SOLVE_PENALTY: f64 = 1e5;
+const MAX_SIMULATOR_CACHE_ENTRIES: usize = 32;
 
 // Global ID counter for unique objective identification
 static NEXT_OBJECTIVE_ID: AtomicUsize = AtomicUsize::new(1);
+static NEXT_CACHE_ACCESS_TICK: AtomicUsize = AtomicUsize::new(1);
 
 // Cache structure to hold simulator and its last parameters
 struct CachedSimulator {
     simulator: DiffsolSimulator,
     last_params: Vec<f64>,
+    residual_buffer: Vec<f64>,
+    alive_token: std::sync::Weak<()>,
+    last_used_tick: usize,
 }
 
 // Thread-local cache: each thread maintains its own cache of simulators
@@ -56,6 +61,7 @@ thread_local! {
 /// Diffsol Objective
 pub struct DiffsolObjective {
     id: usize,
+    cache_token: Arc<()>,
     dsl: String,
     t_span: Vec<f64>,
     data: DMatrix<f64>,
@@ -74,6 +80,7 @@ impl DiffsolObjective {
         let id = NEXT_OBJECTIVE_ID.fetch_add(1, Ordering::Relaxed);
         Self {
             id,
+            cache_token: Arc::new(()),
             dsl,
             t_span,
             data,
@@ -108,10 +115,23 @@ impl DiffsolObjective {
 
     fn with_simulator_cached<F, R>(&self, params: &[f64], f: F) -> Result<R, ProblemError>
     where
-        F: FnOnce(&mut DiffsolSimulator) -> Result<R, ProblemError>,
+        F: FnOnce(&mut DiffsolSimulator, &mut Vec<f64>) -> Result<R, ProblemError>,
     {
         SIMULATOR_CACHE.with(|cache| {
             let mut cache_map = cache.borrow_mut();
+            let access_tick = NEXT_CACHE_ACCESS_TICK.fetch_add(1, Ordering::Relaxed);
+
+            cache_map.retain(|_, cached| cached.alive_token.upgrade().is_some());
+
+            if cache_map.len() >= MAX_SIMULATOR_CACHE_ENTRIES && !cache_map.contains_key(&self.id) {
+                let stale_key = cache_map
+                    .iter()
+                    .min_by_key(|(_, cached)| cached.last_used_tick)
+                    .map(|(id, _)| *id);
+                if let Some(key) = stale_key {
+                    cache_map.remove(&key);
+                }
+            }
 
             let cached = match cache_map.entry(self.id) {
                 std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
@@ -120,27 +140,32 @@ impl DiffsolObjective {
                     entry.insert(CachedSimulator {
                         simulator,
                         last_params: Vec::new(),
+                        residual_buffer: Vec::new(),
+                        alive_token: Arc::downgrade(&self.cache_token),
+                        last_used_tick: access_tick,
                     })
                 }
             };
+            cached.last_used_tick = access_tick;
 
             if cached.last_params.as_slice() != params {
+                cached.last_params.clear();
+                cached.last_params.extend_from_slice(params);
                 match &mut cached.simulator {
                     DiffsolSimulator::Dense(p) => {
                         let ctx = *p.eqn().context();
                         p.eqn_mut()
-                            .set_params(&DenseVector::from_vec(params.to_vec(), ctx));
+                            .set_params(&DenseVector::from_slice(&cached.last_params, ctx));
                     }
                     DiffsolSimulator::Sparse(p) => {
                         let ctx = *p.eqn().context();
                         p.eqn_mut()
-                            .set_params(&SparseVector::from_vec(params.to_vec(), ctx));
+                            .set_params(&SparseVector::from_slice(&cached.last_params, ctx));
                     }
                 }
-                cached.last_params = params.to_vec();
             }
 
-            f(&mut cached.simulator)
+            f(&mut cached.simulator, &mut cached.residual_buffer)
         })
     }
 
@@ -155,7 +180,7 @@ impl DiffsolObjective {
             .map_err(|e| ProblemError::SolverError(e.to_string()))
     }
 
-    fn build_residuals<M>(&self, solution: &M) -> Result<Vec<f64>, ProblemError>
+    fn build_residuals<M>(&self, solution: &M, residuals: &mut Vec<f64>) -> Result<(), ProblemError>
     where
         M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
     {
@@ -173,23 +198,24 @@ impl DiffsolObjective {
         // Solution is organized as (n_states, n_timepoints)
         // Data is organized as (n_timepoints, n_states)
         // We need to iterate with swapped indices
-        let mut residuals = Vec::with_capacity(sol_size);
+        residuals.clear();
+        residuals.reserve(sol_size.saturating_sub(residuals.capacity()));
         for time_idx in 0..self.data.nrows() {
             for state_idx in 0..self.data.ncols() {
                 residuals.push(solution[(state_idx, time_idx)] - self.data[(time_idx, state_idx)]);
             }
         }
 
-        Ok(residuals)
+        Ok(())
     }
 
     #[inline]
-    fn calculate_cost<M>(&self, solution: &M) -> Result<f64, ProblemError>
+    fn calculate_cost<M>(&self, solution: &M, residuals: &mut Vec<f64>) -> Result<f64, ProblemError>
     where
         M: Matrix + MatrixCommon + Index<(usize, usize), Output = f64>,
     {
-        let residuals = self.build_residuals(solution)?;
-        let total_cost = self.costs.iter().map(|c| c.evaluate(&residuals)).sum();
+        self.build_residuals(solution, residuals)?;
+        let total_cost = self.costs.iter().map(|c| c.evaluate(residuals)).sum();
         Ok(total_cost)
     }
 
@@ -197,15 +223,16 @@ impl DiffsolObjective {
         &self,
         solution: &NalgebraMat<f64>,
         sensitivities: &[NalgebraMat<f64>],
+        residuals: &mut Vec<f64>,
     ) -> Result<(f64, Option<Vec<f64>>), ProblemError> {
-        let residuals = self.build_residuals(solution)?;
+        self.build_residuals(solution, residuals)?;
 
         let mut total_cost = 0.0;
         let mut total_grad: Option<Vec<f64>> = None;
 
         for metric in &self.costs {
             let (cost, grad) = metric
-                .evaluate_with_sensitivities(&residuals, sensitivities)
+                .evaluate_with_sensitivities(residuals, sensitivities)
                 .ok_or_else(|| {
                     ProblemError::EvaluationFailed(format!(
                         "Failed to evaluate metric: {}",
@@ -225,7 +252,7 @@ impl DiffsolObjective {
 
 impl Objective for DiffsolObjective {
     fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
-        self.with_simulator_cached(x, |problem| match problem {
+        self.with_simulator_cached(x, |problem, residuals| match problem {
             DiffsolSimulator::Dense(p) => {
                 let solver_result = p.bdf::<DenseSolver>();
                 let Ok(mut solver) = solver_result else {
@@ -234,7 +261,7 @@ impl Objective for DiffsolObjective {
 
                 Self::solve_safely(|| solver.solve_dense(&self.t_span)).map_or_else(
                     |_| Ok(FAILED_SOLVE_PENALTY),
-                    |solution| self.calculate_cost(&solution),
+                    |solution| self.calculate_cost(&solution, residuals),
                 )
             }
             DiffsolSimulator::Sparse(p) => {
@@ -245,14 +272,14 @@ impl Objective for DiffsolObjective {
 
                 Self::solve_safely(|| solver.solve_dense(&self.t_span)).map_or_else(
                     |_| Ok(FAILED_SOLVE_PENALTY),
-                    |solution| self.calculate_cost(&solution),
+                    |solution| self.calculate_cost(&solution, residuals),
                 )
             }
         })
     }
 
     fn evaluate_with_gradient(&self, x: &[f64]) -> Result<(f64, Option<Vec<f64>>), ProblemError> {
-        self.with_simulator_cached(x, |problem| match problem {
+        self.with_simulator_cached(x, |problem, residuals| match problem {
             DiffsolSimulator::Dense(p) => {
                 let mut solver = p
                     .bdf_sens::<DenseSolver>()
@@ -260,7 +287,7 @@ impl Objective for DiffsolObjective {
                 let (solution, sensitivities) =
                     Self::solve_safely(|| solver.solve_dense_sensitivities(&self.t_span))?;
 
-                self.calculate_cost_with_grad(&solution, &sensitivities)
+                self.calculate_cost_with_grad(&solution, &sensitivities, residuals)
             }
             DiffsolSimulator::Sparse(_p) => Err(ProblemError::EvaluationFailed(
                 "Sparse diffsol backend does not currently support gradient evaluation".to_string(),

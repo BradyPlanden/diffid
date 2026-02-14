@@ -81,11 +81,6 @@ impl ScalarOptimiser {
     /// * `initial` - Initial point (will be auto-expanded if needed)
     /// * `bounds` - Optional parameter bounds
     ///
-    /// # Panics
-    ///
-    /// May panic when using Nelder-Mead if the objective function returns an empty vector.
-    /// This should not occur under normal operation.
-    ///
     /// # Returns
     /// Optimisation results including best point, value, and diagnostics
     ///
@@ -114,14 +109,31 @@ impl ScalarOptimiser {
     {
         match self {
             ScalarOptimiser::CMAES(cm) => cm.run_batch(objective, initial, bounds),
-            ScalarOptimiser::NelderMead(nm) => nm.run(
-                |x| {
-                    let result = objective(&[x.to_vec()]);
-                    result.into_iter().next().unwrap() // ToDO: This needs proper error integration
-                },
-                initial,
-                bounds,
-            ),
+            ScalarOptimiser::NelderMead(nm) => {
+                let mut singleton = vec![Vec::new()];
+                nm.run(
+                    |x| {
+                        singleton[0].clear();
+                        singleton[0].extend_from_slice(x);
+                        let mut result_iter = objective(&singleton).into_iter();
+                        result_iter.next().map_or_else(
+                            || {
+                                Err(EvaluationError::message(
+                                    "batch objective returned no result for Nelder-Mead candidate",
+                                ))
+                            },
+                            |value| {
+                                value
+                                    .try_into()
+                                    .map(|evaluation: ScalarEvaluation| evaluation.value())
+                                    .map_err(Into::<EvaluationError>::into)
+                            },
+                        )
+                    },
+                    initial,
+                    bounds,
+                )
+            }
         }
     }
 }
@@ -1232,5 +1244,21 @@ mod tests {
         for (exp, got) in expected.iter().zip(updated.iter()) {
             assert!((exp - got).abs() < 1e-12, "expected {exp} got {got}");
         }
+    }
+
+    #[test]
+    fn nelder_mead_run_batch_handles_empty_batch_results() {
+        let optimiser = ScalarOptimiser::from(NelderMead::new().with_max_iter(16));
+        let result = optimiser.run_batch(
+            |_xs: &[Vec<f64>]| Vec::<f64>::new(),
+            vec![0.5, -0.5],
+            Bounds::unbounded(2),
+        );
+
+        assert!(!result.success);
+        assert!(matches!(
+            result.termination,
+            TerminationReason::FunctionEvaluationFailed(_)
+        ));
     }
 }

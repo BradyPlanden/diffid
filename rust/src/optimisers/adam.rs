@@ -4,6 +4,7 @@ use crate::optimisers::{
     build_results, EvaluatedPoint, GradientEvaluation, OptimisationResults, TerminationReason,
 };
 use std::error::Error as StdError;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Configuration for the Adam optimiser
@@ -217,7 +218,7 @@ impl AdamState {
         match &self.phase {
             AdamPhase::Terminated(reason) => AskResult::Done(self.build_results(reason.clone())),
             AdamPhase::AwaitingEvaluation { pending_point } => {
-                AskResult::Evaluate(vec![pending_point.clone()])
+                AskResult::Evaluate(Arc::from(vec![pending_point.clone()]))
             }
         }
     }

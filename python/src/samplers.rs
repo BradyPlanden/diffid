@@ -610,7 +610,14 @@ impl PyMetropolisHastingsState {
     /// Returns one proposal point per chain.
     fn ask(&self, py: Python<'_>) -> Py<PyAny> {
         match self.inner.ask() {
-            AskResult::Evaluate(points) => Py::new(py, PyEvaluate { points }).unwrap().into_any(),
+            AskResult::Evaluate(points) => Py::new(
+                py,
+                PyEvaluate {
+                    points: points.to_vec(),
+                },
+            )
+            .unwrap()
+            .into_any(),
             AskResult::Done(SamplingResults::MCMC(samples)) => {
                 Py::new(py, PyDone::with_samples(py, PySamples { inner: samples }))
                     .unwrap()
@@ -708,7 +715,14 @@ impl PyDynamicNestedSamplerState {
     ///     or Done(result) indicating completion with `NestedSamples`.
     fn ask(&self, py: Python<'_>) -> Py<PyAny> {
         match self.inner.ask() {
-            AskResult::Evaluate(points) => Py::new(py, PyEvaluate { points }).unwrap().into_any(),
+            AskResult::Evaluate(points) => Py::new(
+                py,
+                PyEvaluate {
+                    points: points.to_vec(),
+                },
+            )
+            .unwrap()
+            .into_any(),
             AskResult::Done(SamplingResults::Nested(samples)) => Py::new(
                 py,
                 PyDone::with_nested_samples(py, PyNestedSamples { inner: samples }),

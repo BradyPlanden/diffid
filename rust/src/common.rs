@@ -2,6 +2,7 @@ use rand::prelude::StdRng;
 use rand::Rng;
 use rand_distr::StandardNormal;
 use std::ops::RangeInclusive;
+use std::sync::Arc;
 
 /// Type alias for a point in parameter space
 pub type Point = Vec<f64>;
@@ -16,7 +17,7 @@ pub type Point = Vec<f64>;
 #[derive(Clone, Debug)]
 pub enum AskResult<R> {
     /// Evaluate these points and call `tell()` with the results
-    Evaluate(Vec<Point>),
+    Evaluate(Arc<[Point]>),
     /// Algorithm has finished - contains final results
     Done(R),
 }

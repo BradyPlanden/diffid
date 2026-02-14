@@ -10,6 +10,7 @@
 
 use rand::prelude::StdRng;
 use rand::SeedableRng;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 mod mcmc_proposal;
@@ -226,14 +227,14 @@ impl DynamicNestedSamplerState {
                 }
 
                 // Return stored pending positions (like other phases)
-                AskResult::Evaluate(pending_positions.clone())
+                AskResult::Evaluate(Arc::from(pending_positions.clone()))
             }
             DNSPhase::AwaitingReplacementBatch {
                 pending_positions, ..
             }
             | DNSPhase::AwaitingExpansion {
                 pending_positions, ..
-            } => AskResult::Evaluate(pending_positions.clone()),
+            } => AskResult::Evaluate(Arc::from(pending_positions.clone())),
         }
     }
 

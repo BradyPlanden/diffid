@@ -7,6 +7,7 @@ use nalgebra::{DMatrix, DVector};
 use rand::prelude::*;
 use rand_distr::StandardNormal;
 use std::cmp::Ordering;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Configuration for the CMA-ES optimiser
@@ -103,8 +104,7 @@ pub enum CMAESPhase {
 
     /// Waiting for population evaluation
     AwaitingPopulation {
-        candidates: Vec<Point>,
-        z_vectors: Vec<DVector<f64>>,
+        candidates: Arc<[Point]>,
         old_mean: DVector<f64>,
     },
 
@@ -182,9 +182,16 @@ struct DistributionState {
     eigenvectors: DMatrix<f64>,
     sqrt_eigenvalues: DVector<f64>,
     inv_sqrt_cov: DMatrix<f64>,
+    eigen_update_interval: usize,
+    generations_since_eigen_update: usize,
+    decomposition_stale: bool,
 }
 
 impl DistributionState {
+    fn compute_eigen_update_interval(dim: usize) -> usize {
+        (dim / 24).clamp(1, 8)
+    }
+
     fn new(initial: &[f64]) -> Self {
         let dim = initial.len();
         Self {
@@ -196,6 +203,9 @@ impl DistributionState {
             eigenvectors: DMatrix::identity(dim, dim),
             sqrt_eigenvalues: DVector::from_element(dim, 1.0),
             inv_sqrt_cov: DMatrix::identity(dim, dim),
+            eigen_update_interval: Self::compute_eigen_update_interval(dim),
+            generations_since_eigen_update: 0,
+            decomposition_stale: false,
         }
     }
 
@@ -219,7 +229,28 @@ impl DistributionState {
         });
         self.inv_sqrt_cov =
             &self.eigenvectors * DMatrix::from_diagonal(&inv_diag) * self.eigenvectors.transpose();
+        self.decomposition_stale = false;
+        self.generations_since_eigen_update = 0;
     }
+
+    fn mark_covariance_changed(&mut self) {
+        self.decomposition_stale = true;
+        self.generations_since_eigen_update = self.generations_since_eigen_update.saturating_add(1);
+    }
+
+    fn maybe_update_decomposition(&mut self) {
+        if self.decomposition_stale
+            && self.generations_since_eigen_update >= self.eigen_update_interval
+        {
+            self.update_decomposition();
+        }
+    }
+}
+
+#[derive(Clone)]
+struct PopulationMember {
+    evaluated: EvaluatedPoint,
+    vector: DVector<f64>,
 }
 
 /// Runtime state of the CMA-ES optimiser
@@ -277,7 +308,7 @@ impl CMAESState {
         match &self.phase {
             CMAESPhase::Terminated(reason) => AskResult::Done(self.build_results(reason.clone())),
             CMAESPhase::EvaluatingInitial { initial_point } => {
-                AskResult::Evaluate(vec![initial_point.clone()])
+                AskResult::Evaluate(Arc::from(vec![initial_point.clone()]))
             }
             CMAESPhase::AwaitingPopulation { candidates, .. } => {
                 AskResult::Evaluate(candidates.clone())
@@ -323,10 +354,9 @@ impl CMAESState {
             }
             CMAESPhase::AwaitingPopulation {
                 candidates,
-                z_vectors,
                 old_mean,
             } => {
-                self.handle_population_evaluated(candidates, z_vectors, &old_mean, values)?;
+                self.handle_population_evaluated(&candidates, &old_mean, values)?;
             }
             CMAESPhase::Terminated(_) => unreachable!(),
         }
@@ -397,8 +427,7 @@ impl CMAESState {
 
     fn handle_population_evaluated(
         &mut self,
-        candidates: Vec<Point>,
-        z_vectors: Vec<DVector<f64>>,
+        candidates: &Arc<[Point]>,
         old_mean: &DVector<f64>,
         results: Vec<f64>,
     ) -> Result<(), TellError> {
@@ -413,27 +442,32 @@ impl CMAESState {
         self.evaluations += results.len();
 
         // Process results into population
-        let mut population: Vec<(EvaluatedPoint, DVector<f64>)> = Vec::with_capacity(expected);
+        let mut population: Vec<PopulationMember> = Vec::with_capacity(expected);
 
-        for ((candidate, z), value) in candidates
-            .into_iter()
-            .zip(z_vectors.into_iter())
-            .zip(results.into_iter())
-        {
-            population.push((EvaluatedPoint::new(candidate, value), z));
+        for (candidate, value) in candidates.iter().cloned().zip(results.into_iter()) {
+            let vector = DVector::from_column_slice(&candidate);
+            population.push(PopulationMember {
+                evaluated: EvaluatedPoint::new(candidate, value),
+                vector,
+            });
         }
 
         // Sort by objective value
-        population.sort_by(|a, b| a.0.value.partial_cmp(&b.0.value).unwrap_or(Ordering::Equal));
+        population.sort_by(|a, b| {
+            a.evaluated
+                .value
+                .partial_cmp(&b.evaluated.value)
+                .unwrap_or(Ordering::Equal)
+        });
 
         // Update best point
-        if let Some((best, _)) = population.first() {
+        if let Some(best) = population.first() {
             match &self.best_point {
-                Some(current_best) if best.value < current_best.value => {
-                    self.best_point = Some(best.clone());
+                Some(current_best) if best.evaluated.value < current_best.value => {
+                    self.best_point = Some(best.evaluated.clone());
                 }
                 None => {
-                    self.best_point = Some(best.clone());
+                    self.best_point = Some(best.evaluated.clone());
                 }
                 _ => {}
             }
@@ -443,7 +477,10 @@ impl CMAESState {
         let termination_reason = self.update_distribution(&population, old_mean);
 
         // Update final population
-        self.final_population = population.iter().map(|(pt, _)| pt.clone()).collect();
+        self.final_population = population
+            .iter()
+            .map(|member| member.evaluated.clone())
+            .collect();
         if let Some(ref best) = self.best_point {
             if !self
                 .final_population
@@ -476,49 +513,50 @@ impl CMAESState {
         }
 
         // Update eigendecomposition
-        self.distribution.update_decomposition();
+        self.distribution.maybe_update_decomposition();
 
         // Sample new population
         let old_mean = self.distribution.mean.clone();
-        let (candidates, z_vectors) = self.sample_population();
+        let candidates = self.sample_population();
 
         self.phase = CMAESPhase::AwaitingPopulation {
             candidates,
-            z_vectors,
             old_mean,
         };
     }
 
-    fn sample_population(&mut self) -> (Vec<Point>, Vec<DVector<f64>>) {
+    fn sample_population(&mut self) -> Arc<[Point]> {
         let lambda = self.params.lambda;
-        let step_matrix = DMatrix::from_diagonal(&self.distribution.sqrt_eigenvalues);
 
         let mut candidates: Vec<Point> = Vec::with_capacity(lambda);
-        let mut z_vectors: Vec<DVector<f64>> = Vec::with_capacity(lambda);
 
         for _ in 0..lambda {
-            let z = DVector::from_iterator(
+            let mut z = DVector::from_iterator(
                 self.dim,
                 (0..self.dim).map(|_| self.rng.sample::<f64, _>(StandardNormal)),
             );
-
-            let step = &self.distribution.eigenvectors * (&step_matrix * &z);
-            let candidate_vec = &self.distribution.mean + step * self.distribution.sigma;
-            let mut candidate: Point = candidate_vec.iter().copied().collect();
+            z.component_mul_assign(&self.distribution.sqrt_eigenvalues);
+            let step = &self.distribution.eigenvectors * z;
+            let mut candidate: Point = self
+                .distribution
+                .mean
+                .iter()
+                .zip(step.iter())
+                .map(|(m, s)| self.distribution.sigma.mul_add(*s, *m))
+                .collect();
 
             // Apply bounds
             self.bounds.clamp(&mut candidate);
 
             candidates.push(candidate);
-            z_vectors.push(z);
         }
 
-        (candidates, z_vectors)
+        Arc::from(candidates)
     }
 
     fn update_distribution(
         &mut self,
-        population: &[(EvaluatedPoint, DVector<f64>)],
+        population: &[PopulationMember],
         old_mean: &DVector<f64>,
     ) -> Option<TerminationReason> {
         let dim_f = self.dim as f64;
@@ -530,8 +568,7 @@ impl CMAESState {
         let mut new_mean = DVector::zeros(self.dim);
         for (i, item) in population.iter().enumerate().take(limit) {
             let weight = params.weights[i];
-            let candidate_vec = DVector::from_column_slice(&item.0.point);
-            new_mean += candidate_vec * weight;
+            new_mean += &item.vector * weight;
         }
 
         let mean_shift = &new_mean - old_mean;
@@ -565,8 +602,7 @@ impl CMAESState {
         let mut rank_mu_update = DMatrix::zeros(self.dim, self.dim);
         for (i, item) in population.iter().enumerate().take(limit) {
             let weight = params.weights[i];
-            let candidate_vec = DVector::from_column_slice(&item.0.point);
-            let y = (candidate_vec - old_mean) / sigma_denom;
+            let y = (&item.vector - old_mean) / sigma_denom;
             rank_mu_update += (&y * y.transpose()) * weight;
         }
 
@@ -580,6 +616,7 @@ impl CMAESState {
             params.c_c,
             &rank_mu_update,
         );
+        dist.mark_covariance_changed();
 
         // Update step size
         dist.sigma *= (params.c_sigma / params.d_sigma * (norm_p_sigma / params.chi_n - 1.0)).exp();
@@ -627,12 +664,12 @@ impl CMAESState {
 
     fn check_convergence(
         &self,
-        population: &[(EvaluatedPoint, DVector<f64>)],
+        population: &[PopulationMember],
         mean_shift: &DVector<f64>,
     ) -> Option<TerminationReason> {
         let fun_diff = if population.len() > 1 {
-            let best_val = population[0].0.value;
-            let worst_val = population[population.len() - 1].0.value;
+            let best_val = population[0].evaluated.value;
+            let worst_val = population[population.len() - 1].evaluated.value;
             (worst_val - best_val).abs()
         } else {
             0.0
@@ -736,7 +773,7 @@ impl CMAES {
 
             match state.ask() {
                 AskResult::Evaluate(points) => {
-                    results = objective(&points);
+                    results = objective(points.as_ref());
                 }
                 AskResult::Done(opt_results) => {
                     return opt_results;
@@ -1206,7 +1243,7 @@ mod tests {
             match state.ask() {
                 AskResult::Evaluate(points) => {
                     // Check all proposed points respect bounds
-                    for point in &points {
+                    for point in points.iter() {
                         for &val in point {
                             assert!(
                                 (-2.0..=2.0).contains(&val),

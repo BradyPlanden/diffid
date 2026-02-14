@@ -5,6 +5,7 @@ use crate::prelude::{Samples, SamplingResults};
 use rand::prelude::StdRng;
 use rand::{Rng, SeedableRng};
 use rand_distr::StandardNormal;
+use std::sync::Arc;
 use std::time::Instant;
 
 #[must_use]
@@ -123,7 +124,7 @@ impl MetropolisHastings {
 
             match state.ask() {
                 AskResult::Evaluate(points) => {
-                    results = objective(&points);
+                    results = objective(points.as_ref());
                 }
                 AskResult::Done(SamplingResults::MCMC(samples)) => {
                     return samples;
@@ -145,6 +146,7 @@ impl MetropolisHastings {
 /// State for ask/tell interface of Metropolis-Hastings sampler
 pub struct MetropolisHastingsState {
     chains: Vec<ChainState>,
+    pending_proposals: Arc<[Point]>,
     step_size: f64,
     max_iterations: usize,
     iteration: usize,
@@ -207,29 +209,31 @@ impl MetropolisHastings {
         let mut initial_point = initial;
         bounds.clamp(&mut initial_point);
 
-        let chains: Vec<ChainState> = (0..self.num_chains)
-            .map(|_| {
-                let mut rng = StdRng::seed_from_u64(seed_rng.random());
-                let mut proposal = initial_point.clone();
-                for val in &mut proposal {
-                    let noise: f64 = rng.sample(StandardNormal);
-                    *val += self.step_size * noise;
-                }
+        let mut chains: Vec<ChainState> = Vec::with_capacity(self.num_chains);
+        let mut pending_proposals: Vec<Point> = Vec::with_capacity(self.num_chains);
+        for _ in 0..self.num_chains {
+            let mut rng = StdRng::seed_from_u64(seed_rng.random());
+            let mut proposal = initial_point.clone();
+            for val in &mut proposal {
+                let noise: f64 = rng.sample(StandardNormal);
+                *val += self.step_size * noise;
+            }
 
-                bounds.clamp(&mut proposal);
-                ChainState {
-                    current: initial_point.clone(),
-                    current_log_likelihood: f64::INFINITY,
-                    proposal,
-                    samples: vec![initial_point.clone()],
-                    rng,
-                    acceptances: Vec::new(),
-                }
-            })
-            .collect();
+            bounds.clamp(&mut proposal);
+            pending_proposals.push(proposal.clone());
+            chains.push(ChainState {
+                current: initial_point.clone(),
+                current_log_likelihood: f64::INFINITY,
+                proposal,
+                samples: vec![initial_point.clone()],
+                rng,
+                acceptances: Vec::new(),
+            });
+        }
 
         MetropolisHastingsState {
             chains,
+            pending_proposals: Arc::from(pending_proposals),
             step_size: self.step_size,
             max_iterations: self.iterations,
             iteration: 0,
@@ -252,14 +256,7 @@ impl MetropolisHastingsState {
     pub fn ask(&self) -> AskResult<SamplingResults> {
         match self.phase {
             MCMCPhase::Terminated => AskResult::Done(SamplingResults::MCMC(self.build_results())),
-            MCMCPhase::AwaitingProposals => {
-                let proposals: Vec<Vec<f64>> = self
-                    .chains
-                    .iter()
-                    .map(|chain| chain.proposal.clone())
-                    .collect();
-                AskResult::Evaluate(proposals)
-            }
+            MCMCPhase::AwaitingProposals => AskResult::Evaluate(self.pending_proposals.clone()),
         }
     }
 
@@ -352,6 +349,12 @@ impl MetropolisHastingsState {
             // Clamp the proposal
             self.bounds.clamp(&mut chain.proposal);
         }
+        self.pending_proposals = Arc::from(
+            self.chains
+                .iter()
+                .map(|chain| chain.proposal.clone())
+                .collect::<Vec<_>>(),
+        );
 
         self.iteration += 1;
 

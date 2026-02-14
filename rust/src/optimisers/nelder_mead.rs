@@ -4,6 +4,7 @@ use crate::optimisers::{
     build_results, EvaluatedPoint, OptimisationResults, ScalarEvaluation, TerminationReason,
 };
 use std::cmp::Ordering;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Configuration for the Nelder-Mead optimiser
@@ -215,20 +216,20 @@ impl NelderMeadState {
                 AskResult::Done(self.build_results(reason.clone()))
             }
             NelderMeadPhase::EvaluatingInitial => {
-                AskResult::Evaluate(vec![self.initial_point.clone()])
+                AskResult::Evaluate(Arc::from(vec![self.initial_point.clone()]))
             }
             NelderMeadPhase::BuildingSimplex { pending_point, .. }
             | NelderMeadPhase::Shrinking { pending_point, .. } => {
-                AskResult::Evaluate(vec![pending_point.clone()])
+                AskResult::Evaluate(Arc::from(vec![pending_point.clone()]))
             }
             NelderMeadPhase::AwaitingReflection {
                 reflected_point, ..
-            } => AskResult::Evaluate(vec![reflected_point.clone()]),
+            } => AskResult::Evaluate(Arc::from(vec![reflected_point.clone()])),
             NelderMeadPhase::AwaitingExpansion { expanded_point, .. } => {
-                AskResult::Evaluate(vec![expanded_point.clone()])
+                AskResult::Evaluate(Arc::from(vec![expanded_point.clone()]))
             }
             NelderMeadPhase::AwaitingContraction { contract_point, .. } => {
-                AskResult::Evaluate(vec![contract_point.clone()])
+                AskResult::Evaluate(Arc::from(vec![contract_point.clone()]))
             }
         }
     }
@@ -933,7 +934,7 @@ mod tests {
             match state.ask() {
                 AskResult::Evaluate(points) => {
                     // Check all proposed points respect bounds
-                    for point in &points {
+                    for point in points.iter() {
                         for &val in point {
                             assert!(
                                 (-1.0..=1.0).contains(&val),

@@ -480,7 +480,14 @@ impl PyAdamState {
     /// ...     print(f"optimisation complete: {result.result}")
     fn ask(&self, py: Python<'_>) -> Py<PyAny> {
         match self.inner.ask() {
-            AskResult::Evaluate(points) => Py::new(py, PyEvaluate { points }).unwrap().into_any(),
+            AskResult::Evaluate(points) => Py::new(
+                py,
+                PyEvaluate {
+                    points: points.to_vec(),
+                },
+            )
+            .unwrap()
+            .into_any(),
             AskResult::Done(results) => Py::new(py, PyDone::with_optimisation_results(py, results))
                 .unwrap()
                 .into_any(),
@@ -609,7 +616,14 @@ impl PyNelderMeadState {
     ///     or Done(result) indicating completion.
     fn ask(&self, py: Python<'_>) -> Py<PyAny> {
         match self.inner.ask() {
-            AskResult::Evaluate(points) => Py::new(py, PyEvaluate { points }).unwrap().into_any(),
+            AskResult::Evaluate(points) => Py::new(
+                py,
+                PyEvaluate {
+                    points: points.to_vec(),
+                },
+            )
+            .unwrap()
+            .into_any(),
             AskResult::Done(results) => Py::new(py, PyDone::with_optimisation_results(py, results))
                 .unwrap()
                 .into_any(),
@@ -725,7 +739,14 @@ impl PyCMAESState {
     /// of points returned depends on the `population_size` setting.
     fn ask(&self, py: Python<'_>) -> Py<PyAny> {
         match self.inner.ask() {
-            AskResult::Evaluate(points) => Py::new(py, PyEvaluate { points }).unwrap().into_any(),
+            AskResult::Evaluate(points) => Py::new(
+                py,
+                PyEvaluate {
+                    points: points.to_vec(),
+                },
+            )
+            .unwrap()
+            .into_any(),
             AskResult::Done(results) => Py::new(py, PyDone::with_optimisation_results(py, results))
                 .unwrap()
                 .into_any(),

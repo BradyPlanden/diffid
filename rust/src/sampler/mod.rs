@@ -649,7 +649,7 @@ mod tests {
             AskResult::Evaluate(points) => {
                 // Provide results to complete iteration 0
                 state
-                    .tell(points.into_iter().map(|_| Ok::<f64, std::io::Error>(1.0)))
+                    .tell(points.iter().map(|_| Ok::<f64, std::io::Error>(1.0)))
                     .expect("tell should succeed");
             }
             AskResult::Done(_) => panic!("Expected Evaluate on first ask"),

@@ -197,15 +197,9 @@ fn rmse(weight: f64) -> PyCostMetric {
 #[pyfunction(name = "GaussianNLL")]
 #[pyo3(signature = (variance, weight = 1.0))]
 fn gaussian_nll(variance: f64, weight: f64) -> PyResult<PyCostMetric> {
-    if !variance.is_finite() || variance <= 0.0 {
-        return Err(PyValueError::new_err(
-            "variance must be positive and finite",
-        ));
-    }
-    Ok(PyCostMetric::from_metric(
-        GaussianNll::new(Some(weight), variance),
-        "gaussian_nll",
-    ))
+    let metric = GaussianNll::try_new(Some(weight), variance)
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    Ok(PyCostMetric::from_metric(metric, "gaussian_nll"))
 }
 
 // Problem

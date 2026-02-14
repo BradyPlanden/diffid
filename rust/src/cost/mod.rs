@@ -1,5 +1,23 @@
 use diffsol::{MatrixCommon, NalgebraMat};
 use std::f64::consts::PI;
+use std::fmt;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CostMetricError {
+    InvalidVariance(f64),
+}
+
+impl fmt::Display for CostMetricError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CostMetricError::InvalidVariance(value) => {
+                write!(f, "variance must be positive and finite, got {value}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for CostMetricError {}
 
 /// Trait for cost metrics applied to residuals between simulated and observed data.
 pub trait CostMetric: Send + Sync {
@@ -59,11 +77,9 @@ impl CostMetric for SumSquaredError {
 
         for (param_idx, sens) in sensitivities.iter().enumerate() {
             let total_elements = sens.nrows() * sens.ncols();
-            assert_eq!(
-                total_elements,
-                residuals.len(),
-                "sensitivity matrix must have the same number of elements as residuals",
-            );
+            if total_elements != residuals.len() {
+                return None;
+            }
 
             // Iterate through matrix elements in row-major order
             let mut dot = 0.0;
@@ -137,11 +153,9 @@ impl CostMetric for RootMeanSquaredError {
 
         for (param_idx, sens) in sensitivities.iter().enumerate() {
             let total_elements = sens.nrows() * sens.ncols();
-            assert_eq!(
-                total_elements,
-                residuals.len(),
-                "sensitivity matrix must have the same number of elements as residuals",
-            );
+            if total_elements != residuals.len() {
+                return None;
+            }
 
             // Iterate through matrix elements in row-major order
             let mut dot = 0.0;
@@ -191,21 +205,33 @@ impl GaussianNll {
     ///
     /// # Arguments
     /// * `variance` - The variance of the Gaussian distribution (must be positive)
-    ///
-    /// # Panics
-    /// Panics if variance is not positive and finite
     pub fn new(weight: Option<f64>, variance: f64) -> Self {
-        assert!(
-            variance > 0.0 && variance.is_finite(),
-            "Variance must be positive and finite, got {variance}"
-        );
+        Self::try_new(weight, variance).unwrap_or_else(|_| {
+            let clamped = variance.abs().clamp(f64::EPSILON, f64::MAX);
+            let log_term = (2.0 * PI * clamped).ln();
+            Self {
+                weight: weight.unwrap_or(1.0),
+                variance: clamped,
+                log_term,
+            }
+        })
+    }
+
+    /// Attempts to create a Gaussian NLL metric with explicit validation.
+    ///
+    /// # Errors
+    /// Returns [`CostMetricError::InvalidVariance`] when variance is non-finite or non-positive.
+    pub fn try_new(weight: Option<f64>, variance: f64) -> Result<Self, CostMetricError> {
+        if !variance.is_finite() || variance <= 0.0 {
+            return Err(CostMetricError::InvalidVariance(variance));
+        }
 
         let log_term = (2.0 * PI * variance).ln();
-        Self {
+        Ok(Self {
             weight: weight.unwrap_or(1.0),
             variance,
             log_term,
-        }
+        })
     }
 
     /// Creates a new Gaussian NLL with variance clamped to a valid range.
@@ -255,11 +281,9 @@ impl CostMetric for GaussianNll {
 
         for (param_idx, sens) in sensitivities.iter().enumerate() {
             let total_elements = sens.nrows() * sens.ncols();
-            assert_eq!(
-                total_elements,
-                residuals.len(),
-                "sensitivity matrix must have the same number of elements as residuals",
-            );
+            if total_elements != residuals.len() {
+                return None;
+            }
 
             // Iterate through matrix elements in row-major order
             let mut dot = 0.0;
@@ -365,9 +389,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Variance must be positive")]
     fn test_gaussian_nll_invalid_variance() {
-        GaussianNll::new(None, -1.0);
+        let result = GaussianNll::try_new(None, -1.0);
+        assert!(matches!(result, Err(CostMetricError::InvalidVariance(_))));
     }
 
     #[test]

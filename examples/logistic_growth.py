@@ -23,8 +23,8 @@ builder = (
     .with_diffsl(ds)
     .with_data(stacked_data)
     .with_tolerances(1e-6, 1e-8)
-    .with_parameter("r", 100)
-    .with_parameter("k", 100)
+    .with_parameter("r", 50)
+    .with_parameter("k", 50)
     .with_parallel(True)
     .with_optimiser(optimiser)  # Override default optimiser
 )

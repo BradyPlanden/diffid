@@ -8,6 +8,8 @@
 - **DiffsolBuilder**: Automatically multi-threaded
 - **CMA-ES**: Parallel population evaluation
 - **Dynamic Nested Sampling**: Parallel live point evaluation
+- **Batching vs parallelism**: Batch evaluation can be used even when parallel objective
+  execution is disabled, provided the objective exposes batch support.
 
 ## Controlling Threads
 

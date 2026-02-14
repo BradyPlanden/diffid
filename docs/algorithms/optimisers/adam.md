@@ -60,6 +60,7 @@ Where $\alpha$ is the learning rate (step size).
 | `threshold` | 1e-6 | Objective convergence tolerance |
 | `gradient_threshold` | None | Gradient norm convergence tolerance |
 | `patience` | None | Timeout in seconds |
+| `history` | false | Capture full optimisation trajectory |
 
 ## Convergence Criteria
 
@@ -129,6 +130,8 @@ result = optimiser.run(problem, initial_guess=[1.0, 2.0])
 - Supports automatic numerical gradient computation via central differences
 - Bias correction is essential for early iterations
 - Tracks both current position and best-found position
+- Evaluation failures terminate immediately with `FunctionEvaluationFailed`
+- History capture is optional (`with_history(false)` by default) for lower allocation overhead
 
 ## References
 

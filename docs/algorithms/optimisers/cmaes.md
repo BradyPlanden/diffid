@@ -127,6 +127,9 @@ result = optimiser.run(problem, initial_guess=[0.5] * n_params)
 - Full covariance matrix (not diagonal approximation)
 - Lazy eigendecomposition for efficient sampling
 - Bounds enforced via clamping after each sample
+- Evaluation failures terminate immediately with `FunctionEvaluationFailed`
+- Batched population evaluation is used when the objective supports batch calls,
+  independent of whether parallel objective execution is enabled
 
 ## References
 

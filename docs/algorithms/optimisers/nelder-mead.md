@@ -85,6 +85,12 @@ The algorithm terminates when any of the following conditions is met:
 - Can converge to local minima
 - Not parallelisable
 
+## Failure and Validation Behaviour
+
+- Evaluation failures terminate immediately with `FunctionEvaluationFailed`
+- Bounds dimension mismatch is rejected during initialisation (fails fast)
+- Internally uses a single-point ask path while preserving batch-shaped Ask/Tell compatibility
+
 ## Example
 
 ```python

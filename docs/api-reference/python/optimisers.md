@@ -10,6 +10,17 @@ Optimisation algorithms for finding parameter values that minimise the objective
 | `CMAES` | Gradient-free | Global search, 10-100+ params | 1-100+ |
 | `Adam` | Gradient-based | Smooth objectives, fast convergence | Any |
 
+## Behaviour Notes
+
+- Evaluation failures now follow a strict policy across Adam, Nelder-Mead, and CMA-ES:
+  an objective error terminates the run with `TerminationReason.FunctionEvaluationFailed`.
+- Bounds dimensions are validated at optimiser init/run entry:
+  a mismatch between `initial_guess` dimension and bounds dimension fails immediately.
+- Adam now supports optional history capture with `.with_history(bool)`:
+  default is `False` to keep hot-loop allocations low.
+- Adam and Nelder-Mead use an internal single-point ask path while preserving the Python
+  batch-shaped Ask/Tell surface (`Evaluate(points=[...])`) for compatibility.
+
 ## Nelder-Mead
 
 ::: diffid.NelderMead
@@ -208,6 +219,10 @@ result = optimiser.run(problem, initial_guess=[1.0, 2.0])
     - Prevents division by zero
     - Almost never needs tuning
 
+- **`history`**: Trajectory capture toggle (`.with_history(True/False)`, default: `False`)
+    - Keep disabled for lowest overhead
+    - Enable when you need full per-iteration trajectory diagnostics
+
 - **`threshold`**: Gradient norm threshold (default: 1e-6)
     - Stop when gradient is small
     - Smaller for higher precision
@@ -247,6 +262,9 @@ The optimiser stops when:
 1. `max_iter` iterations reached, OR
 2. Objective value < `threshold`, OR
 3. `patience` seconds elapsed without improvement
+
+When objective evaluation fails, optimisation terminates with
+`TerminationReason.FunctionEvaluationFailed` (strict failure semantics).
 
 ### Reproducibility
 

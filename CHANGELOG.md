@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Features
+- Optimiser evaluation-failure semantics aligned across Adam, Nelder-Mead, CMA-ES, and Diffsol objective handling (strict fail with `FunctionEvaluationFailed`).
+- Added allocation-light single-point ask path for Adam and Nelder-Mead while preserving backward-compatible batch-shaped Ask/Tell APIs.
+- Added Adam history toggle (`with_history`) with cheap-by-default behavior.
+- Decoupled batch-evaluation routing from parallel-evaluation capability so optimise/sample can use batch paths whenever objectives support batching.
+
+### Performance
+- Reduced hot-loop allocation pressure in Adam, CMA-ES, and vector objective evaluation paths.
+
+### Documentation
+- Updated optimiser docs/guides to describe strict failure behavior, bounds dimension validation, Adam history capture, and batch routing behavior.
+
 ## [0.3.0] - 2026-01-25
 
 ### Features

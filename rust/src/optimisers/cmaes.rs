@@ -259,7 +259,6 @@ impl DistributionState {
 #[derive(Clone)]
 struct PopulationMember {
     evaluated: EvaluatedPoint,
-    vector: DVector<f64>,
 }
 
 /// Runtime state of the CMA-ES optimiser
@@ -282,6 +281,7 @@ pub struct CMAESState {
     start_time: Instant,
     best_point: Option<EvaluatedPoint>,
     final_population: Vec<EvaluatedPoint>,
+    population_buffer: Vec<PopulationMember>,
 }
 
 impl CMAESState {
@@ -309,6 +309,7 @@ impl CMAESState {
             start_time: Instant::now(),
             best_point: None,
             final_population: Vec::new(),
+            population_buffer: Vec::new(),
         }
     }
 
@@ -459,14 +460,16 @@ impl CMAESState {
 
         self.evaluations += results.len();
 
-        // Process results into population
-        let mut population: Vec<PopulationMember> = Vec::with_capacity(expected);
+        // Reuse population storage across generations.
+        let mut population = std::mem::take(&mut self.population_buffer);
+        population.clear();
+        if population.capacity() < expected {
+            population.reserve(expected - population.capacity());
+        }
 
         for (candidate, value) in candidates.iter().cloned().zip(results.into_iter()) {
-            let vector = DVector::from_column_slice(&candidate);
             population.push(PopulationMember {
                 evaluated: EvaluatedPoint::new(candidate, value),
-                vector,
             });
         }
 
@@ -495,10 +498,14 @@ impl CMAESState {
         let termination_reason = self.update_distribution(&population, old_mean);
 
         // Update final population
-        self.final_population = population
-            .iter()
-            .map(|member| member.evaluated.clone())
-            .collect();
+        self.final_population.clear();
+        let required_capacity = population.len() + 1;
+        if self.final_population.capacity() < required_capacity {
+            self.final_population
+                .reserve(required_capacity - self.final_population.capacity());
+        }
+        self.final_population
+            .extend(population.iter().map(|member| member.evaluated.clone()));
         if let Some(ref best) = self.best_point {
             if !self
                 .final_population
@@ -514,10 +521,12 @@ impl CMAESState {
         // Check termination
         if let Some(reason) = termination_reason {
             self.phase = CMAESPhase::Terminated(reason);
+            self.population_buffer = population;
             return Ok(());
         }
 
         // Start next generation
+        self.population_buffer = population;
         self.start_generation();
         Ok(())
     }
@@ -586,7 +595,9 @@ impl CMAESState {
         let mut new_mean = DVector::zeros(self.dim);
         for (i, item) in population.iter().enumerate().take(limit) {
             let weight = params.weights[i];
-            new_mean += &item.vector * weight;
+            for (mean_coord, point_coord) in new_mean.iter_mut().zip(item.evaluated.point.iter()) {
+                *mean_coord = weight.mul_add(*point_coord, *mean_coord);
+            }
         }
 
         let mean_shift = &new_mean - old_mean;
@@ -620,8 +631,13 @@ impl CMAESState {
         let mut rank_mu_update = DMatrix::zeros(self.dim, self.dim);
         for (i, item) in population.iter().enumerate().take(limit) {
             let weight = params.weights[i];
-            let y = (&item.vector - old_mean) / sigma_denom;
-            rank_mu_update += (&y * y.transpose()) * weight;
+            for row in 0..self.dim {
+                let y_row = (item.evaluated.point[row] - old_mean[row]) / sigma_denom;
+                for col in 0..self.dim {
+                    let y_col = (item.evaluated.point[col] - old_mean[col]) / sigma_denom;
+                    rank_mu_update[(row, col)] += weight * y_row * y_col;
+                }
+            }
         }
 
         // Update covariance

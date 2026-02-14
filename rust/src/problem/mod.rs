@@ -1,4 +1,5 @@
 use diffsol::error::DiffsolError;
+use std::cell::RefCell;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
@@ -322,6 +323,10 @@ pub struct VectorObjective {
     costs: Vec<Arc<dyn CostMetric>>,
 }
 
+thread_local! {
+    static VECTOR_RESIDUAL_BUFFER: RefCell<Vec<f64>> = const { RefCell::new(Vec::new()) };
+}
+
 impl VectorObjective {
     /// Create a new vector objective
     ///
@@ -353,13 +358,22 @@ impl Objective for VectorObjective {
             });
         }
 
-        let residuals: Vec<f64> = pred
-            .iter()
-            .zip(self.data.iter())
-            .map(|(pred, data)| pred - data)
-            .collect();
+        let total_cost = VECTOR_RESIDUAL_BUFFER.with(|buffer| {
+            let mut residuals = buffer.borrow_mut();
+            residuals.clear();
+            let capacity = residuals.capacity();
+            if capacity < pred.len() {
+                residuals.reserve(pred.len() - capacity);
+            }
+            residuals.extend(
+                pred.iter()
+                    .zip(self.data.iter())
+                    .map(|(pred, data)| pred - data),
+            );
+            self.costs.iter().map(|c| c.evaluate(&residuals)).sum()
+        });
 
-        Ok(self.costs.iter().map(|c| c.evaluate(&residuals)).sum())
+        Ok(total_cost)
     }
 }
 

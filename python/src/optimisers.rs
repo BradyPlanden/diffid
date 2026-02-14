@@ -368,6 +368,12 @@ impl PyAdam {
         slf
     }
 
+    /// Enable or disable full trajectory capture during optimisation.
+    fn with_history(mut slf: PyRefMut<'_, Self>, capture_history: bool) -> PyRefMut<'_, Self> {
+        slf.inner = std::mem::take(&mut slf.inner).with_history(capture_history);
+        slf
+    }
+
     /// Abort the run once the patience window has elapsed.
     ///
     /// Parameters

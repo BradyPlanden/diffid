@@ -324,3 +324,32 @@ fn nelder_mead_ask_single_matches_batch_ask_shape() {
         AskResult::Done(_) => panic!("expected Evaluate from ask"),
     }
 }
+
+#[test]
+fn adam_history_capture_is_opt_in_and_off_by_default() {
+    let without_history = Adam::new().with_max_iter(8).with_threshold(0.0).run(
+        |x| (x[0] * x[0], vec![2.0 * x[0]]),
+        vec![1.0],
+        Bounds::unbounded(1),
+    );
+
+    let with_history = Adam::new()
+        .with_max_iter(8)
+        .with_threshold(0.0)
+        .with_history(true)
+        .run(
+            |x| (x[0] * x[0], vec![2.0 * x[0]]),
+            vec![1.0],
+            Bounds::unbounded(1),
+        );
+
+    assert_eq!(
+        without_history.final_simplex.len(),
+        1,
+        "history should be disabled by default"
+    );
+    assert!(
+        with_history.final_simplex.len() > 1,
+        "history-enabled mode should retain multiple evaluated points"
+    );
+}

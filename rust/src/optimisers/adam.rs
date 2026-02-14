@@ -19,6 +19,7 @@ pub struct Adam {
     threshold: f64,
     gradient_threshold: Option<f64>,
     patience: Option<Duration>,
+    capture_history: bool,
 }
 
 impl Adam {
@@ -32,6 +33,7 @@ impl Adam {
             threshold: 1e-6,
             gradient_threshold: None, // Uses threshold if None
             patience: None,
+            capture_history: false,
         }
     }
 
@@ -74,6 +76,14 @@ impl Adam {
 
     pub fn with_patience(mut self, patience: f64) -> Self {
         self.patience = Some(Duration::from_secs_f64(patience));
+        self
+    }
+
+    /// Enable or disable storing the full trajectory of evaluated points.
+    ///
+    /// Disabled by default to reduce hot-path allocations.
+    pub fn with_history(mut self, capture_history: bool) -> Self {
+        self.capture_history = capture_history;
         self
     }
 
@@ -199,6 +209,7 @@ pub struct AdamState {
     evaluations: usize,
     start_time: Instant,
     history: Vec<EvaluatedPoint>,
+    best_point: Option<EvaluatedPoint>,
     prev_cost: Option<f64>,
 }
 
@@ -217,6 +228,7 @@ impl AdamState {
             evaluations: 0,
             start_time: Instant::now(),
             history: Vec::new(),
+            best_point: None,
             prev_cost: None,
         }
     }
@@ -268,8 +280,7 @@ impl AdamState {
             Ok(e) => e,
             Err(e) => {
                 let err: EvaluationError = e.into();
-                self.history
-                    .push(EvaluatedPoint::new(self.x.clone(), f64::NAN));
+                self.record_point(f64::NAN);
                 self.phase = AdamPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
                     format!("{err}"),
                 ));
@@ -315,16 +326,9 @@ impl AdamState {
 
     /// Get the current best point and value
     ///
-    /// # Panics
-    ///
-    /// This method will not panic in practice, as it only compares finite values.
-    /// The `unwrap()` is safe because `partial_cmp` only returns `None` for NaN comparisons,
-    /// which are filtered out by the `is_finite()` check.
     pub fn best(&self) -> Option<(&[f64], f64)> {
-        self.history
-            .iter()
-            .filter(|p| p.value.is_finite())
-            .min_by(|a, b| a.value.partial_cmp(&b.value).unwrap())
+        self.best_point
+            .as_ref()
             .map(|ep| (ep.point.as_slice(), ep.value))
     }
 
@@ -344,17 +348,14 @@ impl AdamState {
 
         // Validate gradient values
         if !gradient.iter().all(|g| g.is_finite()) {
-            self.history
-                .push(EvaluatedPoint::new(self.x.clone(), value));
+            self.record_point(value);
             self.phase = AdamPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
                 "Gradient contained non-finite values".to_string(),
             ));
             return;
         }
 
-        // Record point in history
-        self.history
-            .push(EvaluatedPoint::new(self.x.clone(), value));
+        self.record_point(value);
 
         // Check gradient convergence
         let grad_norm = gradient.iter().map(|g| g * g).sum::<f64>().sqrt();
@@ -415,12 +416,30 @@ impl AdamState {
     //     point.apply_bounds(self.bounds.as_ref());
     // }
 
+    fn record_point(&mut self, value: f64) {
+        if self.config.capture_history {
+            self.history
+                .push(EvaluatedPoint::new(self.x.clone(), value));
+        }
+
+        if value.is_finite() {
+            let should_update_best = self
+                .best_point
+                .as_ref()
+                .is_none_or(|best| value < best.value);
+            if should_update_best {
+                self.best_point = Some(EvaluatedPoint::new(self.x.clone(), value));
+            }
+        }
+    }
+
     fn build_results(&self, reason: TerminationReason) -> OptimisationResults {
-        let points = if self.history.is_empty() {
-            // If we never evaluated, create a dummy point
-            vec![EvaluatedPoint::new(self.x.clone(), f64::NAN)]
-        } else {
+        let points = if self.config.capture_history && !self.history.is_empty() {
             self.history.clone()
+        } else if let Some(best) = &self.best_point {
+            vec![best.clone()]
+        } else {
+            vec![EvaluatedPoint::new(self.x.clone(), f64::NAN)]
         };
 
         build_results(

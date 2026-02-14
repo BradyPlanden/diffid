@@ -251,6 +251,11 @@ pub trait Objective: Send + Sync {
         xs.iter().map(|x| self.evaluate(x)).collect()
     }
 
+    /// Boolean flag to denote whether the objective supports batched evaluation.
+    fn supports_batch_evaluation(&self) -> bool {
+        false
+    }
+
     /// Boolean flag to denote whether the objective can support
     /// parallel evaluations.
     fn supports_parallel_evaluation(&self) -> bool {
@@ -296,6 +301,10 @@ where
     fn has_gradient(&self) -> bool {
         false
     }
+
+    fn supports_batch_evaluation(&self) -> bool {
+        true
+    }
 }
 
 /// Implement Objective for gradient state
@@ -313,6 +322,10 @@ where
     }
 
     fn has_gradient(&self) -> bool {
+        true
+    }
+
+    fn supports_batch_evaluation(&self) -> bool {
         true
     }
 }
@@ -374,6 +387,10 @@ impl Objective for VectorObjective {
         });
 
         Ok(total_cost)
+    }
+
+    fn supports_batch_evaluation(&self) -> bool {
+        true
     }
 }
 
@@ -463,7 +480,8 @@ impl<O: Objective> Problem<O> {
 
         match opt {
             Optimiser::Scalar(scalar_opt) => {
-                if self.objective.supports_parallel_evaluation() {
+                if self.objective.supports_batch_evaluation() && scalar_opt.benefits_from_batching()
+                {
                     scalar_opt.run_batch(
                         |xs| self.evaluate_population(xs),
                         x0,
@@ -513,7 +531,9 @@ impl<O: Objective> Problem<O> {
 
         match sampler {
             Sampler::Scalar(scalar_sampler) => {
-                if self.objective.supports_parallel_evaluation() {
+                if self.objective.supports_batch_evaluation()
+                    && scalar_sampler.benefits_from_batching()
+                {
                     scalar_sampler.run_batch(
                         |xs| self.evaluate_population(xs),
                         x0,
@@ -534,6 +554,10 @@ impl<O: Objective> Problem<O> {
 mod tests {
     use super::*;
     use crate::cost::{RootMeanSquaredError, SumSquaredError};
+    use crate::optimisers::CMAES;
+    use crate::sampler::MetropolisHastings;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
 
     #[test]
     fn vector_problem_exponential_model() {
@@ -702,5 +726,93 @@ mod tests {
             }
             _ => panic!("expected BuildFailed error for empty data"),
         }
+    }
+
+    struct BatchRoutingObjective {
+        single_calls: Arc<AtomicUsize>,
+        batch_calls: Arc<AtomicUsize>,
+    }
+
+    impl Objective for BatchRoutingObjective {
+        fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
+            self.single_calls.fetch_add(1, Ordering::Relaxed);
+            Ok(x.iter().map(|xi| xi * xi).sum())
+        }
+
+        fn evaluate_population(&self, xs: &[Vec<f64>]) -> Vec<Result<f64, ProblemError>> {
+            self.batch_calls.fetch_add(1, Ordering::Relaxed);
+            xs.iter()
+                .map(|x| Ok(x.iter().map(|xi| xi * xi).sum()))
+                .collect()
+        }
+
+        fn supports_batch_evaluation(&self) -> bool {
+            true
+        }
+
+        fn supports_parallel_evaluation(&self) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn optimise_uses_batch_path_without_parallel_evaluation() {
+        let single_calls = Arc::new(AtomicUsize::new(0));
+        let batch_calls = Arc::new(AtomicUsize::new(0));
+
+        let objective = BatchRoutingObjective {
+            single_calls: Arc::clone(&single_calls),
+            batch_calls: Arc::clone(&batch_calls),
+        };
+
+        let mut params = ParameterSet::new();
+        params.push(ParameterSpec::new("x", 1.0, Unbounded));
+
+        let problem = Problem::new(objective, params)
+            .with_optimiser(CMAES::new().with_max_iter(2).with_seed(7));
+
+        let _ = problem.optimise(Some(vec![1.0]), None);
+
+        assert!(
+            batch_calls.load(Ordering::Relaxed) > 0,
+            "expected batch objective path to be used"
+        );
+        assert_eq!(
+            single_calls.load(Ordering::Relaxed),
+            0,
+            "single-point objective path should not be used"
+        );
+    }
+
+    #[test]
+    fn sample_uses_batch_path_without_parallel_evaluation() {
+        let single_calls = Arc::new(AtomicUsize::new(0));
+        let batch_calls = Arc::new(AtomicUsize::new(0));
+
+        let objective = BatchRoutingObjective {
+            single_calls: Arc::clone(&single_calls),
+            batch_calls: Arc::clone(&batch_calls),
+        };
+
+        let mut params = ParameterSet::new();
+        params.push(ParameterSpec::new("x", 1.0, Unbounded));
+
+        let problem = Problem::new(objective, params);
+        let sampler: Sampler = MetropolisHastings::new()
+            .with_num_chains(2)
+            .with_iterations(1)
+            .into();
+
+        let _ = problem.sample(Some(vec![1.0]), Some(&sampler));
+
+        assert!(
+            batch_calls.load(Ordering::Relaxed) > 0,
+            "expected batch objective path to be used"
+        );
+        assert_eq!(
+            single_calls.load(Ordering::Relaxed),
+            0,
+            "single-point objective path should not be used"
+        );
     }
 }

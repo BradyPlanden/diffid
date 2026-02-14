@@ -40,6 +40,10 @@ pub enum Optimiser {
 }
 
 impl ScalarOptimiser {
+    pub fn benefits_from_batching(&self) -> bool {
+        matches!(self, ScalarOptimiser::CMAES(_))
+    }
+
     /// Run the optimiser with a scalar objective function
     ///
     /// # Arguments

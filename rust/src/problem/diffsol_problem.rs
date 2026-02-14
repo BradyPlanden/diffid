@@ -296,6 +296,10 @@ impl Objective for DiffsolObjective {
         }
     }
 
+    fn supports_batch_evaluation(&self) -> bool {
+        true
+    }
+
     /// Support parallel evaluation if config.parallel
     /// is set by user.
     fn supports_parallel_evaluation(&self) -> bool {

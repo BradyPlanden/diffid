@@ -39,6 +39,10 @@ pub enum Sampler {
 }
 
 impl ScalarSampler {
+    pub fn benefits_from_batching(&self) -> bool {
+        true
+    }
+
     /// Run the sampler with a scalar objective function
     ///
     /// # Arguments

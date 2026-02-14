@@ -412,10 +412,6 @@ impl AdamState {
         };
     }
 
-    // fn apply_bounds_to(&self, point: &mut Point) {
-    //     point.apply_bounds(self.bounds.as_ref());
-    // }
-
     fn record_point(&mut self, value: f64) {
         if self.config.capture_history {
             self.history

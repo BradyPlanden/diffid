@@ -111,10 +111,12 @@ impl MetropolisHastings {
         R: TryInto<ScalarEvaluation, Error = E>,
         E: Into<EvaluationError>,
     {
-        let initial_point = initial;
-        let mut state = self.init(initial_point.clone(), bounds); // ToDo: performance improvement, remove clone
-
-        let mut results = objective(&[initial_point]);
+        let mut state = self.init(initial, bounds);
+        let mut results = match state.ask() {
+            AskResult::Evaluate(points) => objective(points.as_ref()),
+            AskResult::Done(SamplingResults::MCMC(samples)) => return samples,
+            AskResult::Done(_) => unreachable!("MetropolisHastings always returns MCMC results"),
+        };
 
         loop {
             // Call ask and break if an error is encountered

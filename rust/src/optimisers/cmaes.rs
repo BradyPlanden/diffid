@@ -736,11 +736,6 @@ impl CMAES {
     /// Run optimisation using a closure for evaluation
     ///
     /// This is a convenience wrapper around the ask/tell interface
-    ///
-    /// # Panics
-    ///
-    /// Panics if the optimisation state machine enters an unexpected state after
-    /// a tell error. This should not occur under normal operation.
     pub fn run<F, R, E>(
         &self,
         mut objective: F,
@@ -768,8 +763,9 @@ impl CMAES {
         let mut results = vec![objective(&first_point)];
 
         loop {
-            if state.tell(results).is_err() {
-                break;
+            if let Err(err) = state.tell(results) {
+                break state
+                    .build_results(TerminationReason::FunctionEvaluationFailed(err.to_string()));
             }
 
             match state.ask() {
@@ -777,25 +773,15 @@ impl CMAES {
                     results = points.iter().map(|p| objective(p)).collect();
                 }
                 AskResult::Done(opt_results) => {
-                    return opt_results;
+                    break opt_results;
                 }
             }
-        }
-
-        match state.ask() {
-            AskResult::Done(opt_results) => opt_results,
-            AskResult::Evaluate(_) => panic!("Unexpected state after tell error"),
         }
     }
 
     /// Run optimisation using batch evaluation
     ///
     /// Similar to `run`, but evaluates all population points in a single call
-    ///
-    /// # Panics
-    ///
-    /// Panics if the optimisation state machine enters an unexpected state after
-    /// a tell error. This should not occur under normal operation.
     pub fn run_batch<F, R, E>(
         &self,
         objective: F,
@@ -823,8 +809,9 @@ impl CMAES {
         let mut results = objective(&[first_point]);
 
         loop {
-            if state.tell(results).is_err() {
-                break;
+            if let Err(err) = state.tell(results) {
+                break state
+                    .build_results(TerminationReason::FunctionEvaluationFailed(err.to_string()));
             }
 
             match state.ask() {
@@ -832,14 +819,9 @@ impl CMAES {
                     results = objective(points.as_ref());
                 }
                 AskResult::Done(opt_results) => {
-                    return opt_results;
+                    break opt_results;
                 }
             }
-        }
-
-        match state.ask() {
-            AskResult::Done(opt_results) => opt_results,
-            AskResult::Evaluate(_) => panic!("Unexpected state after tell error"),
         }
     }
 }
@@ -1234,6 +1216,31 @@ mod tests {
             }
             AskResult::Done(_) => panic!("Should not be done yet"),
         }
+    }
+
+    #[test]
+    fn cmaes_run_batch_handles_result_count_mismatch_without_panic() {
+        let optimiser = CMAES::new()
+            .with_max_iter(20)
+            .with_population_size(8)
+            .with_seed(42);
+
+        let results = optimiser.run_batch(
+            |_xs| vec![Ok::<f64, std::io::Error>(1.0)], // always wrong count after initial point
+            vec![2.0, -1.0],
+            Bounds::unbounded(2),
+        );
+
+        assert!(!results.success, "run_batch should fail cleanly");
+        assert!(matches!(
+            results.termination,
+            TerminationReason::FunctionEvaluationFailed(_)
+        ));
+        assert!(
+            results.message.contains("Expected 8 results, got 1"),
+            "unexpected message: {}",
+            results.message
+        );
     }
 
     #[test]

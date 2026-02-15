@@ -454,11 +454,6 @@ impl Adam {
     /// Run optimisation using a closure for evaluation
     ///
     /// The closure should return `(value, gradient)` for a given point
-    ///
-    /// # Panics
-    ///
-    /// Panics if the optimisation state machine enters an unexpected state after
-    /// a tell error. This should not occur under normal operation.
     pub fn run<F, R, E>(
         &self,
         mut objective: F,
@@ -485,8 +480,9 @@ impl Adam {
         let mut result = objective(&first_point);
 
         loop {
-            if state.tell(result).is_err() {
-                break;
+            if let Err(err) = state.tell(result) {
+                break state
+                    .build_results(TerminationReason::FunctionEvaluationFailed(err.to_string()));
             }
 
             match state.ask_single() {
@@ -494,14 +490,9 @@ impl Adam {
                     result = objective(&point);
                 }
                 SingleAskResult::Done(results) => {
-                    return results;
+                    break results;
                 }
             }
-        }
-
-        match state.ask_single() {
-            SingleAskResult::Done(results) => results,
-            SingleAskResult::Evaluate(_) => panic!("Unexpected state after tell error"),
         }
     }
 
@@ -681,6 +672,32 @@ mod tests {
                 got: 1
             })
         ));
+    }
+
+    #[test]
+    fn adam_run_handles_gradient_dimension_mismatch_without_panic() {
+        let adam = Adam::new().with_max_iter(10).with_step_size(0.1);
+        let results = adam.run(
+            |x: &[f64]| {
+                let value = x.iter().map(|xi| xi * xi).sum::<f64>();
+                (value, vec![0.0]) // wrong gradient dimension for 2D problem
+            },
+            vec![1.0, 2.0],
+            Bounds::unbounded(2),
+        );
+
+        assert!(!results.success);
+        assert!(matches!(
+            results.termination,
+            TerminationReason::FunctionEvaluationFailed(_)
+        ));
+        assert!(
+            results
+                .message
+                .contains("Expected gradient dimension 2, got 1"),
+            "unexpected message: {}",
+            results.message
+        );
     }
 
     #[test]

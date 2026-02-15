@@ -29,6 +29,8 @@ All optimisers now use strict evaluation-failure semantics:
 
 - Objective/solver evaluation errors terminate with `FunctionEvaluationFailed`
 - Invalid bounds dimensionality fails fast during optimiser initialisation
+- Invalid optimiser configuration fails fast with `FunctionEvaluationFailed`
+  instead of silently clamping or ignoring invalid values
 
 ## See Also
 

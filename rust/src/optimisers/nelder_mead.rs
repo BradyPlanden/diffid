@@ -1,4 +1,4 @@
-use crate::common::{AskResult, Bounds, Point, SingleAskResult};
+use crate::common::{AskResult, Bounds, Point, SingleAskRefResult, SingleAskResult};
 use crate::errors::{EvaluationError, TellError};
 use crate::optimisers::{
     build_results, EvaluatedPoint, OptimisationResults, ScalarEvaluation, TerminationReason,
@@ -20,7 +20,7 @@ pub struct NelderMead {
     gamma: f64,
     rho: f64,
     sigma: f64,
-    patience: Option<Duration>,
+    patience: Option<f64>,
 }
 
 impl NelderMead {
@@ -45,7 +45,7 @@ impl NelderMead {
     }
 
     pub fn with_threshold(mut self, threshold: f64) -> Self {
-        self.threshold = threshold.max(0.0);
+        self.threshold = threshold;
         self
     }
 
@@ -55,7 +55,7 @@ impl NelderMead {
     }
 
     pub fn with_position_tolerance(mut self, tolerance: f64) -> Self {
-        self.position_tolerance = tolerance.max(0.0);
+        self.position_tolerance = tolerance;
         self
     }
 
@@ -73,8 +73,68 @@ impl NelderMead {
     }
 
     pub fn with_patience(mut self, patience: f64) -> Self {
-        self.patience = Some(Duration::from_secs_f64(patience));
+        self.patience = Some(patience);
         self
+    }
+
+    fn validate_config(&self) -> Result<(), String> {
+        if !self.threshold.is_finite() || self.threshold < 0.0 {
+            return Err(format!(
+                "Invalid Nelder-Mead config: threshold must be finite and >= 0, got {}",
+                self.threshold
+            ));
+        }
+        if !self.step_size.is_finite() || self.step_size <= 0.0 {
+            return Err(format!(
+                "Invalid Nelder-Mead config: step_size must be finite and > 0, got {}",
+                self.step_size
+            ));
+        }
+        if !self.position_tolerance.is_finite() || self.position_tolerance < 0.0 {
+            return Err(format!(
+                "Invalid Nelder-Mead config: position_tolerance must be finite and >= 0, got {}",
+                self.position_tolerance
+            ));
+        }
+        if let Some(max_evals) = self.max_evaluations {
+            if max_evals == 0 {
+                return Err(
+                    "Invalid Nelder-Mead config: max_evaluations must be >= 1, got 0".to_string(),
+                );
+            }
+        }
+        if !self.alpha.is_finite() || self.alpha <= 0.0 {
+            return Err(format!(
+                "Invalid Nelder-Mead config: alpha must be finite and > 0, got {}",
+                self.alpha
+            ));
+        }
+        if !self.gamma.is_finite() || self.gamma <= 1.0 {
+            return Err(format!(
+                "Invalid Nelder-Mead config: gamma must be finite and > 1, got {}",
+                self.gamma
+            ));
+        }
+        if !self.rho.is_finite() || !(0.0..1.0).contains(&self.rho) {
+            return Err(format!(
+                "Invalid Nelder-Mead config: rho must be finite and in (0, 1), got {}",
+                self.rho
+            ));
+        }
+        if !self.sigma.is_finite() || !(0.0..1.0).contains(&self.sigma) {
+            return Err(format!(
+                "Invalid Nelder-Mead config: sigma must be finite and in (0, 1), got {}",
+                self.sigma
+            ));
+        }
+        if let Some(patience) = self.patience {
+            if !patience.is_finite() || patience <= 0.0 {
+                return Err(format!(
+                    "Invalid Nelder-Mead config: patience must be finite and > 0 seconds, got {patience}",
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Initialize the optimisation state
@@ -84,7 +144,9 @@ impl NelderMead {
         let dim = initial.len();
         let mut initial_point = initial;
 
-        let phase = if let Err(err) = bounds.validate_dimension(dim) {
+        let phase = if let Err(err) = self.validate_config() {
+            NelderMeadPhase::Terminated(TerminationReason::FunctionEvaluationFailed(err))
+        } else if let Err(err) = bounds.validate_dimension(dim) {
             NelderMeadPhase::Terminated(TerminationReason::FunctionEvaluationFailed(
                 err.to_string(),
             ))
@@ -127,6 +189,17 @@ impl NelderMead {
         R: TryInto<ScalarEvaluation, Error = E>,
         E: Into<EvaluationError>,
     {
+        if let Err(err) = self.validate_config() {
+            return build_results(
+                &[EvaluatedPoint::new(initial, f64::NAN)],
+                0,
+                0,
+                Duration::ZERO,
+                TerminationReason::FunctionEvaluationFailed(err),
+                None,
+            );
+        }
+
         if let Err(err) = bounds.validate_dimension(initial.len()) {
             return build_results(
                 &[EvaluatedPoint::new(initial, f64::NAN)],
@@ -146,13 +219,11 @@ impl NelderMead {
                 break;
             }
 
-            match state.ask_single() {
-                SingleAskResult::Evaluate(point) => {
-                    result = objective(&point);
+            match state.ask_ref() {
+                SingleAskRefResult::Evaluate(point) => {
+                    result = objective(point);
                 }
-                SingleAskResult::Done(results) => {
-                    return results;
-                }
+                SingleAskRefResult::Done(results) => return results,
             }
         }
 
@@ -228,30 +299,40 @@ pub struct NelderMeadState {
 }
 
 impl NelderMeadState {
+    /// Get the next point to evaluate as a borrowed slice, or final results.
+    ///
+    /// This avoids cloning the pending point when callers can evaluate immediately.
+    pub fn ask_ref(&self) -> SingleAskRefResult<'_, OptimisationResults> {
+        match &self.phase {
+            NelderMeadPhase::Terminated(reason) => {
+                SingleAskRefResult::Done(self.build_results(reason.clone()))
+            }
+            NelderMeadPhase::EvaluatingInitial => {
+                SingleAskRefResult::Evaluate(self.initial_point.as_slice())
+            }
+            NelderMeadPhase::BuildingSimplex { pending_point, .. }
+            | NelderMeadPhase::Shrinking { pending_point, .. } => {
+                SingleAskRefResult::Evaluate(pending_point.as_slice())
+            }
+            NelderMeadPhase::AwaitingReflection {
+                reflected_point, ..
+            } => SingleAskRefResult::Evaluate(reflected_point.as_slice()),
+            NelderMeadPhase::AwaitingExpansion { expanded_point, .. } => {
+                SingleAskRefResult::Evaluate(expanded_point.as_slice())
+            }
+            NelderMeadPhase::AwaitingContraction { contract_point, .. } => {
+                SingleAskRefResult::Evaluate(contract_point.as_slice())
+            }
+        }
+    }
+
     /// Get the next point to evaluate, or the final result if optimisation is complete.
     ///
     /// This single-point path avoids wrapping each point in `Arc<[Point]>`.
     pub fn ask_single(&self) -> SingleAskResult<OptimisationResults> {
-        match &self.phase {
-            NelderMeadPhase::Terminated(reason) => {
-                SingleAskResult::Done(self.build_results(reason.clone()))
-            }
-            NelderMeadPhase::EvaluatingInitial => {
-                SingleAskResult::Evaluate(self.initial_point.clone())
-            }
-            NelderMeadPhase::BuildingSimplex { pending_point, .. }
-            | NelderMeadPhase::Shrinking { pending_point, .. } => {
-                SingleAskResult::Evaluate(pending_point.clone())
-            }
-            NelderMeadPhase::AwaitingReflection {
-                reflected_point, ..
-            } => SingleAskResult::Evaluate(reflected_point.clone()),
-            NelderMeadPhase::AwaitingExpansion { expanded_point, .. } => {
-                SingleAskResult::Evaluate(expanded_point.clone())
-            }
-            NelderMeadPhase::AwaitingContraction { contract_point, .. } => {
-                SingleAskResult::Evaluate(contract_point.clone())
-            }
+        match self.ask_ref() {
+            SingleAskRefResult::Evaluate(point) => SingleAskResult::Evaluate(point.to_vec()),
+            SingleAskRefResult::Done(results) => SingleAskResult::Done(results),
         }
     }
 
@@ -421,23 +502,18 @@ impl NelderMeadState {
                 return;
             }
 
-            let (contract_toward, coeff) = if reflected_value < worst_value {
+            let contract_point = if reflected_value < worst_value {
                 // Outside contraction
-                (&reflected_point, self.config.rho)
+                self.transform_point(&centroid, &reflected_point, self.config.rho)
             } else {
                 // Inside contraction
-                (
-                    &self
-                        .simplex
-                        .last()
-                        .expect("simplex should not be empty")
-                        .point
-                        .clone(),
-                    -self.config.rho,
-                )
+                let worst_point = &self
+                    .simplex
+                    .last()
+                    .expect("simplex should not be empty")
+                    .point;
+                self.transform_point(&centroid, worst_point, -self.config.rho)
             };
-
-            let contract_point = self.transform_point(&centroid, contract_toward, coeff);
 
             self.phase = NelderMeadPhase::AwaitingContraction {
                 reflected_point,
@@ -661,7 +737,7 @@ impl NelderMeadState {
     fn check_termination(&self) -> Option<TerminationReason> {
         // Check patience/timeout
         if let Some(patience) = self.config.patience {
-            if self.start_time.elapsed() >= patience {
+            if self.start_time.elapsed().as_secs_f64() >= patience {
                 return Some(TerminationReason::PatienceElapsed);
             }
         }
@@ -810,6 +886,27 @@ mod tests {
     }
 
     #[test]
+    fn nelder_mead_ask_ref_basic_workflow() {
+        let optimiser = NelderMead::new().with_max_iter(80).with_threshold(1e-8);
+        let (mut state, first_point) = optimiser.init(vec![3.0], Bounds::unbounded(1));
+
+        let mut result = sphere(&first_point[0]);
+        loop {
+            state.tell(result).expect("tell should succeed");
+
+            match state.ask_ref() {
+                SingleAskRefResult::Evaluate(point) => {
+                    result = sphere(point);
+                }
+                SingleAskRefResult::Done(results) => {
+                    assert!(results.value < 1e-4);
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
     fn nelder_mead_ask_tell_matches_run() {
         let optimiser = NelderMead::new()
             .with_max_iter(200)
@@ -907,6 +1004,21 @@ mod tests {
         // Now try to tell again after termination
         let err = state.tell(Ok::<f64, std::io::Error>(1.0)).unwrap_err();
         assert!(matches!(err, TellError::AlreadyTerminated));
+    }
+
+    #[test]
+    fn nelder_mead_invalid_step_size_reports_config_error() {
+        let optimiser = NelderMead::new().with_step_size(0.0);
+        let results = optimiser.run(sphere, vec![1.0, -1.0], Bounds::unbounded(2));
+
+        assert!(!results.success);
+        assert!(matches!(
+            results.termination,
+            TerminationReason::FunctionEvaluationFailed(_)
+        ));
+        assert!(results
+            .message
+            .contains("Invalid Nelder-Mead config: step_size"));
     }
 
     // Note: NelderMead's ask-tell interface always requests one point at a time,

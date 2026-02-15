@@ -1,4 +1,4 @@
-use crate::common::{AskResult, Bounds, Point, SingleAskResult};
+use crate::common::{AskResult, Bounds, Point, SingleAskRefResult, SingleAskResult};
 use crate::errors::{EvaluationError, TellError};
 use crate::optimisers::{
     build_results, EvaluatedPoint, GradientEvaluation, OptimisationResults, TerminationReason,
@@ -18,7 +18,7 @@ pub struct Adam {
     eps: f64,
     threshold: f64,
     gradient_threshold: Option<f64>,
-    patience: Option<Duration>,
+    patience: Option<f64>,
     capture_history: bool,
 }
 
@@ -43,39 +43,33 @@ impl Adam {
     }
 
     pub fn with_step_size(mut self, step_size: f64) -> Self {
-        if step_size.is_finite() && step_size > 0.0 {
-            self.step_size = step_size;
-        }
+        self.step_size = step_size;
         self
     }
 
     pub fn with_betas(mut self, beta1: f64, beta2: f64) -> Self {
-        if (1e-10..1.0).contains(&beta1) && (1e-10..1.0).contains(&beta2) {
-            self.beta1 = beta1;
-            self.beta2 = beta2;
-        }
+        self.beta1 = beta1;
+        self.beta2 = beta2;
         self
     }
 
     pub fn with_eps(mut self, eps: f64) -> Self {
-        if eps.is_finite() && eps > 0.0 {
-            self.eps = eps;
-        }
+        self.eps = eps;
         self
     }
 
     pub fn with_threshold(mut self, threshold: f64) -> Self {
-        self.threshold = threshold.max(0.0);
+        self.threshold = threshold;
         self
     }
 
     pub fn with_gradient_threshold(mut self, threshold: f64) -> Self {
-        self.gradient_threshold = Some(threshold.max(0.0));
+        self.gradient_threshold = Some(threshold);
         self
     }
 
     pub fn with_patience(mut self, patience: f64) -> Self {
-        self.patience = Some(Duration::from_secs_f64(patience));
+        self.patience = Some(patience);
         self
     }
 
@@ -92,12 +86,67 @@ impl Adam {
         self.gradient_threshold.unwrap_or(self.threshold)
     }
 
+    fn validate_config(&self) -> Result<(), String> {
+        if !self.step_size.is_finite() || self.step_size <= 0.0 {
+            return Err(format!(
+                "Invalid Adam config: step_size must be finite and > 0, got {}",
+                self.step_size
+            ));
+        }
+        if !self.beta1.is_finite() || !(0.0..1.0).contains(&self.beta1) {
+            return Err(format!(
+                "Invalid Adam config: beta1 must be finite and in (0, 1), got {}",
+                self.beta1
+            ));
+        }
+        if !self.beta2.is_finite() || !(0.0..1.0).contains(&self.beta2) {
+            return Err(format!(
+                "Invalid Adam config: beta2 must be finite and in (0, 1), got {}",
+                self.beta2
+            ));
+        }
+        if !self.eps.is_finite() || self.eps <= 0.0 {
+            return Err(format!(
+                "Invalid Adam config: eps must be finite and > 0, got {}",
+                self.eps
+            ));
+        }
+        if !self.threshold.is_finite() || self.threshold < 0.0 {
+            return Err(format!(
+                "Invalid Adam config: threshold must be finite and >= 0, got {}",
+                self.threshold
+            ));
+        }
+        if let Some(grad_threshold) = self.gradient_threshold {
+            if !grad_threshold.is_finite() || grad_threshold < 0.0 {
+                return Err(format!(
+                    "Invalid Adam config: gradient_threshold must be finite and >= 0, got {grad_threshold}",
+                ));
+            }
+        }
+        if let Some(patience) = self.patience {
+            if !patience.is_finite() || patience <= 0.0 {
+                return Err(format!(
+                    "Invalid Adam config: patience must be finite and > 0 seconds, got {patience}",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Initialize the optimisation state
     ///
     /// Returns the state and the first point to evaluate
     pub fn init(&self, initial: Point, bounds: Bounds) -> (AdamState, Point) {
         let dim = initial.len();
         let mut initial_point = initial;
+
+        if let Err(err) = self.validate_config() {
+            let mut state = AdamState::new(self.clone(), initial_point.clone(), bounds, dim);
+            state.phase =
+                AdamPhase::Terminated(TerminationReason::FunctionEvaluationFailed(err.clone()));
+            return (state, initial_point);
+        }
 
         if let Err(err) = bounds.validate_dimension(dim) {
             let mut state = AdamState::new(self.clone(), initial_point.clone(), bounds, dim);
@@ -152,23 +201,22 @@ impl MomentumState {
         }
     }
 
-    /// Update momentum estimates and compute parameter update
-    fn compute_update(
+    /// Update momentum estimates and apply parameter update in-place.
+    fn apply_update(
         &mut self,
+        position: &mut [f64],
         gradient: &[f64],
         step_size: f64,
         beta1: f64,
         beta2: f64,
         eps: f64,
-    ) -> Vec<f64> {
+    ) {
         // Update power terms for bias correction
         self.beta1_pow *= beta1;
         self.beta2_pow *= beta2;
 
         let bias_correction1 = (1.0 - self.beta1_pow).max(1e-12);
         let bias_correction2 = (1.0 - self.beta2_pow).max(1e-12);
-
-        let mut update = Vec::with_capacity(gradient.len());
 
         for (i, g) in gradient.iter().enumerate() {
             // Update biased first moment estimate
@@ -182,10 +230,8 @@ impl MomentumState {
 
             // Compute update
             let denom = v_hat.sqrt() + eps;
-            update.push(step_size * m_hat / denom);
+            position[i] -= step_size * m_hat / denom;
         }
-
-        update
     }
 }
 
@@ -233,17 +279,27 @@ impl AdamState {
         }
     }
 
+    /// Get the next point to evaluate as a borrowed slice, or final results.
+    ///
+    /// This avoids cloning the pending point when callers can evaluate immediately.
+    pub fn ask_ref(&self) -> SingleAskRefResult<'_, OptimisationResults> {
+        match &self.phase {
+            AdamPhase::Terminated(reason) => {
+                SingleAskRefResult::Done(self.build_results(reason.clone()))
+            }
+            AdamPhase::AwaitingEvaluation { pending_point } => {
+                SingleAskRefResult::Evaluate(pending_point.as_slice())
+            }
+        }
+    }
+
     /// Get the next point to evaluate, or the final result if optimisation is complete.
     ///
     /// This single-point path avoids wrapping each point in `Arc<[Point]>`.
     pub fn ask_single(&self) -> SingleAskResult<OptimisationResults> {
-        match &self.phase {
-            AdamPhase::Terminated(reason) => {
-                SingleAskResult::Done(self.build_results(reason.clone()))
-            }
-            AdamPhase::AwaitingEvaluation { pending_point } => {
-                SingleAskResult::Evaluate(pending_point.clone())
-            }
+        match self.ask_ref() {
+            SingleAskRefResult::Evaluate(point) => SingleAskResult::Evaluate(point.to_vec()),
+            SingleAskRefResult::Done(results) => SingleAskResult::Done(results),
         }
     }
 
@@ -381,25 +437,21 @@ impl AdamState {
 
         // Check patience/timeout
         if let Some(patience) = self.config.patience {
-            if self.start_time.elapsed() >= patience {
+            if self.start_time.elapsed().as_secs_f64() >= patience {
                 self.phase = AdamPhase::Terminated(TerminationReason::PatienceElapsed);
                 return;
             }
         }
 
-        // Compute parameter update
-        let update = self.momentum.compute_update(
+        // Update momentum and parameters in-place
+        self.momentum.apply_update(
+            &mut self.x,
             &gradient,
             self.config.step_size,
             self.config.beta1,
             self.config.beta2,
             self.config.eps,
         );
-
-        // Apply update
-        for (xi, delta) in self.x.iter_mut().zip(update.iter()) {
-            *xi -= delta;
-        }
 
         // Apply bounds
         self.bounds.clamp(&mut self.x);
@@ -465,6 +517,17 @@ impl Adam {
         R: TryInto<GradientEvaluation, Error = E>,
         E: Into<EvaluationError>,
     {
+        if let Err(err) = self.validate_config() {
+            return build_results(
+                &[EvaluatedPoint::new(initial, f64::NAN)],
+                0,
+                0,
+                Duration::ZERO,
+                TerminationReason::FunctionEvaluationFailed(err),
+                None,
+            );
+        }
+
         if let Err(err) = bounds.validate_dimension(initial.len()) {
             return build_results(
                 &[EvaluatedPoint::new(initial, f64::NAN)],
@@ -485,13 +548,11 @@ impl Adam {
                     .build_results(TerminationReason::FunctionEvaluationFailed(err.to_string()));
             }
 
-            match state.ask_single() {
-                SingleAskResult::Evaluate(point) => {
-                    result = objective(&point);
+            match state.ask_ref() {
+                SingleAskRefResult::Evaluate(point) => {
+                    result = objective(point);
                 }
-                SingleAskResult::Done(results) => {
-                    break results;
-                }
+                SingleAskRefResult::Done(results) => break results,
             }
         }
     }
@@ -701,6 +762,19 @@ mod tests {
     }
 
     #[test]
+    fn adam_invalid_step_size_reports_config_error() {
+        let adam = Adam::new().with_step_size(0.0);
+        let results = adam.run(sphere_infallible, vec![1.0, 2.0], Bounds::unbounded(2));
+
+        assert!(!results.success);
+        assert!(matches!(
+            results.termination,
+            TerminationReason::FunctionEvaluationFailed(_)
+        ));
+        assert!(results.message.contains("Invalid Adam config: step_size"));
+    }
+
+    #[test]
     fn adam_ask_tell_basic_workflow() {
         let optimiser = Adam::new()
             .with_max_iter(500)
@@ -722,6 +796,26 @@ mod tests {
                     assert!(results.value < 1e-4);
                     assert!(results.x[0].abs() < 1e-2);
                     assert!(results.x[1].abs() < 1e-2);
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn adam_ask_ref_basic_workflow() {
+        let optimiser = Adam::new().with_max_iter(200).with_step_size(0.1);
+        let (mut state, first_point) = optimiser.init(vec![2.0, -2.0], Bounds::unbounded(2));
+        let mut result = sphere_infallible(&first_point);
+
+        loop {
+            state.tell(result).expect("tell should succeed");
+            match state.ask_ref() {
+                SingleAskRefResult::Evaluate(point) => {
+                    result = sphere_infallible(point);
+                }
+                SingleAskRefResult::Done(results) => {
+                    assert!(results.value < 1e-4);
                     break;
                 }
             }

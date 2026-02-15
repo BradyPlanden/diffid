@@ -35,6 +35,22 @@ pub enum SingleAskResult<R> {
     Done(R),
 }
 
+/// Borrowing variant of [`AskResult`] to avoid cloning population buffers.
+pub enum AskRefResult<'a, R> {
+    /// Evaluate these points and call `tell()` with the results.
+    Evaluate(&'a [Point]),
+    /// Algorithm has finished - contains final results.
+    Done(R),
+}
+
+/// Borrowing variant of [`SingleAskResult`] to avoid cloning a single point.
+pub enum SingleAskRefResult<'a, R> {
+    /// Evaluate this point and call `tell()` with the result.
+    Evaluate(&'a [f64]),
+    /// Algorithm has finished - contains final results.
+    Done(R),
+}
+
 #[derive(Debug, Clone)]
 pub struct Unbounded;
 

@@ -1,4 +1,4 @@
-use crate::common::{AskResult, Bounds, Point};
+use crate::common::{AskRefResult, AskResult, Bounds, Point};
 use crate::errors::{EvaluationError, TellError};
 use crate::optimisers::{
     build_results, EvaluatedPoint, OptimisationResults, ScalarEvaluation, TerminationReason,
@@ -17,7 +17,7 @@ pub struct CMAES {
     max_iter: usize,
     threshold: f64,
     step_size: f64,
-    patience: Option<Duration>,
+    patience: Option<f64>,
     population_size: Option<usize>,
     seed: Option<u64>,
 }
@@ -40,24 +40,22 @@ impl CMAES {
     }
 
     pub fn with_threshold(mut self, threshold: f64) -> Self {
-        self.threshold = threshold.max(0.0);
+        self.threshold = threshold;
         self
     }
 
     pub fn with_step_size(mut self, step_size: f64) -> Self {
-        self.step_size = step_size.max(1e-12);
+        self.step_size = step_size;
         self
     }
 
     pub fn with_patience(mut self, patience: f64) -> Self {
-        self.patience = Some(Duration::from_secs_f64(patience));
+        self.patience = Some(patience);
         self
     }
 
     pub fn with_population_size(mut self, population_size: usize) -> Self {
-        if population_size >= 1 {
-            self.population_size = Some(population_size);
-        }
+        self.population_size = Some(population_size);
         self
     }
 
@@ -77,12 +75,47 @@ impl CMAES {
         })
     }
 
+    fn validate_config(&self) -> Result<(), String> {
+        if !self.threshold.is_finite() || self.threshold < 0.0 {
+            return Err(format!(
+                "Invalid CMAES config: threshold must be finite and >= 0, got {}",
+                self.threshold
+            ));
+        }
+        if !self.step_size.is_finite() || self.step_size <= 0.0 {
+            return Err(format!(
+                "Invalid CMAES config: step_size must be finite and > 0, got {}",
+                self.step_size
+            ));
+        }
+        if let Some(patience) = self.patience {
+            if !patience.is_finite() || patience <= 0.0 {
+                return Err(format!(
+                    "Invalid CMAES config: patience must be finite and > 0 seconds, got {patience}",
+                ));
+            }
+        }
+        if let Some(population_size) = self.population_size {
+            if population_size == 0 {
+                return Err("Invalid CMAES config: population_size must be >= 1, got 0".to_string());
+            }
+        }
+        Ok(())
+    }
+
     /// Initialize the optimisation state
     ///
     /// Returns the state and the first point to evaluate
     pub fn init(&self, initial: Point, bounds: Bounds) -> (CMAESState, Point) {
         let dim = initial.len();
         let mut initial_point = initial;
+
+        if let Err(err) = self.validate_config() {
+            let mut state = CMAESState::new(self.clone(), initial_point.clone(), bounds, dim);
+            state.phase =
+                CMAESPhase::Terminated(TerminationReason::FunctionEvaluationFailed(err.clone()));
+            return (state, initial_point);
+        }
 
         if let Err(err) = bounds.validate_dimension(dim) {
             let mut state = CMAESState::new(self.clone(), initial_point.clone(), bounds, dim);
@@ -313,7 +346,22 @@ impl CMAESState {
         }
     }
 
-    /// Get the next point(s) to evaluate, or the final result if optimisation is complete
+    /// Get the next point(s) to evaluate as a borrowed slice, or final results.
+    ///
+    /// This avoids cloning `Arc<[Point]>` when callers can evaluate immediately.
+    pub fn ask_ref(&self) -> AskRefResult<'_, OptimisationResults> {
+        match &self.phase {
+            CMAESPhase::Terminated(reason) => {
+                AskRefResult::Done(self.build_results(reason.clone()))
+            }
+            CMAESPhase::EvaluatingInitial { initial_point } => {
+                AskRefResult::Evaluate(std::slice::from_ref(initial_point))
+            }
+            CMAESPhase::AwaitingPopulation { candidates, .. } => AskRefResult::Evaluate(candidates),
+        }
+    }
+
+    /// Get the next point(s) to evaluate, or the final result if optimisation is complete.
     pub fn ask(&self) -> AskResult<OptimisationResults> {
         match &self.phase {
             CMAESPhase::Terminated(reason) => AskResult::Done(self.build_results(reason.clone())),
@@ -683,7 +731,7 @@ impl CMAESState {
     fn check_pre_generation_termination(&self) -> Option<TerminationReason> {
         // Check patience/timeout
         if let Some(patience) = self.config.patience {
-            if self.start_time.elapsed() >= patience {
+            if self.start_time.elapsed().as_secs_f64() >= patience {
                 return Some(TerminationReason::PatienceElapsed);
             }
         }
@@ -747,6 +795,17 @@ impl CMAES {
         R: TryInto<ScalarEvaluation, Error = E>,
         E: Into<EvaluationError>,
     {
+        if let Err(err) = self.validate_config() {
+            return build_results(
+                &[EvaluatedPoint::new(initial, f64::NAN)],
+                0,
+                0,
+                Duration::ZERO,
+                TerminationReason::FunctionEvaluationFailed(err),
+                None,
+            );
+        }
+
         if let Err(err) = bounds.validate_dimension(initial.len()) {
             return build_results(
                 &[EvaluatedPoint::new(initial, f64::NAN)],
@@ -768,13 +827,11 @@ impl CMAES {
                     .build_results(TerminationReason::FunctionEvaluationFailed(err.to_string()));
             }
 
-            match state.ask() {
-                AskResult::Evaluate(points) => {
+            match state.ask_ref() {
+                AskRefResult::Evaluate(points) => {
                     results = points.iter().map(|p| objective(p)).collect();
                 }
-                AskResult::Done(opt_results) => {
-                    break opt_results;
-                }
+                AskRefResult::Done(opt_results) => break opt_results,
             }
         }
     }
@@ -793,6 +850,17 @@ impl CMAES {
         R: TryInto<ScalarEvaluation, Error = E>,
         E: Into<EvaluationError>,
     {
+        if let Err(err) = self.validate_config() {
+            return build_results(
+                &[EvaluatedPoint::new(initial, f64::NAN)],
+                0,
+                0,
+                Duration::ZERO,
+                TerminationReason::FunctionEvaluationFailed(err),
+                None,
+            );
+        }
+
         if let Err(err) = bounds.validate_dimension(initial.len()) {
             return build_results(
                 &[EvaluatedPoint::new(initial, f64::NAN)],
@@ -814,13 +882,11 @@ impl CMAES {
                     .build_results(TerminationReason::FunctionEvaluationFailed(err.to_string()));
             }
 
-            match state.ask() {
-                AskResult::Evaluate(points) => {
-                    results = objective(points.as_ref());
+            match state.ask_ref() {
+                AskRefResult::Evaluate(points) => {
+                    results = objective(points);
                 }
-                AskResult::Done(opt_results) => {
-                    break opt_results;
-                }
+                AskRefResult::Done(opt_results) => break opt_results,
             }
         }
     }
@@ -863,6 +929,27 @@ mod tests {
                     println!("Iterations: {}", results.iterations);
                     println!("Evaluations: {}", results.evaluations);
                     assert!(results.value < 1e-3);
+                    break;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cmaes_ask_ref_basic_workflow() {
+        let cmaes = CMAES::new().with_max_iter(40).with_seed(24);
+        let (mut state, first_point) = cmaes.init(vec![2.0, -1.0], Bounds::unbounded(2));
+        let mut current_results = vec![sphere(&first_point)];
+
+        loop {
+            state.tell(current_results).expect("tell should succeed");
+
+            match state.ask_ref() {
+                AskRefResult::Evaluate(points) => {
+                    current_results = points.iter().map(|p| sphere(p)).collect();
+                }
+                AskRefResult::Done(results) => {
+                    assert!(results.value < 1e-2);
                     break;
                 }
             }
@@ -1241,6 +1328,21 @@ mod tests {
             "unexpected message: {}",
             results.message
         );
+    }
+
+    #[test]
+    fn cmaes_invalid_population_size_reports_config_error() {
+        let optimiser = CMAES::new().with_population_size(0).with_seed(42);
+        let results = optimiser.run(sphere, vec![1.0, 2.0], Bounds::unbounded(2));
+
+        assert!(!results.success);
+        assert!(matches!(
+            results.termination,
+            TerminationReason::FunctionEvaluationFailed(_)
+        ));
+        assert!(results
+            .message
+            .contains("Invalid CMAES config: population_size"));
     }
 
     #[test]

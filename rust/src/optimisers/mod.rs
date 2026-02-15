@@ -396,16 +396,27 @@ fn build_results(
     reason: TerminationReason,
     covariance: Option<&DMatrix<f64>>,
 ) -> OptimisationResults {
-    let mut ordered = points.to_vec();
-    ordered.sort_by(|a, b| a.value.partial_cmp(&b.value).unwrap_or(Ordering::Equal));
+    let mut ordered_indices: Vec<usize> = (0..points.len()).collect();
+    ordered_indices.sort_by(|a, b| {
+        points[*a]
+            .value
+            .partial_cmp(&points[*b].value)
+            .unwrap_or(Ordering::Equal)
+    });
 
-    let best = ordered
-        .first()
-        .cloned()
-        .unwrap_or_else(|| EvaluatedPoint::new(Vec::new(), f64::NAN));
+    let (best_point, best_value) = ordered_indices.first().map_or_else(
+        || (Vec::new(), f64::NAN),
+        |idx| (points[*idx].point.clone(), points[*idx].value),
+    );
 
-    let final_simplex = ordered.iter().map(|v| v.point.clone()).collect();
-    let final_simplex_values = ordered.iter().map(|v| v.value).collect();
+    let final_simplex = ordered_indices
+        .iter()
+        .map(|idx| points[*idx].point.clone())
+        .collect();
+    let final_simplex_values = ordered_indices
+        .iter()
+        .map(|idx| points[*idx].value)
+        .collect();
 
     let covariance = covariance.map(|matrix| {
         (0..matrix.nrows())
@@ -424,8 +435,8 @@ fn build_results(
     let message = reason.to_string();
 
     OptimisationResults {
-        x: best.point,
-        value: best.value,
+        x: best_point,
+        value: best_value,
         iterations,
         evaluations,
         time,
@@ -1264,5 +1275,28 @@ mod tests {
             result.termination,
             TerminationReason::FunctionEvaluationFailed(_)
         ));
+    }
+
+    #[test]
+    fn build_results_sorts_outputs_and_selects_best() {
+        let points = vec![
+            EvaluatedPoint::new(vec![3.0], 3.0),
+            EvaluatedPoint::new(vec![1.0], 1.0),
+            EvaluatedPoint::new(vec![2.0], 2.0),
+        ];
+
+        let result = build_results(
+            &points,
+            7,
+            9,
+            Duration::ZERO,
+            TerminationReason::FunctionToleranceReached,
+            None,
+        );
+
+        assert_eq!(result.x, vec![1.0]);
+        assert_eq!(result.value, 1.0);
+        assert_eq!(result.final_simplex_values, vec![1.0, 2.0, 3.0]);
+        assert_eq!(result.final_simplex, vec![vec![1.0], vec![2.0], vec![3.0]]);
     }
 }

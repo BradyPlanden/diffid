@@ -258,6 +258,9 @@ pub trait Objective: Send + Sync {
 
     /// Boolean flag to denote whether the objective can support
     /// parallel evaluations.
+    ///
+    /// When true, `Problem::optimise`/`sample` may route through population
+    /// evaluation paths for algorithms that benefit from batching.
     fn supports_parallel_evaluation(&self) -> bool {
         false
     }
@@ -462,6 +465,10 @@ impl<O: Objective> Problem<O> {
         self.parameters.initial_values()
     }
 
+    fn supports_population_routing(&self) -> bool {
+        self.objective.supports_batch_evaluation() || self.objective.supports_parallel_evaluation()
+    }
+
     /// A convenience function for optimisation of the problem
     pub fn optimise(
         &self,
@@ -480,8 +487,7 @@ impl<O: Objective> Problem<O> {
 
         match opt {
             Optimiser::Scalar(scalar_opt) => {
-                if self.objective.supports_batch_evaluation() && scalar_opt.benefits_from_batching()
-                {
+                if self.supports_population_routing() && scalar_opt.benefits_from_batching() {
                     scalar_opt.run_batch(
                         |xs| self.evaluate_population(xs),
                         x0,
@@ -531,9 +537,7 @@ impl<O: Objective> Problem<O> {
 
         match sampler {
             Sampler::Scalar(scalar_sampler) => {
-                if self.objective.supports_batch_evaluation()
-                    && scalar_sampler.benefits_from_batching()
-                {
+                if self.supports_population_routing() && scalar_sampler.benefits_from_batching() {
                     scalar_sampler.run_batch(
                         |xs| self.evaluate_population(xs),
                         x0,
@@ -755,6 +759,33 @@ mod tests {
         }
     }
 
+    struct ParallelRoutingObjective {
+        single_calls: Arc<AtomicUsize>,
+        batch_calls: Arc<AtomicUsize>,
+    }
+
+    impl Objective for ParallelRoutingObjective {
+        fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
+            self.single_calls.fetch_add(1, Ordering::Relaxed);
+            Ok(x.iter().map(|xi| xi * xi).sum())
+        }
+
+        fn evaluate_population(&self, xs: &[Vec<f64>]) -> Vec<Result<f64, ProblemError>> {
+            self.batch_calls.fetch_add(1, Ordering::Relaxed);
+            xs.iter()
+                .map(|x| Ok(x.iter().map(|xi| xi * xi).sum()))
+                .collect()
+        }
+
+        fn supports_batch_evaluation(&self) -> bool {
+            false
+        }
+
+        fn supports_parallel_evaluation(&self) -> bool {
+            true
+        }
+    }
+
     #[test]
     fn optimise_uses_batch_path_without_parallel_evaluation() {
         let single_calls = Arc::new(AtomicUsize::new(0));
@@ -808,6 +839,67 @@ mod tests {
         assert!(
             batch_calls.load(Ordering::Relaxed) > 0,
             "expected batch objective path to be used"
+        );
+        assert_eq!(
+            single_calls.load(Ordering::Relaxed),
+            0,
+            "single-point objective path should not be used"
+        );
+    }
+
+    #[test]
+    fn optimise_uses_population_path_with_parallel_capability() {
+        let single_calls = Arc::new(AtomicUsize::new(0));
+        let batch_calls = Arc::new(AtomicUsize::new(0));
+
+        let objective = ParallelRoutingObjective {
+            single_calls: Arc::clone(&single_calls),
+            batch_calls: Arc::clone(&batch_calls),
+        };
+
+        let mut params = ParameterSet::new();
+        params.push(ParameterSpec::new("x", 1.0, Unbounded));
+
+        let problem = Problem::new(objective, params)
+            .with_optimiser(CMAES::new().with_max_iter(2).with_seed(11));
+
+        let _ = problem.optimise(Some(vec![1.0]), None);
+
+        assert!(
+            batch_calls.load(Ordering::Relaxed) > 0,
+            "expected population objective path to be used"
+        );
+        assert_eq!(
+            single_calls.load(Ordering::Relaxed),
+            0,
+            "single-point objective path should not be used"
+        );
+    }
+
+    #[test]
+    fn sample_uses_population_path_with_parallel_capability() {
+        let single_calls = Arc::new(AtomicUsize::new(0));
+        let batch_calls = Arc::new(AtomicUsize::new(0));
+
+        let objective = ParallelRoutingObjective {
+            single_calls: Arc::clone(&single_calls),
+            batch_calls: Arc::clone(&batch_calls),
+        };
+
+        let mut params = ParameterSet::new();
+        params.push(ParameterSpec::new("x", 1.0, Unbounded));
+
+        let problem = Problem::new(objective, params);
+        let sampler: Sampler = MetropolisHastings::new()
+            .with_num_chains(2)
+            .with_iterations(1)
+            .into();
+
+        let _ = problem.sample(Some(vec![1.0]), Some(&sampler));
+
+        assert!(
+            batch_calls.load(Ordering::Relaxed) > 0,
+            "expected population objective path to be used"
         );
         assert_eq!(
             single_calls.load(Ordering::Relaxed),

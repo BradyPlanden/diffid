@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/github/license/bradyplanden/diffid?color=blue)](https://github.com/bradyplanden/diffid/blob/main/LICENSE)
 [![Releases](https://img.shields.io/github/v/release/bradyplanden/diffid?color=gold)](https://github.com/bradyplanden/diffid/releases)
 
-**diff**erential **id**entification offers a different paradigm for a parameter inference library. Conventional Python-based inference libraries are constructed via python bindings to a high-performance forward model with the optimisation algorithms implemented in Python.  Diffid offers an alternative, where the Python layer acts purely as a declarative configuration interface, while all computationally intensive work (the optimisation / sampling loop, gradient calculations, etc.) happens entirely within the Rust runtime without crossing the FFI boundary repeatedly. This is architecture is presented visually below,
+**diff**erential **id**entification offers a different paradigm for a parameter inference library. Conventional Python-based inference libraries are constructed via bindings to a high-performance forward model with the inference algorithms implemented in Python. Diffid offers an alternative, where the Python-layer can act purely as a declarative configuration interface, while all computationally intensive work (Forward model evaluation, inference loops, etc.) happens entirely within the Rust runtime without crossing the FFI boundary repeatedly. This architecture is presented visually below,
 
 </div>
 

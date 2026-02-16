@@ -39,11 +39,11 @@ use samplers::Sampler;
 type ParameterSpecEntry = (String, f64, Option<(f64, f64)>);
 
 // Import objective types for the problem enum
-use diffid_core::problem::{DiffsolObjective, ScalarObjective, VectorObjective};
+use diffid_core::problem::{DiffsolObjective, ProblemError, ScalarObjective, VectorObjective};
 
 // Type aliases to reduce complexity warnings
-type BoxedScalarFn = Box<dyn Fn(&[f64]) -> f64 + Send + Sync>;
-type BoxedGradientFn = Box<dyn Fn(&[f64]) -> Vec<f64> + Send + Sync>;
+type BoxedScalarFn = Box<dyn Fn(&[f64]) -> Result<f64, ProblemError> + Send + Sync>;
+type BoxedGradientFn = Box<dyn Fn(&[f64]) -> Result<Vec<f64>, ProblemError> + Send + Sync>;
 type ScalarProblemType = Problem<ScalarObjective<BoxedScalarFn>>;
 type ScalarGradientProblemType = Problem<ScalarObjective<BoxedScalarFn, BoxedGradientFn>>;
 
@@ -290,9 +290,8 @@ impl PyProblem {
     }
 
     /// Return the numeric configuration value stored under `key` if present.
-    fn get_config(&self, _key: String) -> Option<f64> {
-        // Config storage has been removed in the refactored API
-        None
+    fn get_config(&self, key: String) -> Option<f64> {
+        self.config.get(&key).copied()
     }
 
     /// Return the number of parameters the problem expects.

@@ -138,6 +138,39 @@ F_i { a * y }
     assert pytest.approx(true_param, rel=1e-12, abs=1e-12) == result.final_simplex[0][0]
 
 
+def test_diffsol_problem_config_accessors_cover_with_config_and_with_tolerances():
+    ds = """
+in_i { a = 1 }
+u_i { y = 0.1 }
+F_i { a * y }
+"""
+
+    t_span = np.linspace(0, 1, 6)
+    data = 0.1 * np.exp(2.0 * t_span)
+    stacked_data = np.column_stack((t_span, data))
+
+    problem = (
+        diffid.DiffsolBuilder()
+        .with_diffsl(ds)
+        .with_data(stacked_data)
+        .with_config({"rtol": 1e-5, "parallel": 0.0, "custom": 42.0})
+        .with_tolerances(rtol=1e-4, atol=1e-7)
+        .with_parameter("a", 2.0)
+        .build()
+    )
+
+    config = problem.config()
+    assert config["rtol"] == 1e-4
+    assert config["atol"] == 1e-7
+    assert config["parallel"] == 0.0
+    assert config["custom"] == 42.0
+
+    assert problem.get_config("rtol") == 1e-4
+    assert problem.get_config("atol") == 1e-7
+    assert problem.get_config("custom") == 42.0
+    assert problem.get_config("missing") is None
+
+
 @pytest.mark.parametrize("variance", [0.5, 2.0])
 def test_diffsol_cost_metrics(variance: float) -> None:
     """Ensure selectable cost metrics produce consistent values."""

@@ -1,5 +1,6 @@
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -15,6 +16,18 @@ def is_ci() -> bool:
     """Detect CI environment."""
     ci_env_vars = ("CI", "GITHUB_ACTIONS")
     return any(os.environ.get(var) for var in ci_env_vars)
+
+
+def has_julia_runtime() -> bool:
+    """Detect whether a Julia runtime is available locally."""
+    julia_from_env = os.environ.get("JULIA_EXE")
+    return bool(julia_from_env) or shutil.which("julia") is not None
+
+
+def run_julia_examples_enabled() -> bool:
+    """Opt-in gate for Julia-backed examples with heavyweight runtime setup."""
+    flag = os.environ.get("DIFFID_RUN_JULIA_EXAMPLES", "")
+    return flag.lower() in {"1", "true", "yes"}
 
 
 @dataclass(frozen=True)
@@ -40,6 +53,17 @@ DIFFRAX_IMPORTS = ("jax", "jaxlib", "diffrax")
 
 # Define special handling for specific example patterns
 EXAMPLE_CONFIGS: list[ExampleConfig] = [
+    ExampleConfig(
+        pattern="predator_prey_diffeqpy.py",
+        skip_condition=lambda: (
+            is_ci() or not has_julia_runtime() or not run_julia_examples_enabled()
+        ),
+        skip_reason=(
+            "Skipping diffeqpy predator_prey example unless Julia is available and "
+            "DIFFID_RUN_JULIA_EXAMPLES=1"
+        ),
+        required_imports=("diffeqpy",),
+    ),
     ExampleConfig(
         pattern="predator_prey",
         skip_condition=is_ci,

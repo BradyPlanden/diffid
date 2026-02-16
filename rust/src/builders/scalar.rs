@@ -1,7 +1,9 @@
 use super::{ParameterSet, ProblemBuilderError};
 use crate::optimisers::Optimiser;
 use crate::prelude::{ParameterSpec, Problem};
-use crate::problem::{NoFunction, NoGradient, ParameterRange, ScalarObjective};
+use crate::problem::{
+    IntoGradientValue, IntoScalarValue, NoFunction, NoGradient, ParameterRange, ScalarObjective,
+};
 
 #[must_use]
 #[derive(Clone)]
@@ -65,6 +67,20 @@ impl<G> ScalarProblemBuilder<NoFunction, G> {
             optimiser: self.optimiser,
         }
     }
+
+    /// Stores a fallible objective function that can return evaluation errors.
+    pub fn with_fallible_function<F, E>(self, f: F) -> ScalarProblemBuilder<F, G>
+    where
+        F: Fn(&[f64]) -> Result<f64, E> + Send + Sync + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        ScalarProblemBuilder {
+            f,
+            gradient: self.gradient,
+            parameters: self.parameters,
+            optimiser: self.optimiser,
+        }
+    }
 }
 
 impl<F> ScalarProblemBuilder<F, NoGradient> {
@@ -80,12 +96,27 @@ impl<F> ScalarProblemBuilder<F, NoGradient> {
             optimiser: self.optimiser,
         }
     }
+
+    /// Stores a fallible gradient function that can return evaluation errors.
+    pub fn with_fallible_gradient<G, E>(self, gradient: G) -> ScalarProblemBuilder<F, G>
+    where
+        G: Fn(&[f64]) -> Result<Vec<f64>, E> + Send + Sync + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        ScalarProblemBuilder {
+            f: self.f,
+            gradient,
+            parameters: self.parameters,
+            optimiser: self.optimiser,
+        }
+    }
 }
 
 /// Build without gradient
-impl<F> ScalarProblemBuilder<F, NoGradient>
+impl<F, R> ScalarProblemBuilder<F, NoGradient>
 where
-    F: Fn(&[f64]) -> f64 + Send + Sync + 'static,
+    F: Fn(&[f64]) -> R + Send + Sync + 'static,
+    R: IntoScalarValue + 'static,
 {
     /// Build the problem
     ///
@@ -103,10 +134,12 @@ where
 }
 
 /// Build with gradient
-impl<F, G> ScalarProblemBuilder<F, G>
+impl<F, G, R, RG> ScalarProblemBuilder<F, G>
 where
-    F: Fn(&[f64]) -> f64 + Send + Sync + 'static,
-    G: Fn(&[f64]) -> Vec<f64> + Send + Sync + 'static,
+    F: Fn(&[f64]) -> R + Send + Sync + 'static,
+    G: Fn(&[f64]) -> RG + Send + Sync + 'static,
+    R: IntoScalarValue + 'static,
+    RG: IntoGradientValue + 'static,
 {
     /// Build the problem
     ///

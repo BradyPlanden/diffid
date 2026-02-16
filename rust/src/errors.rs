@@ -34,9 +34,9 @@ impl EvaluationError {
 impl fmt::Display for EvaluationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::User(e) => write!(f, "Evaluation failed:: {e}"),
-            Self::NonFiniteValue => write!(f, "Evaluation failed::NonFiniteValue"),
-            Self::NonFiniteGradient => write!(f, "Evaluation failed::NonFiniteGradient"),
+            Self::User(e) => write!(f, "{e}"),
+            Self::NonFiniteValue => write!(f, "non-finite objective value"),
+            Self::NonFiniteGradient => write!(f, "non-finite gradient"),
         }
     }
 }

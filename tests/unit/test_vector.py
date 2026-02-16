@@ -223,7 +223,7 @@ def test_vector_builder_dimension_mismatch():
 
     with pytest.raises(
         diffid.errors.EvaluationError,
-        match="Evaluation failed: Evaluation failed:: expected 3 elements, got 5",
+        match="Evaluation failed: expected 3 elements, got 5",
     ):
         problem.evaluate([1.0])
 
@@ -272,3 +272,27 @@ def test_vector_builder_config():
     config = problem.config()
     assert "custom_param" in config
     assert config["custom_param"] == 42.0
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_vector_builder_rejects_non_finite_initial_values_without_bounds(value):
+    data = np.array([1.0, 2.0])
+
+    def model(params):
+        return params[0] * data
+
+    builder = diffid.VectorBuilder().with_objective(model).with_data(data)
+    with pytest.raises(ValueError, match="must be finite"):
+        builder.with_parameter("a", value)
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_vector_builder_rejects_non_finite_initial_values_with_bounds(value):
+    data = np.array([1.0, 2.0])
+
+    def model(params):
+        return params[0] * data
+
+    builder = diffid.VectorBuilder().with_objective(model).with_data(data)
+    with pytest.raises(ValueError, match="must be finite"):
+        builder.with_parameter("a", value, bounds=(0.0, 1.0))

@@ -13,6 +13,56 @@ pub use diffsol_problem::DiffsolObjective;
 pub struct NoGradient;
 pub struct NoFunction;
 
+pub trait IntoScalarValue {
+    /// Convert a scalar callback output into a concrete objective value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProblemError`] when the callback output represents a failed
+    /// evaluation.
+    fn into_scalar_value(self) -> Result<f64, ProblemError>;
+}
+
+impl IntoScalarValue for f64 {
+    fn into_scalar_value(self) -> Result<f64, ProblemError> {
+        Ok(self)
+    }
+}
+
+impl<E> IntoScalarValue for Result<f64, E>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    fn into_scalar_value(self) -> Result<f64, ProblemError> {
+        self.map_err(|err| ProblemError::External(Box::new(err)))
+    }
+}
+
+pub trait IntoGradientValue {
+    /// Convert a gradient callback output into a concrete gradient vector.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProblemError`] when the callback output represents a failed
+    /// gradient evaluation.
+    fn into_gradient_value(self) -> Result<Vec<f64>, ProblemError>;
+}
+
+impl IntoGradientValue for Vec<f64> {
+    fn into_gradient_value(self) -> Result<Vec<f64>, ProblemError> {
+        Ok(self)
+    }
+}
+
+impl<E> IntoGradientValue for Result<Vec<f64>, E>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    fn into_gradient_value(self) -> Result<Vec<f64>, ProblemError> {
+        self.map_err(|err| ProblemError::External(Box::new(err)))
+    }
+}
+
 /// A thread-safe, shared function that computes residuals
 pub type VectorFn =
     Arc<dyn Fn(&[f64]) -> Result<Vec<f64>, Box<dyn std::error::Error + Send + Sync>> + Send + Sync>;
@@ -41,7 +91,7 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for ProblemError {
 impl std::fmt::Display for ProblemError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EvaluationFailed(msg) => write!(f, "evaluation failed: {msg}"),
+            Self::EvaluationFailed(msg) => write!(f, "{msg}"),
             Self::SolverError(msg) => write!(f, "solver failed: {msg}"),
             Self::DimensionMismatch { expected, got } => {
                 write!(f, "expected {expected} elements, got {got}")
@@ -271,10 +321,7 @@ pub struct ScalarObjective<F = NoFunction, G = NoGradient> {
     grad: G,
 }
 
-impl<F> ScalarObjective<F, NoGradient>
-where
-    F: Fn(&[f64]) -> f64 + Send + Sync,
-{
+impl<F> ScalarObjective<F, NoGradient> {
     pub fn new(f: F) -> Self {
         Self {
             f,
@@ -282,23 +329,20 @@ where
         }
     }
 }
-impl<F, G> ScalarObjective<F, G>
-where
-    F: Fn(&[f64]) -> f64 + Send + Sync,
-    G: Fn(&[f64]) -> Vec<f64> + Send + Sync,
-{
+impl<F, G> ScalarObjective<F, G> {
     pub fn with_gradient(f: F, grad: G) -> Self {
         Self { f, grad }
     }
 }
 
 /// Implement Objective for `NoGradient` state
-impl<F> Objective for ScalarObjective<F, NoGradient>
+impl<F, R> Objective for ScalarObjective<F, NoGradient>
 where
-    F: Fn(&[f64]) -> f64 + Send + Sync,
+    F: Fn(&[f64]) -> R + Send + Sync,
+    R: IntoScalarValue,
 {
     fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
-        Ok((self.f)(x))
+        (self.f)(x).into_scalar_value()
     }
 
     fn has_gradient(&self) -> bool {
@@ -311,17 +355,25 @@ where
 }
 
 /// Implement Objective for gradient state
-impl<F, G> Objective for ScalarObjective<F, G>
+impl<F, G, R, GR> Objective for ScalarObjective<F, G>
 where
-    F: Fn(&[f64]) -> f64 + Send + Sync,
-    G: Fn(&[f64]) -> Vec<f64> + Send + Sync,
+    F: Fn(&[f64]) -> R + Send + Sync,
+    G: Fn(&[f64]) -> GR + Send + Sync,
+    R: IntoScalarValue,
+    GR: IntoGradientValue,
 {
     fn evaluate(&self, x: &[f64]) -> Result<f64, ProblemError> {
-        Ok((self.f)(x))
+        (self.f)(x).into_scalar_value()
     }
 
     fn gradient(&self, x: &[f64]) -> Option<Vec<f64>> {
-        Some((self.grad)(x))
+        (self.grad)(x).into_gradient_value().ok()
+    }
+
+    fn evaluate_with_gradient(&self, x: &[f64]) -> Result<(f64, Option<Vec<f64>>), ProblemError> {
+        let value = (self.f)(x).into_scalar_value()?;
+        let gradient = (self.grad)(x).into_gradient_value()?;
+        Ok((value, Some(gradient)))
     }
 
     fn has_gradient(&self) -> bool {

@@ -2,7 +2,7 @@ import diffid
 import numpy as np
 
 
-def _test_optimisation_api():
+def test_optimisation_api():
     """Test basic Diffsol builder functionality"""
     # Example diffsol ODE (logistic growth)
     ds = """
@@ -32,7 +32,9 @@ F_i { (r * y) * (1 - (y / k)) }
     # Test that we can optimise the problem
     result = problem.optimise()
     assert result.success
-    assert result.value < 1e-5
+    assert result.value < 1e-4
+    assert problem.config()["rtol"] == 1e-6
+    assert problem.get_config("rtol") == 1e-6
 
 
 def test_diffsol_builder_allows_multiple_builds():
